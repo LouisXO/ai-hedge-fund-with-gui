@@ -1,0 +1,325 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# AI Hedge Fund Web App - Cursor Project Rules
+
+## Project Overview
+This is an AI-powered hedge fund system with a modern web interface featuring 17 sophisticated trading agents that simulate investment decisions from legendary investors like Warren Buffett, Charlie Munger, Cathie Wood, and others. The system includes backtesting capabilities and real-time decision monitoring.
+
+## Technology Stack
+
+### Frontend
+- **Framework**: React 18+ with TypeScript (strict mode)
+- **Build Tool**: Vite
+- **Styling**: Tailwind CSS with custom design system
+- **UI Components**: Radix UI / shadcn/ui
+- **State Management**: Zustand (preferred) or Redux Toolkit
+- **Data Fetching**: React Query (TanStack Query)
+- **Routing**: React Router v6+
+- **Charts**: Recharts or Chart.js
+- **Icons**: Lucide React or Heroicons
+
+### Backend
+- **Framework**: FastAPI with Python 3.8+
+- **Database**: PostgreSQL with SQLAlchemy + Alembic
+- **Async**: asyncio with uvicorn
+- **WebSockets**: FastAPI WebSocket support
+- **Validation**: Pydantic v2
+- **Authentication**: JWT with FastAPI Security
+- **Task Queue**: Celery with Redis
+- **API Documentation**: Automatic OpenAPI/Swagger
+
+### Development Tools
+- **Package Manager**: pnpm (frontend), Poetry (backend)
+- **Linting**: ESLint + Prettier (frontend), Black + isort (backend)
+- **Type Checking**: TypeScript (frontend), mypy (backend)
+- **Testing**: Vitest (frontend), pytest (backend)
+- **Git Hooks**: husky + lint-staged
+
+## Architecture Guidelines
+
+### Frontend Architecture
+1. **Component Structure**: Use functional components with hooks
+2. **File Organization**: Feature-based folder structure
+3. **State Management**: Local state for UI, global state for app data
+4. **API Layer**: Centralized API client with React Query
+5. **Error Boundaries**: Implement at route and component levels
+6. **Performance**: Code splitting, lazy loading, memoization
+
+### Backend Architecture
+1. **API Design**: RESTful with clear resource naming
+2. **Dependency Injection**: FastAPI's dependency system
+3. **Database**: Repository pattern with SQLAlchemy models
+4. **Error Handling**: Centralized exception handling
+5. **Security**: Input validation, rate limiting, CORS configuration
+6. **Logging**: Structured logging with correlation IDs
+
+## Coding Standards
+
+### TypeScript/React Standards
+```typescript
+// Use strict TypeScript configuration
+// Prefer interfaces over types for object shapes
+interface AgentDecision {
+  agentName: string;
+  recommendation: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number;
+  reasoning: string;
+  timestamp: Date;
+}
+
+// Use functional components with explicit return types
+const AgentCard: React.FC<AgentCardProps> = ({ agent, decision }) => {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+      {/* Component content */}
+    </div>
+  );
+};
+
+// Custom hooks for business logic
+const useAgentDecisions = (tickers: string[]) => {
+  return useQuery({
+    queryKey: ['agentDecisions', tickers],
+    queryFn: () => fetchAgentDecisions(tickers),
+    refetchInterval: 30000, // 30 seconds
+  });
+};
+```
+
+### Python/FastAPI Standards
+```python
+# Use type hints everywhere
+from typing import List, Optional
+from pydantic import BaseModel, Field
+
+class AgentDecisionRequest(BaseModel):
+    tickers: List[str] = Field(..., min_items=1, max_items=10)
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    show_reasoning: bool = False
+
+# Use dependency injection
+@router.post("/decisions", response_model=List[AgentDecisionResponse])
+async def get_agent_decisions(
+    request: AgentDecisionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> List[AgentDecisionResponse]:
+    """Get trading decisions from all agents for specified tickers."""
+    pass
+
+# Use async/await consistently
+async def process_agent_decisions(tickers: List[str]) -> Dict[str, Any]:
+    """Process decisions from all agents asynchronously."""
+    tasks = [agent.analyze(ticker) for agent in agents for ticker in tickers]
+    results = await asyncio.gather(*tasks)
+    return aggregate_decisions(results)
+```
+
+## File Organization
+
+### Frontend Structure
+```
+app/frontend/
+├── src/
+│   ├── components/           # Reusable UI components
+│   │   ├── ui/              # Basic UI components (shadcn)
+│   │   ├── charts/          # Chart components
+│   │   ├── forms/           # Form components
+│   │   └── layout/          # Layout components
+│   ├── features/            # Feature-based modules
+│   │   ├── dashboard/       # Dashboard feature
+│   │   ├── agents/          # Agent management
+│   │   ├── backtesting/     # Backtesting interface
+│   │   └── portfolio/       # Portfolio management
+│   ├── hooks/               # Custom React hooks
+│   ├── lib/                 # Utility libraries
+│   ├── services/            # API services
+│   ├── store/               # Global state management
+│   ├── types/               # TypeScript type definitions
+│   └── utils/               # Helper functions
+```
+
+### Backend Structure
+```
+app/backend/
+├── models/                  # SQLAlchemy models
+├── routes/                  # FastAPI route handlers
+├── services/                # Business logic services
+├── schemas/                 # Pydantic schemas
+├── core/                    # Core configuration
+├── utils/                   # Utility functions
+├── tests/                   # Test files
+└── migrations/              # Alembic migrations
+```
+
+## Component Guidelines
+
+### React Component Rules
+1. **Naming**: Use PascalCase for components, camelCase for props
+2. **Props**: Define explicit interfaces, avoid `any` types
+3. **Styling**: Use Tailwind CSS classes, create design tokens
+4. **Accessibility**: Include ARIA labels, keyboard navigation
+5. **Performance**: Use React.memo for expensive components
+6. **Error Handling**: Implement error boundaries and fallbacks
+
+### UI/UX Standards
+1. **Design System**: Consistent spacing (4px grid), colors, typography
+2. **Dark Mode**: Support for light/dark themes
+3. **Responsive**: Mobile-first approach with Tailwind breakpoints
+4. **Loading States**: Skeleton loaders and progress indicators
+5. **Feedback**: Toast notifications for user actions
+6. **Navigation**: Breadcrumbs and clear hierarchy
+
+## API Design Principles
+
+### RESTful Conventions
+```
+GET    /api/v1/agents                    # List all agents
+GET    /api/v1/agents/{agent_id}         # Get specific agent
+POST   /api/v1/decisions                 # Generate decisions
+GET    /api/v1/portfolio                 # Get portfolio status
+POST   /api/v1/backtest                  # Run backtest
+GET    /api/v1/backtest/{test_id}        # Get backtest results
+```
+
+### WebSocket Events
+```
+# Real-time events
+agent_decision_update    # New agent decision
+portfolio_update         # Portfolio changes
+market_data_update      # Live market data
+backtest_progress       # Backtest progress
+error_notification      # Error alerts
+```
+
+## Security Guidelines
+
+1. **Authentication**: JWT tokens with refresh mechanism
+2. **API Keys**: Secure storage and rotation of external API keys
+3. **Input Validation**: Validate all inputs with Pydantic
+4. **Rate Limiting**: Implement rate limiting for API endpoints
+5. **CORS**: Configure appropriate CORS policies
+6. **Environment Variables**: Use .env files, never commit secrets
+
+## Performance Guidelines
+
+### Frontend Performance
+1. **Code Splitting**: Route-based and component-based splitting
+2. **Lazy Loading**: Defer loading of non-critical components
+3. **Memoization**: Use React.memo, useMemo, useCallback appropriately
+4. **Bundle Size**: Monitor and optimize bundle size
+5. **Caching**: Implement proper caching strategies with React Query
+
+### Backend Performance
+1. **Database**: Use database indexes, optimize queries
+2. **Caching**: Redis for frequently accessed data
+3. **Async Operations**: Use async/await for I/O operations
+4. **Background Tasks**: Use Celery for heavy computations
+5. **Connection Pooling**: Proper database connection management
+
+## Testing Standards
+
+### Frontend Testing
+```typescript
+// Component tests with React Testing Library
+import { render, screen } from '@testing-library/react';
+import { AgentCard } from './AgentCard';
+
+test('renders agent decision correctly', () => {
+  const mockDecision = {
+    agentName: 'Warren Buffett',
+    recommendation: 'BUY',
+    confidence: 0.85,
+    reasoning: 'Undervalued company with strong fundamentals'
+  };
+  
+  render(<AgentCard decision={mockDecision} />);
+  expect(screen.getByText('Warren Buffett')).toBeInTheDocument();
+});
+```
+
+### Backend Testing
+```python
+# API tests with pytest
+import pytest
+from fastapi.testclient import TestClient
+
+def test_get_agent_decisions(client: TestClient):
+    response = client.post("/api/v1/decisions", json={
+        "tickers": ["AAPL", "MSFT"],
+        "show_reasoning": True
+    })
+    assert response.status_code == 200
+    assert len(response.json()) > 0
+```
+
+## Development Workflow
+
+1. **Feature Branches**: Use feature/ prefix for new features
+2. **Commit Messages**: Follow conventional commits format
+3. **Pull Requests**: Require code review and passing tests
+4. **Documentation**: Update README and API docs for changes
+5. **Deployment**: Use Docker for consistent environments
+
+## Environment Configuration
+
+### Required Environment Variables
+```bash
+# API Keys
+OPENAI_API_KEY=your-openai-api-key
+GROQ_API_KEY=your-groq-api-key
+FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+
+# Database
+DATABASE_URL=postgresql://user:password@localhost/ai_hedge_fund
+REDIS_URL=redis://localhost:6379
+
+# Security
+SECRET_KEY=your-secret-key
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Application
+DEBUG=False
+ENVIRONMENT=development
+```
+
+## Error Handling
+
+### Frontend Error Handling
+1. **Error Boundaries**: Catch React component errors
+2. **API Errors**: Centralized error handling with React Query
+3. **User Feedback**: Toast notifications for errors
+4. **Fallback UI**: Graceful degradation for failures
+5. **Logging**: Client-side error reporting
+
+### Backend Error Handling
+1. **Exception Handling**: Custom exception classes
+2. **HTTP Status Codes**: Proper status code usage
+3. **Error Responses**: Consistent error response format
+4. **Logging**: Structured error logging
+5. **Monitoring**: Error tracking and alerting
+## Best Practices
+
+1. **Code Reviews**: All code must be reviewed before merging
+2. **Documentation**: Keep README and API docs updated
+3. **Testing**: Maintain test coverage above 80%
+4. **Performance**: Regular performance audits
+5. **Security**: Regular security audits and dependency updates
+6. **Accessibility**: Follow WCAG 2.1 guidelines
+7. **Internationalization**: Prepare for multiple languages
+
+## Deployment Guidelines
+
+1. **Docker**: Containerize both frontend and backend
+2. **Environment Parity**: Keep dev/staging/prod environments consistent
+3. **Database Migrations**: Use Alembic for database schema changes
+4. **Static Assets**: Optimize and compress static assets
+5. **Monitoring**: Implement application monitoring and logging
+6. **Backup**: Regular database backups and disaster recovery
+
+Remember: This is an educational project. Always include appropriate disclaimers about the simulation nature of the trading decisions and emphasize that this is not financial advice. 

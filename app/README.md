@@ -1,175 +1,256 @@
-# AI Hedge Fund [WIP] 🚧
+# AI Hedge Fund Web Application
 
-This project is currently a work in progress. To track progress, please get updates [here](https://x.com/virattt).
+A comprehensive web application for AI-powered hedge fund trading analysis with real-time portfolio monitoring and intelligent decision-making.
 
-The AI Hedge Fund app is a complete system with both frontend and backend components that enables you to run an AI-powered hedge fund trading system through a web interface on your own computer.
+## 🚀 Features
 
-<img width="1692" alt="Screenshot 2025-05-15 at 8 57 56 PM" src="https://github.com/user-attachments/assets/2173fa5b-1029-49dd-8b04-d7583616de1b" />
+### 📊 Dashboard
+- **AI Trading Analysis**: Configure and run AI-powered trading analysis with multiple analyst agents
+- **Real-time Updates**: Live streaming updates during analysis execution
+- **Results History**: Save and review previous analysis results
+- **Agent Decisions**: Detailed view of each AI agent's trading recommendations with confidence scores and reasoning
 
+### 💼 Portfolio Management
+- **Real-time Portfolio Monitoring**: Live portfolio data with auto-refresh capabilities
+- **Holdings Overview**: Detailed view of all portfolio positions with P&L tracking
+- **Performance Metrics**: Portfolio performance across different time periods
+- **Smart Alerts**: Automated alerts for significant losses, concentration risks, and market updates
 
-## Overview
+### 🔄 Agent Flow Visualization
+- **Interactive Flow Diagram**: Visual representation of AI agent workflows
+- **Real-time Agent Status**: Monitor agent execution and decision-making process
 
-The AI Hedge Fund consists of:
+## 🛠️ Technology Stack
 
-- **Backend**: A FastAPI application that provides a REST API to run the hedge fund trading system and backtester
-- **Frontend**: A React/Vite application that offers a user-friendly interface to visualize and control the hedge fund operations
+### Frontend
+- **React 18** with TypeScript
+- **Tailwind CSS** for styling
+- **Vite** for fast development and building
+- **React Flow** for interactive diagrams
+- **shadcn/ui** components for consistent UI
 
-## Table of Contents
+### Backend
+- **FastAPI** for high-performance API
+- **Python 3.8+** with async support
+- **Streaming responses** for real-time updates
+- **CORS enabled** for frontend integration
 
-- [🚀 Quick Start (For Non-Technical Users)](#-quick-start-for-non-technical-users)
-  - [Option 1: Using 1-Line Shell Script (Recommended)](#option-1-using-1-line-shell-script-recommended)
-  - [Option 2: Using npm (Alternative)](#option-2-using-npm-alternative)
-- [🛠️ Manual Setup (For Developers)](#️-manual-setup-for-developers)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Running the Application](#running-the-application)
-- [Detailed Documentation](#detailed-documentation)
-- [Disclaimer](#disclaimer)
-
-## 🚀 Quick Start (For Non-Technical Users)
-
-**One-line setup and run command:**
-
-### Option 1: Using 1-Line Shell Script (Recommended)
-
-#### For Mac/Linux:
-```bash
-./run.sh
-```
-
-If you get a "permission denied" error, run this first:
-```bash
-chmod +x run.sh && ./run.sh
-```
-
-Or alternatively, you can run:
-```bash
-bash run.sh
-```
-
-#### For Windows:
-```cmd
-run.bat
-```
-
-### Option 2: Using npm (Alternative)
-```bash
-cd app && npm install && npm run setup
-```
-
-**That's it!** These scripts will:
-1. Check for required dependencies (Node.js, Python, Poetry)
-2. Install all dependencies automatically
-3. Start both frontend and backend services
-4. **Automatically open your web browser** to the application
-
-**Requirements:**
-- [Node.js](https://nodejs.org/) (includes npm)
-- [Python 3](https://python.org/)
-- [Poetry](https://python-poetry.org/)
-
-**After running, you can access:**
-- Frontend (Web Interface): http://localhost:5173
-- Backend API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
-
----
-
-## 🛠️ Manual Setup (For Developers)
-
-If you prefer to set up each component manually or need more control:
+## 🏃‍♂️ Quick Start
 
 ### Prerequisites
+- Node.js 18+ and pnpm
+- Python 3.8+ and Poetry
+- Git
 
-- Node.js and npm for the frontend
-- Python 3.8+ and Poetry for the backend
-
-### Installation
-
-1. Clone the repository:
+### 1. Clone and Setup
 ```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
+git clone <repository-url>
 cd ai-hedge-fund
 ```
 
-2. Set up your environment variables:
+### 2. Environment Configuration
 ```bash
-# Create .env file for your API keys (in the root directory)
 cp .env.example .env
+# Edit .env with your API keys (OpenAI, Anthropic, etc.)
 ```
 
-3. Edit the .env file to add your API keys:
+### 3. Start the Application
+
+#### Option A: Using Setup Scripts (Recommended)
 ```bash
-# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
-OPENAI_API_KEY=your-openai-api-key
+# Mac/Linux
+./app/run.sh
 
-# For running LLMs hosted by groq (deepseek, llama3, etc.)
-GROQ_API_KEY=your-groq-api-key
-
-# For getting financial data to power the hedge fund
-FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+# Windows
+./app/run.bat
 ```
 
-4. Install Poetry (if not already installed):
+#### Option B: Manual Setup
 ```bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
-5. Install root project dependencies:
-```bash
-# From the root directory
-poetry install
-```
-
-6. Install backend app dependencies:
-```bash
-# Navigate to the backend directory
+# Backend
 cd app/backend
-pip install -r requirements.txt  # If there's a requirements.txt file
-# OR
-poetry install  # If there's a pyproject.toml in the backend directory
-```
+pip install -r requirements.txt
+uvicorn app.backend.main:app --reload --port 8000
 
-7. Install frontend app dependencies:
-```bash
+# Frontend (new terminal)
 cd app/frontend
-npm install  # or pnpm install or yarn install
-```
-
-### Running the Application
-
-1. Start the backend server:
-```bash
-# In one terminal, from the backend directory
-cd app/backend
-poetry run uvicorn main:app --reload
-```
-
-2. Start the frontend application:
-```bash
-# In another terminal, from the frontend directory
-cd app/frontend
+npm install
 npm run dev
 ```
 
-You can now access:
-- Frontend application: http://localhost:5173
-- Backend API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
+### 4. Access the Application
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
 
-## Detailed Documentation
+## 📱 Using the Web App
 
-For more detailed information:
-- [Backend Documentation](./backend/README.md)
-- [Frontend Documentation](./frontend/README.md)
+### Dashboard
+1. **Configure Analysis**:
+   - Enter stock tickers (comma-separated)
+   - Set date range (optional)
+   - Configure portfolio settings
+   - Select AI analysts and model
+   - Choose whether to show detailed reasoning
 
-## Disclaimer
+2. **Run Analysis**:
+   - Click "Run AI Analysis"
+   - Watch real-time updates in the Live Updates panel
+   - View results as they come in
 
-This project is for **educational and research purposes only**.
+3. **Review Results**:
+   - See agent decisions with confidence scores
+   - Read detailed reasoning for each recommendation
+   - View decision summary and statistics
+   - Access previous analysis from history
 
-- Not intended for real trading or investment
-- No warranties or guarantees provided
-- Creator assumes no liability for financial losses
-- Consult a financial advisor for investment decisions
+### Portfolio Dashboard
+1. **Monitor Portfolio**:
+   - View real-time portfolio value and P&L
+   - Track individual holdings performance
+   - Monitor portfolio allocation and weights
 
-By using this software, you agree to use it solely for learning purposes. 
+2. **Configure Auto-refresh**:
+   - Toggle auto-refresh on/off
+   - Set refresh interval (10s, 30s, 1m, 5m)
+   - Monitor live status indicator
+
+3. **Review Alerts**:
+   - Check for significant losses
+   - Monitor concentration risks
+   - Stay updated with market insights
+
+## 🔧 API Endpoints
+
+### Hedge Fund Analysis
+- `POST /api/v1/hedge-fund/run` - Run AI trading analysis (streaming)
+
+### Portfolio Management
+- `GET /api/v1/portfolio/` - Get complete portfolio data
+- `GET /api/v1/portfolio/holdings` - Get holdings only
+- `GET /api/v1/portfolio/performance` - Get performance metrics
+- `GET /api/v1/portfolio/alerts` - Get portfolio alerts
+
+### Health Check
+- `GET /api/v1/health` - API health status
+
+## 🎯 Key Features Explained
+
+### AI Analyst Agents
+- **Financial Analyst**: Fundamental analysis and financial metrics
+- **Technical Analyst**: Chart patterns and technical indicators  
+- **Sentiment Analyst**: Market sentiment and news analysis
+- **Risk Analyst**: Risk assessment and portfolio analysis
+
+### Real-time Updates
+The application uses Server-Sent Events (SSE) for real-time streaming:
+- Progress updates during analysis
+- Live portfolio data refresh
+- Instant alert notifications
+
+### Data Persistence
+- Analysis results saved to localStorage
+- Portfolio history tracking
+- User preferences persistence
+
+## 🔒 Security & Configuration
+
+### Environment Variables
+```bash
+# AI Model API Keys
+OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
+
+# Database (if using)
+DATABASE_URL=your_database_url
+
+# CORS Settings
+FRONTEND_URL=http://localhost:5173
+```
+
+### CORS Configuration
+The backend is configured to allow requests from:
+- http://localhost:5173 (development)
+- http://127.0.0.1:5173 (alternative localhost)
+
+## 🚀 Deployment
+
+### Development
+```bash
+# Frontend
+npm run dev
+
+# Backend  
+uvicorn app.backend.main:app --reload
+```
+
+### Production
+```bash
+# Frontend
+npm run build
+npm run preview
+
+# Backend
+uvicorn app.backend.main:app --host 0.0.0.0 --port 8000
+```
+
+### Docker (Coming Soon)
+```bash
+docker-compose up --build
+```
+
+## 🧪 Testing
+
+### Frontend
+```bash
+cd app/frontend
+npm run test
+```
+
+### Backend
+```bash
+cd app/backend
+pytest
+```
+
+## 📈 Performance Optimization
+
+### Frontend
+- Component lazy loading
+- Efficient re-rendering with React hooks
+- Optimized bundle size with Vite
+- Responsive design for all devices
+
+### Backend
+- Async/await for non-blocking operations
+- Streaming responses for real-time data
+- Efficient data processing
+- Connection pooling for databases
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for detailed guidelines.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+
+## ⚠️ Disclaimer
+
+This application is for educational and research purposes only. It should not be used for actual trading without proper risk management and compliance with financial regulations. Always consult with financial professionals before making investment decisions.
+
+## 🆘 Support
+
+- **Issues**: GitHub Issues
+- **Discussions**: GitHub Discussions
+- **Documentation**: See `/docs` folder
+
+---
+
+**Happy Trading! 🚀📈**
