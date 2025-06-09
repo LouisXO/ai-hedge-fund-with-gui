@@ -16,7 +16,7 @@ type LayoutProps = {
 
 export function Layout({ leftSidebar, rightSidebar, children, currentView }: LayoutProps) {
   const [isCollapsed, setIsCollapsed] = useState(false); // Start expanded to show sidebar
-  const [showCustomSidebar, setShowCustomSidebar] = useState(true); // Show custom sidebar by default
+  const [showCustomSidebar] = useState(true); // Show custom sidebar by default
   
   // Only show components sidebar in flow view
   const shouldShowComponentsSidebar = currentView === 'flow';

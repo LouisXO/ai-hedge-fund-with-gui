@@ -3,7 +3,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Play, BarChart3, Loader2, TrendingUp, TrendingDown, Minus, Target, AlertTriangle } from 'lucide-react';
+import { Play, BarChart3, Loader2, TrendingUp, TrendingDown, Minus, Target, AlertTriangle, HelpCircle } from 'lucide-react';
 import { SWARM_NAMES } from '../data/multi-node-mappings';
 import { apiModels, defaultModel, ModelItem } from '../data/models';
 
@@ -67,6 +67,77 @@ interface StrategySignal {
   confidence: number;
   metrics?: Record<string, number>;
 }
+
+// Financial terms explanations
+const financialTerms: Record<string, string> = {
+  'ROE': 'Return on Equity - Measures how efficiently a company uses shareholders\' equity to generate profits. Higher is generally better (>15% is good).',
+  'Net Margin': 'Net Profit Margin - Shows what percentage of revenue becomes profit after all expenses. Higher margins indicate better profitability.',
+  'Op Margin': 'Operating Margin - Percentage of revenue left after paying operating expenses. Shows operational efficiency before interest and taxes.',
+  'Operating Margin': 'Operating Margin - Percentage of revenue left after paying operating expenses. Shows operational efficiency before interest and taxes.',
+  'Current Ratio': 'Current Ratio - Current Assets ÷ Current Liabilities. Measures ability to pay short-term debts. 1.5-3.0 is typically healthy.',
+  'D/E': 'Debt-to-Equity Ratio - Total Debt ÷ Total Equity. Shows financial leverage. Lower ratios indicate less financial risk.',
+  'Debt-to-Equity': 'Debt-to-Equity Ratio - Total Debt ÷ Total Equity. Shows financial leverage. Lower ratios indicate less financial risk.',
+  'P/E': 'Price-to-Earnings Ratio - Stock Price ÷ Earnings Per Share. Shows how much investors pay per dollar of earnings. Lower can indicate value.',
+  'P/B': 'Price-to-Book Ratio - Stock Price ÷ Book Value Per Share. Compares market value to accounting value. <1 may indicate undervaluation.',
+  'P/S': 'Price-to-Sales Ratio - Market Cap ÷ Annual Revenue. Shows valuation relative to sales. Useful for comparing companies in same industry.',
+  'DCF': 'Discounted Cash Flow - Valuation method that estimates company value based on projected future cash flows discounted to present value.',
+  'EV/EBITDA': 'Enterprise Value to EBITDA - Total company value ÷ earnings before interest, taxes, depreciation. Lower ratios may indicate value.',
+  'ROIC': 'Return on Invested Capital - Measures how efficiently a company generates profits from its invested capital. >10% is generally good.',
+  'FCFF': 'Free Cash Flow to Firm - Cash available to all investors after operating expenses and investments. Key measure of company\'s cash generation.',
+  'Market Cap': 'Market Capitalization - Total value of all company shares (Share Price × Number of Shares). Indicates company size.',
+  'Revenue Growth': 'Revenue Growth - Percentage increase in sales over time. Positive growth indicates expanding business.',
+  'Earnings Growth': 'Earnings Growth - Percentage change in company profits over time. Key indicator of business performance.',
+  'Free Cash Flow': 'Free Cash Flow - Cash generated after capital expenditures. Shows actual cash available for dividends, buybacks, or debt reduction.',
+  'Margin Requirement': 'Margin Requirement - Minimum equity percentage required when trading on margin. Higher requirements mean less leverage allowed.',
+  'Unrealized Gains': 'Unrealized Gains - Paper profits/losses on investments you still own. Not actual cash until positions are closed.'
+};
+
+// Tooltip component
+const FinancialTooltip = ({ term, children }: { term: string; children: React.ReactNode }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const explanation = financialTerms[term];
+  
+  if (!explanation) return <>{children}</>;
+
+  return (
+    <div className="relative inline-flex items-center gap-1">
+      {children}
+      <div
+        className="relative"
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+      >
+        <HelpCircle className="w-3 h-3 text-gray-400 hover:text-gray-600 cursor-help" />
+        {showTooltip && (
+          <div className="absolute bottom-full left-1/4 transform -translate-x-1/2 mb-2 px-4 py-3 bg-gray-900 text-white text-sm rounded-lg shadow-xl max-w-2xl min-w-80 z-50 leading-relaxed">
+            <div className="font-semibold mb-1 text-blue-300">{term}</div>
+            <div className="text-gray-100 max-h-32 overflow-y-auto">{explanation}</div>
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Helper function to wrap financial terms with tooltips
+const wrapFinancialTerms = (text: string) => {
+  // Split text and wrap known financial terms
+  const terms = Object.keys(financialTerms);
+  const parts = text.split(new RegExp(`\\b(${terms.join('|')})\\b`, 'gi'));
+  
+  return parts.map((part, index) => {
+    const term = terms.find(t => t.toLowerCase() === part.toLowerCase());
+    if (term) {
+      return (
+        <FinancialTooltip key={index} term={term}>
+          <span className="underline decoration-dotted decoration-gray-400">{part}</span>
+        </FinancialTooltip>
+      );
+    }
+    return part;
+  });
+};
 
 export function Portfolio() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
@@ -689,7 +760,9 @@ export function Portfolio() {
                       <span className="font-medium text-gray-900">${portfolio.cash.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-700">Margin Requirement:</span>
+                      <FinancialTooltip term="Margin Requirement">
+                        <span className="text-gray-700 underline decoration-dotted decoration-gray-400">Margin Requirement:</span>
+                      </FinancialTooltip>
                       <span className="font-medium text-gray-900">{(portfolio.margin_requirement * 100).toFixed(1)}%</span>
                     </div>
                     <div className="flex justify-between">
@@ -702,7 +775,9 @@ export function Portfolio() {
                       const { totalGain, totalPercent } = getTotalUnrealizedGains();
                       return (
                         <div className="bg-gray-50 rounded-lg p-3">
-                          <div className="text-sm text-gray-600 mb-1">Total Unrealized Gains</div>
+                          <FinancialTooltip term="Unrealized Gains">
+                            <div className="text-sm text-gray-600 mb-1 underline decoration-dotted decoration-gray-400">Total Unrealized Gains</div>
+                          </FinancialTooltip>
                           <div className={`text-lg font-bold ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {totalGain >= 0 ? '+' : ''}${totalGain.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
@@ -1108,7 +1183,7 @@ export function Portfolio() {
                               {/* Show current price if available from risk management agent */}
                               {viewingResult.detailedAnalysis?.analyst_signals?.risk_management_agent?.[ticker]?.current_price && (
                                 <Badge variant="outline" className="text-gray-900 font-semibold">
-                                  ${viewingResult.detailedAnalysis.analyst_signals.risk_management_agent[ticker].current_price.toFixed(2)}
+                                  ${viewingResult.detailedAnalysis.analyst_signals.risk_management_agent[ticker].current_price?.toFixed(2)}
                                 </Badge>
                               )}
                               <div className="flex items-center gap-2">
@@ -1132,7 +1207,7 @@ export function Portfolio() {
                                   {/* Show trade value if price is available */}
                                   {viewingResult.detailedAnalysis?.analyst_signals?.risk_management_agent?.[ticker]?.current_price && (
                                     <span className="ml-1 text-xs">
-                                      (${(decision.quantity * viewingResult.detailedAnalysis.analyst_signals.risk_management_agent[ticker].current_price).toLocaleString()})
+                                      (${(decision.quantity * (viewingResult.detailedAnalysis.analyst_signals.risk_management_agent[ticker].current_price || 0)).toLocaleString()})
                                     </span>
                                   )}
                                 </Badge>
@@ -1172,7 +1247,7 @@ export function Portfolio() {
                           )}
                           
                           <div className="bg-white rounded-lg p-3 border-l-4 border-l-blue-500">
-                            <p className="text-sm text-gray-700 leading-relaxed">{decision.reasoning}</p>
+                            <p className="text-sm text-gray-700 leading-relaxed">{wrapFinancialTerms(decision.reasoning)}</p>
                           </div>
                         </div>
                       ))}
@@ -1261,15 +1336,48 @@ export function Portfolio() {
                                 {analysis.reasoning && (
                                   <div className="text-sm text-gray-700 mb-2">
                                     {typeof analysis.reasoning === 'string' ? (
-                                      <p>{analysis.reasoning}</p>
+                                      <p>{wrapFinancialTerms(analysis.reasoning)}</p>
                                     ) : (
                                       <div>
-                                        <p className="font-medium mb-1">Portfolio Analysis:</p>
-                                        <div className="text-xs space-y-1 bg-white rounded p-2">
+                                        <p className="font-medium mb-1">Detailed Analysis:</p>
+                                        <div className="text-xs space-y-2 bg-white rounded p-2">
                                           {Object.entries(analysis.reasoning).map(([key, value]) => (
-                                            <div key={key} className="flex justify-between">
-                                              <span className="capitalize">{key.replace(/_/g, ' ')}:</span>
-                                              <span>${typeof value === 'number' ? value.toLocaleString() : value}</span>
+                                            <div key={key} className="border-b border-gray-100 pb-2 last:border-b-0">
+                                              <div className="font-medium text-gray-800 capitalize mb-1">
+                                                {key.replace(/_/g, ' ')}:
+                                              </div>
+                                              {typeof value === 'object' && value !== null && 'signal' in value && 'details' in value ? (
+                                                <div className="ml-2">
+                                                  <div className="flex items-center gap-2 mb-1">
+                                                    <Badge 
+                                                      variant="outline"
+                                                      className={
+                                                        (value as {signal: string}).signal === 'bullish' ? 'text-green-700 bg-green-50 border-green-200' :
+                                                        (value as {signal: string}).signal === 'bearish' ? 'text-red-700 bg-red-50 border-red-200' :
+                                                        'text-gray-700 bg-gray-50 border-gray-200'
+                                                      }
+                                                    >
+                                                      {(value as {signal: string}).signal}
+                                                    </Badge>
+                                                  </div>
+                                                  <div className="text-gray-600 text-xs">
+                                                    {wrapFinancialTerms((value as {details: string}).details)}
+                                                  </div>
+                                                </div>
+                                              ) : typeof value === 'object' && value !== null ? (
+                                                <div className="ml-2 space-y-1">
+                                                  {Object.entries(value).map(([subKey, subValue]) => (
+                                                    <div key={subKey} className="flex justify-between">
+                                                      <span className="capitalize">{subKey.replace(/_/g, ' ')}:</span>
+                                                      <span>{typeof subValue === 'number' ? subValue.toLocaleString() : String(subValue)}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <div className="ml-2 text-gray-600">
+                                                  {typeof value === 'number' ? value.toLocaleString() : String(value)}
+                                                </div>
+                                              )}
                                             </div>
                                           ))}
                                         </div>
