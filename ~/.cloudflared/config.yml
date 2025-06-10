@@ -1,0 +1,7 @@
+tunnel: 946a1fa9-8c35-4cb6-9f8f-28cf7d89050f
+credentials-file: /Users/louisleng/.cloudflared/946a1fa9-8c35-4cb6-9f8f-28cf7d89050f.json
+
+ingress:
+  - hostname: api.hedge-fund.louisleng.com
+    service: http://localhost:8000
+  - service: http_status:404 

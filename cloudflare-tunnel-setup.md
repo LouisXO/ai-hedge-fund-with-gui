@@ -22,8 +22,8 @@ cloudflared tunnel login
 ## Step 3: Create a Tunnel
 
 ```bash
-# Create a new tunnel (replace 'ai-hedge-fund-api' with your preferred name)
-cloudflared tunnel create ai-hedge-fund-api
+# Create a new tunnel
+cloudflared tunnel create ai-hedge-fund-backend
 
 # This will create a tunnel and give you a tunnel ID
 # Note down the tunnel ID - you'll need it
@@ -34,12 +34,12 @@ cloudflared tunnel create ai-hedge-fund-api
 Create a config file at `~/.cloudflared/config.yml`:
 
 ```yaml
-tunnel: ai-hedge-fund-api  # Your tunnel name
-credentials-file: ~/.cloudflared/YOUR_TUNNEL_ID.json  # Replace with actual tunnel ID
+tunnel: 0d96dc93-711a-421f-a722-42e47b03b8ea
+credentials-file: /Users/louisleng/.cloudflared/0d96dc93-711a-421f-a722-42e47b03b8ea.json
 
 ingress:
   # Route your API domain to your local backend
-  - hostname: your-api-domain.your-domain.com  # Replace with your desired subdomain
+  - hostname: api.hedge-fund.louisleng.com
     service: http://localhost:8000
   # Catch-all rule (required)
   - service: http_status:404
@@ -49,15 +49,14 @@ ingress:
 
 ```bash
 # Create DNS record pointing to your tunnel
-# Replace 'your-api-domain.your-domain.com' with your desired API subdomain
-cloudflared tunnel route dns ai-hedge-fund-api your-api-domain.your-domain.com
+cloudflared tunnel route dns ai-hedge-fund-backend api.hedge-fund.louisleng.com
 ```
 
 ## Step 6: Run the Tunnel
 
 ```bash
 # Test the tunnel
-cloudflared tunnel run ai-hedge-fund-api
+cloudflared tunnel run ai-hedge-fund-backend
 
 # To run in background (for production)
 cloudflared tunnel --config ~/.cloudflared/config.yml run
@@ -73,12 +72,12 @@ sudo cloudflared service install
 ## Example URLs
 
 After setup, your API will be accessible at:
-- `https://your-api-domain.your-domain.com/portfolio/`
-- `https://your-api-domain.your-domain.com/hedge-fund/run`
+- `https://api.hedge-fund.louisleng.com/portfolio/`
+- `https://api.hedge-fund.louisleng.com/hedge-fund/run`
 - etc.
 
 ## Troubleshooting
 
 - Check tunnel status: `cloudflared tunnel list`
-- View logs: `cloudflared tunnel run ai-hedge-fund-api --loglevel debug`
+- View logs: `cloudflared tunnel run ai-hedge-fund-backend --loglevel debug`
 - Test locally first: Ensure your backend runs on `http://localhost:8000` 
