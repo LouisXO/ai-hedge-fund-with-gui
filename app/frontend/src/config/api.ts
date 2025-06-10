@@ -20,14 +20,14 @@ const getApiBaseUrl = (): string => {
   // Fallback options (uncomment if needed):
   
   // Option 2: Same domain, different port (if both on same server)
-  // const protocol = window.location.protocol;
-  // const hostname = window.location.hostname;
-  // return `${protocol}//${hostname}:8000`;
+//   const protocol = window.location.protocol;
+//   const hostname = window.location.hostname;
+//   return `${protocol}//${hostname}:8000`;
   
-  // Option 3: Subdomain approach
-  // const protocol = window.location.protocol;
-  // const hostname = window.location.hostname;
-  // return `${protocol}//api.${hostname}`;
+// //   Option 3: Subdomain approach
+//   const protocol = window.location.protocol;
+//   const hostname = window.location.hostname;
+//   return `${protocol}//api.${hostname}`;
 };
 
 // API endpoints configuration
