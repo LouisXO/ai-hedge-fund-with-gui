@@ -5,25 +5,29 @@ const getApiBaseUrl = (): string => {
     return 'http://localhost:8000';
   }
   
-  // For production, use the same host as the frontend but on port 8000
-  // You can also use environment variables or different logic here
-  const protocol = window.location.protocol;
-  const hostname = window.location.hostname;
-  
-  // If hostname is localhost in production (unlikely but possible)
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:8000';
+  // Check for environment variable first (most flexible)
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
   }
   
-  // For production deployment, construct API URL
-  // Option 1: Same domain, different port
-  return `${protocol}//${hostname}:8000`;
+  // For production deployment with Cloudflare Tunnel
+  // Replace this with your actual Cloudflare tunnel domain
+  const CLOUDFLARE_TUNNEL_DOMAIN = 'your-api-domain.your-domain.com';
   
-  // Option 2: Subdomain approach (uncomment if using subdomains)
+  // Use HTTPS for Cloudflare tunnel
+  return `https://${CLOUDFLARE_TUNNEL_DOMAIN}`;
+  
+  // Fallback options (uncomment if needed):
+  
+  // Option 2: Same domain, different port (if both on same server)
+  // const protocol = window.location.protocol;
+  // const hostname = window.location.hostname;
+  // return `${protocol}//${hostname}:8000`;
+  
+  // Option 3: Subdomain approach
+  // const protocol = window.location.protocol;
+  // const hostname = window.location.hostname;
   // return `${protocol}//api.${hostname}`;
-  
-  // Option 3: Different domain (uncomment and modify if API is on different domain)
-  // return 'https://your-api-domain.com';
 };
 
 // API endpoints configuration

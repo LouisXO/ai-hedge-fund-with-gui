@@ -8,12 +8,14 @@ app = FastAPI(title="AI Hedge Fund API", description="Backend API for AI Hedge F
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Frontend URLs
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",  # Development
+        "https://hedge-fund.louisleng.com",  # Production
+        # "https://your-custom-domain.com",  # Custom domain
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Include all routes
 app.include_router(api_router)
