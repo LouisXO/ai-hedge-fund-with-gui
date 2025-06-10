@@ -11,11 +11,11 @@ const getApiBaseUrl = (): string => {
   }
   
   // TEMPORARY: Use direct IP for production while tunnel is being debugged
-  return 'http://100.110.174.98:8000';
+  // return 'http://100.110.174.98:8000';
   
   // TODO: Switch back to Cloudflare tunnel when working:
-  // const CLOUDFLARE_TUNNEL_DOMAIN = 'api.hedge-fund.louisleng.com';
-  // return `https://${CLOUDFLARE_TUNNEL_DOMAIN}`;
+  const CLOUDFLARE_TUNNEL_DOMAIN = 'api-hedge-fund.louisleng.com';
+  return `https://${CLOUDFLARE_TUNNEL_DOMAIN}`;
   
   // Fallback options (uncomment if needed):
   

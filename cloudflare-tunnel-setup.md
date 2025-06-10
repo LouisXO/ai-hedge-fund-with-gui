@@ -39,7 +39,7 @@ credentials-file: /Users/louisleng/.cloudflared/0d96dc93-711a-421f-a722-42e47b03
 
 ingress:
   # Route your API domain to your local backend
-  - hostname: api.hedge-fund.louisleng.com
+  - hostname: api-hedge-fund.louisleng.com
     service: http://localhost:8000
   # Catch-all rule (required)
   - service: http_status:404
@@ -49,7 +49,7 @@ ingress:
 
 ```bash
 # Create DNS record pointing to your tunnel
-cloudflared tunnel route dns ai-hedge-fund-backend api.hedge-fund.louisleng.com
+cloudflared tunnel route dns ai-hedge-fund-backend api-hedge-fund.louisleng.com
 ```
 
 ## Step 6: Run the Tunnel
@@ -72,8 +72,8 @@ sudo cloudflared service install
 ## Example URLs
 
 After setup, your API will be accessible at:
-- `https://api.hedge-fund.louisleng.com/portfolio/`
-- `https://api.hedge-fund.louisleng.com/hedge-fund/run`
+- `https://api-hedge-fund.louisleng.com/portfolio/`
+- `https://api-hedge-fund.louisleng.com/hedge-fund/run`
 - etc.
 
 ## Troubleshooting
