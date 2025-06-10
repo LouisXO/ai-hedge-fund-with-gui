@@ -2,6 +2,8 @@ import datetime
 import os
 import pandas as pd
 import requests
+import yfinance as yf
+from typing import List, Dict, Optional
 
 from src.data.cache import get_cache
 from src.data.models import (
@@ -23,34 +25,41 @@ _cache = get_cache()
 
 
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
-    """Fetch price data from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
+    """Fetch price data from cache or Yahoo Finance API (FREE)."""
     cache_key = f"{ticker}_{start_date}_{end_date}"
     
-    # Check cache first - simple exact match
+    # Check cache first
     if cached_data := _cache.get_prices(cache_key):
         return [Price(**price) for price in cached_data]
 
-    # If not in cache, fetch from API
-    headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-
-    # Parse response with Pydantic model
-    price_response = PriceResponse(**response.json())
-    prices = price_response.prices
-
-    if not prices:
+    try:
+        # Use Yahoo Finance instead of paid API
+        stock = yf.Ticker(ticker)
+        df = stock.history(start=start_date, end=end_date)
+        
+        if df.empty:
+            return []
+        
+        # Convert Yahoo Finance data to Price objects
+        prices = []
+        for date, row in df.iterrows():
+            price = Price(
+                time=date.strftime('%Y-%m-%dT%H:%M:%S'),
+                open=float(row['Open']),
+                high=float(row['High']),
+                low=float(row['Low']),
+                close=float(row['Close']),
+                volume=int(row['Volume'])
+            )
+            prices.append(price)
+        
+        # Cache the results
+        _cache.set_prices(cache_key, [p.model_dump() for p in prices])
+        return prices
+        
+    except Exception as e:
+        print(f"Error fetching Yahoo Finance data for {ticker}: {e}")
         return []
-
-    # Cache the results using the comprehensive cache key
-    _cache.set_prices(cache_key, [p.model_dump() for p in prices])
-    return prices
 
 
 def get_financial_metrics(
@@ -59,34 +68,95 @@ def get_financial_metrics(
     period: str = "ttm",
     limit: int = 10,
 ) -> list[FinancialMetrics]:
-    """Fetch financial metrics from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
+    """Fetch financial metrics from cache or Yahoo Finance (FREE)."""
     cache_key = f"{ticker}_{period}_{end_date}_{limit}"
     
-    # Check cache first - simple exact match
+    # Check cache first
     if cached_data := _cache.get_financial_metrics(cache_key):
         return [FinancialMetrics(**metric) for metric in cached_data]
 
-    # If not in cache, fetch from API
-    headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-
-    # Parse response with Pydantic model
-    metrics_response = FinancialMetricsResponse(**response.json())
-    financial_metrics = metrics_response.financial_metrics
-
-    if not financial_metrics:
+    try:
+        # Use Yahoo Finance for company info
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        
+        if not info:
+            return []
+        
+        # Create FinancialMetrics object from Yahoo Finance data with ALL required fields
+        financial_metric = FinancialMetrics(
+            ticker=ticker,
+            report_period=end_date,
+            period=period,
+            currency=info.get('currency', 'USD'),  # Required field
+            
+            # Market metrics
+            market_cap=info.get('marketCap'),
+            enterprise_value=info.get('enterpriseValue'),
+            
+            # Valuation ratios
+            price_to_earnings_ratio=info.get('trailingPE'),
+            price_to_book_ratio=info.get('priceToBook'),
+            price_to_sales_ratio=info.get('priceToSalesTrailing12Months'),
+            enterprise_value_to_ebitda_ratio=info.get('enterpriseToEbitda'),
+            enterprise_value_to_revenue_ratio=info.get('enterpriseToRevenue'),
+            free_cash_flow_yield=None,  # Not directly available
+            peg_ratio=info.get('pegRatio'),
+            
+            # Margins
+            gross_margin=info.get('grossMargins'),
+            operating_margin=info.get('operatingMargins'),
+            net_margin=info.get('profitMargins'),
+            
+            # Returns
+            return_on_equity=info.get('returnOnEquity'),
+            return_on_assets=info.get('returnOnAssets'),
+            return_on_invested_capital=None,  # Not directly available
+            
+            # Turnover ratios
+            asset_turnover=None,  # Not directly available
+            inventory_turnover=None,  # Not directly available
+            receivables_turnover=None,  # Not directly available
+            days_sales_outstanding=None,  # Not directly available
+            operating_cycle=None,  # Not directly available
+            working_capital_turnover=None,  # Not directly available
+            
+            # Liquidity ratios
+            current_ratio=info.get('currentRatio'),
+            quick_ratio=info.get('quickRatio'),
+            cash_ratio=None,  # Not directly available
+            operating_cash_flow_ratio=None,  # Not directly available
+            
+            # Leverage ratios
+            debt_to_equity=info.get('debtToEquity'),
+            debt_to_assets=None,  # Not directly available
+            interest_coverage=None,  # Not directly available
+            
+            # Growth rates
+            revenue_growth=info.get('revenueGrowth'),
+            earnings_growth=info.get('earningsGrowth'),
+            book_value_growth=None,  # Not directly available
+            earnings_per_share_growth=None,  # Not directly available
+            free_cash_flow_growth=None,  # Not directly available
+            operating_income_growth=None,  # Not directly available
+            ebitda_growth=None,  # Not directly available
+            
+            # Per share metrics
+            payout_ratio=info.get('payoutRatio'),
+            earnings_per_share=info.get('trailingEps'),
+            book_value_per_share=info.get('bookValue'),
+            free_cash_flow_per_share=None,  # Not directly available
+        )
+        
+        financial_metrics = [financial_metric]
+        
+        # Cache the results
+        _cache.set_financial_metrics(cache_key, [m.model_dump() for m in financial_metrics])
+        return financial_metrics
+        
+    except Exception as e:
+        print(f"Error fetching Yahoo Finance metrics for {ticker}: {e}")
         return []
-
-    # Cache the results as dicts using the comprehensive cache key
-    _cache.set_financial_metrics(cache_key, [m.model_dump() for m in financial_metrics])
-    return financial_metrics
 
 
 def search_line_items(
@@ -96,32 +166,56 @@ def search_line_items(
     period: str = "ttm",
     limit: int = 10,
 ) -> list[LineItem]:
-    """Fetch line items from API."""
-    # If not in cache or insufficient data, fetch from API
-    headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    url = "https://api.financialdatasets.ai/financials/search/line-items"
-
-    body = {
-        "tickers": [ticker],
-        "line_items": line_items,
-        "end_date": end_date,
-        "period": period,
-        "limit": limit,
-    }
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-    data = response.json()
-    response_model = LineItemResponse(**data)
-    search_results = response_model.search_results
-    if not search_results:
+    """Fetch line items from Yahoo Finance financial statements (FREE)."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        
+        # Get financial statements
+        income_stmt = stock.financials
+        balance_sheet = stock.balance_sheet
+        cashflow = stock.cashflow
+        
+        line_items_results = []
+        
+        # Search through all statements for requested line items
+        statements = {
+            'income_statement': income_stmt,
+            'balance_sheet': balance_sheet,
+            'cash_flow': cashflow
+        }
+        
+        for statement_name, df in statements.items():
+            if df.empty:
+                continue
+                
+            for line_item in line_items:
+                # Search for line item in the dataframe index (case insensitive)
+                matching_items = [idx for idx in df.index if line_item.lower() in idx.lower()]
+                
+                for match in matching_items:
+                    # Get the most recent value (first column)
+                    if not df.columns.empty:
+                        recent_date = df.columns[0]
+                        value = df.loc[match, recent_date]
+                        
+                        if pd.notna(value):
+                            line_item_obj = LineItem(
+                                ticker=ticker,
+                                report_period=recent_date.strftime('%Y-%m-%d') if hasattr(recent_date, 'strftime') else str(recent_date),
+                                period=period,
+                                currency=info.get('currency', 'USD'),  # Required field
+                                line_item=match,
+                                value=float(value),
+                                statement_type=statement_name
+                            )
+                            line_items_results.append(line_item_obj)
+        
+        return line_items_results[:limit]
+        
+    except Exception as e:
+        print(f"Error fetching Yahoo Finance line items for {ticker}: {e}")
         return []
-
-    # Cache the results
-    return search_results[:limit]
 
 
 def get_insider_trades(
@@ -130,58 +224,25 @@ def get_insider_trades(
     start_date: str | None = None,
     limit: int = 1000,
 ) -> list[InsiderTrade]:
-    """Fetch insider trades from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
+    """Fetch insider trades - Using SEC EDGAR API (FREE) - Limited functionality."""
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
     
-    # Check cache first - simple exact match
+    # Check cache first
     if cached_data := _cache.get_insider_trades(cache_key):
         return [InsiderTrade(**trade) for trade in cached_data]
 
-    # If not in cache, fetch from API
-    headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    all_trades = []
-    current_end_date = end_date
-
-    while True:
-        url = f"https://api.financialdatasets.ai/insider-trades/?ticker={ticker}&filing_date_lte={current_end_date}"
-        if start_date:
-            url += f"&filing_date_gte={start_date}"
-        url += f"&limit={limit}"
-
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-
-        data = response.json()
-        response_model = InsiderTradeResponse(**data)
-        insider_trades = response_model.insider_trades
-
-        if not insider_trades:
-            break
-
-        all_trades.extend(insider_trades)
-
-        # Only continue pagination if we have a start_date and got a full page
-        if not start_date or len(insider_trades) < limit:
-            break
-
-        # Update end_date to the oldest filing date from current batch for next iteration
-        current_end_date = min(trade.filing_date for trade in insider_trades).split("T")[0]
-
-        # If we've reached or passed the start_date, we can stop
-        if current_end_date <= start_date:
-            break
-
-    if not all_trades:
+    try:
+        # Note: SEC EDGAR insider trading data requires complex parsing
+        # For now, return empty list - you might want to implement SEC Form 4 parsing
+        print(f"Insider trades for {ticker}: SEC EDGAR parsing not implemented yet")
         return []
-
-    # Cache the results using the comprehensive cache key
-    _cache.set_insider_trades(cache_key, [trade.model_dump() for trade in all_trades])
-    return all_trades
+        
+        # TODO: Implement SEC Form 4 parsing or use alternative free source
+        # This would require parsing XML from SEC EDGAR which is complex
+        
+    except Exception as e:
+        print(f"Error fetching insider trades for {ticker}: {e}")
+        return []
 
 
 def get_company_news(
@@ -190,92 +251,101 @@ def get_company_news(
     start_date: str | None = None,
     limit: int = 1000,
 ) -> list[CompanyNews]:
-    """Fetch company news from cache or API."""
-    # Create a cache key that includes all parameters to ensure exact matches
+    """Fetch company news using NewsAPI (FREE - 100 requests/day)."""
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
     
-    # Check cache first - simple exact match
+    # Check cache first
     if cached_data := _cache.get_company_news(cache_key):
         return [CompanyNews(**news) for news in cached_data]
 
-    # If not in cache, fetch from API
-    headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
-
-    all_news = []
-    current_end_date = end_date
-
-    while True:
-        url = f"https://api.financialdatasets.ai/news/?ticker={ticker}&end_date={current_end_date}"
-        if start_date:
-            url += f"&start_date={start_date}"
-        url += f"&limit={limit}"
-
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-
-        data = response.json()
-        response_model = CompanyNewsResponse(**data)
-        company_news = response_model.news
-
-        if not company_news:
-            break
-
-        all_news.extend(company_news)
-
-        # Only continue pagination if we have a start_date and got a full page
-        if not start_date or len(company_news) < limit:
-            break
-
-        # Update end_date to the oldest date from current batch for next iteration
-        current_end_date = min(news.date for news in company_news).split("T")[0]
-
-        # If we've reached or passed the start_date, we can stop
-        if current_end_date <= start_date:
-            break
-
-    if not all_news:
+    # Check if NewsAPI key is available
+    api_key = os.environ.get("NEWSAPI_KEY")
+    if not api_key:
+        print("NewsAPI key not found. Get free key from newsapi.org")
         return []
 
-    # Cache the results using the comprehensive cache key
-    _cache.set_company_news(cache_key, [news.model_dump() for news in all_news])
-    return all_news
+    try:
+        # Calculate date range
+        if start_date:
+            from_date = start_date
+        else:
+            # Default to 30 days back
+            from_dt = datetime.datetime.strptime(end_date, '%Y-%m-%d') - datetime.timedelta(days=30)
+            from_date = from_dt.strftime('%Y-%m-%d')
+        
+        url = "https://newsapi.org/v2/everything"
+        params = {
+            'q': f'"{ticker}" OR "{ticker} stock"',
+            'from': from_date,
+            'to': end_date,
+            'sortBy': 'publishedAt',
+            'apiKey': api_key,
+            'pageSize': min(limit, 100)  # NewsAPI max is 100 per request
+        }
+        
+        response = requests.get(url, params=params)
+        if response.status_code != 200:
+            print(f"NewsAPI error: {response.status_code}")
+            return []
+        
+        data = response.json()
+        articles = data.get('articles', [])
+        
+        # Convert to CompanyNews objects
+        company_news = []
+        for article in articles:
+            # Handle missing author field - provide default value
+            author = article.get('author')
+            if not author or author.strip() == '':
+                # Use source name as fallback author
+                source_info = article.get('source', {})
+                author = source_info.get('name', 'Unknown')
+            
+            news = CompanyNews(
+                ticker=ticker,
+                title=article.get('title', ''),
+                author=author,  # Now guaranteed to have a value
+                url=article.get('url', ''),
+                date=article.get('publishedAt', ''),
+                source=article.get('source', {}).get('name', ''),
+                sentiment=None  # NewsAPI doesn't provide sentiment
+            )
+            company_news.append(news)
+        
+        # Cache the results
+        _cache.set_company_news(cache_key, [news.model_dump() for news in company_news])
+        return company_news
+        
+    except Exception as e:
+        print(f"Error fetching news for {ticker}: {e}")
+        return []
 
 
 def get_market_cap(
     ticker: str,
     end_date: str,
 ) -> float | None:
-    """Fetch market cap from the API."""
-    # Check if end_date is today
-    if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
-        # Get the market cap from company facts API
-        headers = {}
-        if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-            headers["X-API-KEY"] = api_key
-
-        url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            print(f"Error fetching company facts: {ticker} - {response.status_code}")
-            return None
-
-        data = response.json()
-        response_model = CompanyFactsResponse(**data)
-        return response_model.company_facts.market_cap
-
-    financial_metrics = get_financial_metrics(ticker, end_date)
-    if not financial_metrics:
+    """Fetch market cap using Yahoo Finance (FREE)."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        
+        market_cap = info.get('marketCap')
+        if market_cap:
+            return float(market_cap)
+        
+        # Alternative calculation: shares outstanding * current price
+        shares = info.get('sharesOutstanding')
+        current_price = info.get('currentPrice')
+        
+        if shares and current_price:
+            return float(shares * current_price)
+        
         return None
-
-    market_cap = financial_metrics[0].market_cap
-
-    if not market_cap:
+        
+    except Exception as e:
+        print(f"Error fetching market cap for {ticker}: {e}")
         return None
-
-    return market_cap
 
 
 def prices_to_df(prices: list[Price]) -> pd.DataFrame:
@@ -290,7 +360,49 @@ def prices_to_df(prices: list[Price]) -> pd.DataFrame:
     return df
 
 
-# Update the get_price_data function to use the new functions
 def get_price_data(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
+    """Get price data using free Yahoo Finance API."""
     prices = get_prices(ticker, start_date, end_date)
     return prices_to_df(prices)
+
+
+# Additional helper functions for enhanced free data
+def get_company_info_detailed(ticker: str) -> Dict:
+    """Get detailed company information using Yahoo Finance."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        
+        return {
+            'sector': info.get('sector'),
+            'industry': info.get('industry'),
+            'employees': info.get('fullTimeEmployees'),
+            'summary': info.get('longBusinessSummary'),
+            'website': info.get('website'),
+            'headquarters': {
+                'city': info.get('city'),
+                'state': info.get('state'),
+                'country': info.get('country')
+            },
+            'metrics': {
+                'beta': info.get('beta'),
+                'dividend_yield': info.get('dividendYield'),
+                'ex_dividend_date': info.get('exDividendDate'),
+                'payout_ratio': info.get('payoutRatio'),
+                'profit_margin': info.get('profitMargins'),
+                'operating_margin': info.get('operatingMargins'),
+                'return_on_assets': info.get('returnOnAssets'),
+                'return_on_equity': info.get('returnOnEquity'),
+                'revenue_per_share': info.get('revenuePerShare'),
+                'debt_to_equity': info.get('debtToEquity'),
+                'current_ratio': info.get('currentRatio'),
+                'book_value': info.get('bookValue'),
+                'price_to_book': info.get('priceToBook'),
+                'enterprise_value': info.get('enterpriseValue'),
+                'forward_pe': info.get('forwardPE'),
+                'trailing_pe': info.get('trailingPE')
+            }
+        }
+    except Exception as e:
+        print(f"Error fetching detailed company info for {ticker}: {e}")
+        return {}

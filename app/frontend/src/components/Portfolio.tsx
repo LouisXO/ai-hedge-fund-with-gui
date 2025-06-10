@@ -3,9 +3,10 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Play, BarChart3, Loader2, TrendingUp, TrendingDown, Minus, Target, AlertTriangle, HelpCircle } from 'lucide-react';
+import { Play, BarChart3, Loader2, TrendingUp, TrendingDown, Minus, Target, AlertTriangle, HelpCircle, LineChart, RefreshCw, Trash2 } from 'lucide-react';
 import { SWARM_NAMES } from '../data/multi-node-mappings';
 import { apiModels, defaultModel, ModelItem } from '../data/models';
+import { API_CONFIG, apiRequest } from '../config/api';
 
 interface Position {
   ticker: string;
@@ -32,6 +33,15 @@ interface Portfolio {
     long: number;
     short: number;
   }>;
+}
+
+interface PortfolioChartData {
+  date: string;
+  timestamp: number;
+  total_value: number;
+  cash: number;
+  positions_value: number;
+  unrealized_gains: number;
 }
 
 interface AnalysisResult {
@@ -139,9 +149,397 @@ const wrapFinancialTerms = (text: string) => {
   });
 };
 
+// Portfolio Performance Chart Component
+const PortfolioChart = ({ data, period, isLoading }: { data: PortfolioChartData[]; period: string; isLoading?: boolean }) => {
+  if (isLoading) {
+    return (
+      <div className="bg-white rounded-lg p-4 border border-gray-200 flex items-center justify-center h-64">
+        <div className="text-center text-gray-500">
+          <Loader2 className="w-8 h-8 mx-auto mb-2 text-blue-500 animate-spin" />
+          <p>Loading portfolio data...</p>
+          <p className="text-sm">Fetching {period} historical data</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="bg-white rounded-lg p-4 border border-gray-200 flex items-center justify-center h-64">
+        <div className="text-center text-gray-500">
+          <LineChart className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+          <p>No historical data available yet</p>
+          <p className="text-sm">Data will appear as you make trades</p>
+        </div>
+      </div>
+    );
+  }
+
+  const maxValue = Math.max(...data.map(d => d.total_value));
+  const minValue = Math.min(...data.map(d => d.total_value));
+  const valueRange = maxValue - minValue || 1; // Prevent division by zero
+  
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  return (
+    <div className="w-full">
+      <div className="mb-6">
+        <h4 className="text-xl font-semibold text-gray-900 mb-2">Portfolio Performance ({period})</h4>
+      </div>
+      
+      <div className="w-full bg-white rounded-lg border border-gray-200 p-6">
+        <div className="w-full overflow-x-auto">
+          <svg 
+            viewBox="0 0 1000 400" 
+            className="w-full h-auto min-w-[800px]"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {/* Grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
+              <g key={ratio}>
+                <line
+                  x1={60}
+                  y1={50 + ratio * 300}
+                  x2={940}
+                  y2={50 + ratio * 300}
+                  stroke="#f3f4f6"
+                  strokeWidth="1"
+                />
+                {/* Y-axis labels */}
+                <text
+                  x={50}
+                  y={50 + ratio * 300 + 5}
+                  textAnchor="end"
+                  className="fill-gray-600"
+                  fontSize="12"
+                >
+                  {formatCurrency(maxValue - ratio * valueRange)}
+                </text>
+              </g>
+            ))}
+            
+            {/* Total value line */}
+            <polyline
+              points={data.map((point, index) => {
+                const x = 60 + (index / (data.length - 1)) * 880;
+                const y = 50 + (1 - (point.total_value - minValue) / valueRange) * 300;
+                return `${x},${y}`;
+              }).join(' ')}
+              fill="none"
+              stroke="#2563eb"
+              strokeWidth="3"
+            />
+            
+            {/* Cost Basis line */}
+            <polyline
+              points={data.map((point, index) => {
+                const baseValue = point.total_value - point.unrealized_gains;
+                const x = 60 + (index / (data.length - 1)) * 880;
+                const y = 50 + (1 - (baseValue - minValue) / valueRange) * 300;
+                return `${x},${y}`;
+              }).join(' ')}
+              fill="none"
+              stroke="#6b7280"
+              strokeWidth="2"
+              strokeDasharray="8,4"
+            />
+            
+            {/* Data points */}
+            {data.map((point, index) => {
+              const x = 60 + (index / (data.length - 1)) * 880;
+              const y = 50 + (1 - (point.total_value - minValue) / valueRange) * 300;
+              return (
+                <circle
+                  key={index}
+                  cx={x}
+                  cy={y}
+                  r="4"
+                  fill="#2563eb"
+                  className="hover:r-6 transition-all cursor-pointer"
+                />
+              );
+            })}
+          </svg>
+        </div>
+        
+        <div className="mt-6 flex justify-between items-center text-sm text-gray-700">
+          <span className="font-medium">{data[0]?.date}</span>
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-1 bg-blue-600 rounded"></div>
+              <span className="font-medium">Total Value</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-1 bg-gray-600 rounded opacity-60" style={{ backgroundImage: 'repeating-linear-gradient(to right, #6b7280 0, #6b7280 4px, transparent 4px, transparent 8px)' }}></div>
+              <span className="font-medium">Cost Basis</span>
+            </div>
+          </div>
+          <span className="font-medium">{data[data.length - 1]?.date}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Compact Portfolio Chart for Overview Section
+const CompactPortfolioChart = ({ data, period, onPeriodChange, isLoading }: { 
+  data: PortfolioChartData[]; 
+  period: string; 
+  onPeriodChange: (period: string) => void;
+  isLoading?: boolean;
+}) => {
+  if (isLoading) {
+    return (
+      <div className="bg-gray-50 rounded-lg p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-700">Performance Trend</span>
+          <select
+            value={period}
+            onChange={(e) => onPeriodChange(e.target.value)}
+            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white text-gray-900"
+          >
+            <option value="1mo">1M</option>
+            <option value="3mo">3M</option>
+            <option value="6mo">6M</option>
+            <option value="1y">1Y</option>
+          </select>
+        </div>
+        <div className="flex items-center justify-center h-20 text-gray-400">
+          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+          <span className="text-xs">Loading...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="bg-gray-50 rounded-lg p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-700">Performance Trend</span>
+          <select
+            value={period}
+            onChange={(e) => onPeriodChange(e.target.value)}
+            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white text-gray-900"
+          >
+            <option value="1mo">1M</option>
+            <option value="3mo">3M</option>
+            <option value="6mo">6M</option>
+            <option value="1y">1Y</option>
+          </select>
+        </div>
+        <div className="flex items-center justify-center h-20 text-gray-400">
+          <LineChart className="w-4 h-4 mr-2" />
+          <span className="text-xs">No chart data</span>
+        </div>
+      </div>
+    );
+  }
+
+  const maxValue = Math.max(...data.map(d => d.total_value));
+  const minValue = Math.min(...data.map(d => d.total_value));
+  const valueRange = maxValue - minValue || 1;
+
+  const formatCompactCurrency = (amount: number) => {
+    if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`;
+    if (amount >= 1000) return `$${(amount / 1000).toFixed(0)}K`;
+    return `$${amount.toFixed(0)}`;
+  };
+
+  return (
+    <div className="bg-gradient-to-br from-gray-50 to-white rounded-lg p-4 border border-gray-200 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <span className="text-sm font-semibold text-gray-800">Performance Trend</span>
+          <div className="text-xs text-gray-500 mt-0.5">
+            {formatCompactCurrency(data[data.length - 1]?.total_value || 0)} current
+          </div>
+        </div>
+        <select
+          value={period}
+          onChange={(e) => onPeriodChange(e.target.value)}
+          className="text-xs px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 hover:border-blue-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 transition-colors"
+        >
+          <option value="1mo">1M</option>
+          <option value="3mo">3M</option>
+          <option value="6mo">6M</option>
+          <option value="1y">1Y</option>
+        </select>
+      </div>
+      
+      <div className="relative">
+        <svg viewBox="0 0 300 90" className="w-full h-24">
+          {/* Background gradient */}
+          <defs>
+            <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.1" />
+              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.02" />
+            </linearGradient>
+            <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#1d4ed8" />
+              <stop offset="100%" stopColor="#3b82f6" />
+            </linearGradient>
+          </defs>
+          
+          {/* Grid lines */}
+          {[0.2, 0.4, 0.6, 0.8].map((ratio) => (
+            <line
+              key={ratio}
+              x1={25}
+              y1={15 + ratio * 60}
+              x2={275}
+              y2={15 + ratio * 60}
+              stroke="#e5e7eb"
+              strokeWidth="0.5"
+              opacity="0.6"
+            />
+          ))}
+          
+          {/* Y-axis labels */}
+          <text
+            x={20}
+            y={20}
+            textAnchor="end"
+            className="fill-gray-500 text-xs"
+            fontSize="9"
+            fontWeight="500"
+          >
+            {formatCompactCurrency(maxValue)}
+          </text>
+          <text
+            x={20}
+            y={80}
+            textAnchor="end"
+            className="fill-gray-500 text-xs"
+            fontSize="9"
+            fontWeight="500"
+          >
+            {formatCompactCurrency(minValue)}
+          </text>
+          
+          {/* Area fill under the line */}
+          <path
+            d={`M 25 ${15 + (1 - (data[0]?.total_value - minValue) / valueRange) * 60} ${data.map((point, index) => {
+              const x = 25 + (index / (data.length - 1)) * 250;
+              const y = 15 + (1 - (point.total_value - minValue) / valueRange) * 60;
+              return `L ${x} ${y}`;
+            }).join(' ')} L 275 75 L 25 75 Z`}
+            fill="url(#chartGradient)"
+          />
+          
+          {/* Cost Basis line */}
+          <polyline
+            points={data.map((point, index) => {
+              const baseValue = point.total_value - point.unrealized_gains;
+              const x = 25 + (index / (data.length - 1)) * 250;
+              const y = 15 + (1 - (baseValue - minValue) / valueRange) * 60;
+              return `${x},${y}`;
+            }).join(' ')}
+            fill="none"
+            stroke="#94a3b8"
+            strokeWidth="1.5"
+            strokeDasharray="3,3"
+            opacity="0.7"
+          />
+          
+          {/* Total value line */}
+          <polyline
+            points={data.map((point, index) => {
+              const x = 25 + (index / (data.length - 1)) * 250;
+              const y = 15 + (1 - (point.total_value - minValue) / valueRange) * 60;
+              return `${x},${y}`;
+            }).join(' ')}
+            fill="none"
+            stroke="url(#lineGradient)"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          
+          {/* Data points */}
+          {data.map((point, index) => {
+            const x = 25 + (index / (data.length - 1)) * 250;
+            const y = 15 + (1 - (point.total_value - minValue) / valueRange) * 60;
+            return (
+              <circle
+                key={index}
+                cx={x}
+                cy={y}
+                r="2"
+                fill="#ffffff"
+                stroke="#2563eb"
+                strokeWidth="2"
+                className="drop-shadow-sm"
+              />
+            );
+          })}
+          
+          {/* Latest value indicator */}
+          {data.length > 0 && (() => {
+            const lastPoint = data[data.length - 1];
+            const x = 275;
+            const y = 15 + (1 - (lastPoint.total_value - minValue) / valueRange) * 60;
+            return (
+              <circle
+                cx={x}
+                cy={y}
+                r="3"
+                fill="#2563eb"
+                className="animate-pulse"
+              />
+            );
+          })()}
+        </svg>
+      </div>
+      
+      <div className="flex justify-between items-center text-xs mt-3 pt-2 border-t border-gray-100">
+        <span className="text-gray-600 font-medium">{data[0]?.date}</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-0.5 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full"></div>
+            <span className="text-gray-700 font-medium">Total</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-0.5 bg-gray-400 rounded-full opacity-70" style={{ backgroundImage: 'repeating-linear-gradient(to right, #94a3b8 0px, #94a3b8 2px, transparent 2px, transparent 4px)' }}></div>
+            <span className="text-gray-700 font-medium">Cost</span>
+          </div>
+        </div>
+        <span className="text-gray-600 font-medium">{data[data.length - 1]?.date}</span>
+      </div>
+      
+      {/* Performance indicator */}
+      {data.length > 1 && (() => {
+        const currentValue = data[data.length - 1]?.total_value || 0;
+        const previousValue = data[0]?.total_value || 0;
+        const change = currentValue - previousValue;
+        const changePercent = previousValue > 0 ? (change / previousValue) * 100 : 0;
+        
+        return (
+          <div className="mt-2 text-center">
+            <span className={`text-xs font-semibold ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {change >= 0 ? '+' : ''}{formatCompactCurrency(change)} ({change >= 0 ? '+' : ''}{changePercent.toFixed(1)}%)
+            </span>
+          </div>
+        );
+      })()}
+    </div>
+  );
+};
+
 export function Portfolio() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [portfolioHistory, setPortfolioHistory] = useState<PortfolioChartData[]>([]);
+  const [chartPeriod, setChartPeriod] = useState<string>('1mo');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
+  const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [initialCash, setInitialCash] = useState('100000');
   const [marginRequirement, setMarginRequirement] = useState('0.5');
   const [tickers, setTickers] = useState('AAPL,MSFT,GOOGL,TSLA');
@@ -173,22 +571,277 @@ export function Portfolio() {
     fetchPortfolio();
   }, []);
 
+  useEffect(() => {
+    if (portfolio) {
+      fetchRealTimeStockData();
+      generatePortfolioHistory();
+    }
+  }, [portfolio, chartPeriod]);
+
+  // Auto-refresh stock prices every 2 minutes
+  useEffect(() => {
+    if (!portfolio) return;
+
+    const interval = setInterval(() => {
+      fetchRealTimeStockData();
+    }, 120000); // 2 minutes
+
+    return () => clearInterval(interval);
+  }, [portfolio]);
+
   const fetchPortfolio = async () => {
     try {
-      const response = await fetch('http://localhost:8000/portfolio/');
+      const response = await apiRequest(API_CONFIG.ENDPOINTS.PORTFOLIO);
       if (response.ok) {
         const data = await response.json();
-        setPortfolio(data);
+        // Handle new API response structure with portfolio_id and portfolio
+        setPortfolio(data.portfolio || data);
       }
     } catch (error) {
       console.error('Error fetching portfolio:', error);
     }
   };
 
+  const fetchRealTimeStockData = async () => {
+    if (!portfolio) return;
+
+    // Get all active tickers from portfolio
+    const activeTickers = Object.entries(portfolio.positions || {})
+      .filter(([, position]) => position.long > 0 || position.short > 0)
+      .map(([ticker]) => ticker);
+
+    if (activeTickers.length === 0) return;
+
+    setIsRefreshingPrices(true);
+    try {
+      const response = await apiRequest(API_CONFIG.ENDPOINTS.PORTFOLIO_STOCK_DATA, {
+        method: 'POST',
+        body: JSON.stringify({
+          tickers: activeTickers,
+          period: '1d'
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Store the stock data in a way that getCurrentPrice can access it
+        const mockAnalysisResults = activeTickers.map(ticker => ({
+          ticker,
+          swarm: 'real-time',
+          status: 'completed' as const,
+          timestamp: new Date(),
+          detailedAnalysis: {
+            analyst_signals: {
+              risk_management_agent: {
+                [ticker]: {
+                  current_price: data.stock_data?.[ticker]?.current_price || 0
+                }
+              }
+            }
+          }
+        }));
+
+        // Update analysis results with real-time price data
+        setAnalysisResults(prev => {
+          // Remove old real-time results and add new ones
+          const filtered = prev.filter(r => r.swarm !== 'real-time');
+          return [...filtered, ...mockAnalysisResults];
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching real-time stock data:', error);
+    } finally {
+      setIsRefreshingPrices(false);
+    }
+  };
+
+  const generatePortfolioHistory = async () => {
+    if (!portfolio) return;
+
+    setIsLoadingChart(true);
+    
+    // Get all active tickers from portfolio
+    const activeTickers = Object.entries(portfolio.positions || {})
+      .filter(([, position]) => position.long > 0 || position.short > 0)
+      .map(([ticker]) => ticker);
+
+    if (activeTickers.length === 0) {
+      // If no positions, create a flat line at cash value
+      const days = chartPeriod === '1mo' ? 30 : chartPeriod === '3mo' ? 90 : chartPeriod === '6mo' ? 180 : chartPeriod === '1y' ? 365 : 30;
+      const historyData: PortfolioChartData[] = [];
+      const baseCash = portfolio.cash || 100000;
+
+      for (let i = days; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        
+        historyData.push({
+          date: date.toISOString().split('T')[0],
+          timestamp: date.getTime(),
+          total_value: baseCash,
+          cash: baseCash,
+          positions_value: 0,
+          unrealized_gains: 0
+        });
+      }
+
+      setPortfolioHistory(historyData);
+      setIsLoadingChart(false);
+      return;
+    }
+
+    try {
+      // Fetch historical stock data for the selected period
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PORTFOLIO_STOCK_DATA}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tickers: activeTickers,
+          period: chartPeriod
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const historyData: PortfolioChartData[] = [];
+
+        // Create a map of all dates to ensure consistency across all stocks
+        const allDatesSet = new Set<string>();
+        activeTickers.forEach(ticker => {
+          const stockData = data.stock_data?.[ticker];
+          if (stockData?.chart_data) {
+            stockData.chart_data.forEach((point: { date: string; close: number }) => {
+              allDatesSet.add(point.date);
+            });
+          }
+        });
+
+        const allDates = Array.from(allDatesSet).sort();
+
+        // Calculate portfolio value for each date
+        allDates.forEach(date => {
+          let totalPositionsValue = 0;
+          let totalCostBasis = 0;
+
+          // Calculate value for each holding on this date
+          activeTickers.forEach(ticker => {
+            const position = portfolio.positions[ticker];
+            if (!position || (position.long === 0 && position.short === 0)) return;
+
+            const stockData = data.stock_data?.[ticker];
+            const historicalPoint = stockData?.chart_data?.find((point: { date: string; close: number }) => point.date === date);
+            
+            if (historicalPoint) {
+              const historicalPrice = historicalPoint.close;
+              const costBasis = position.long * position.long_cost_basis + position.short * position.short_cost_basis;
+              const currentValue = position.long * historicalPrice - position.short * historicalPrice;
+              
+              totalPositionsValue += Math.abs(currentValue);
+              totalCostBasis += Math.abs(costBasis);
+            } else {
+              // If no historical data for this date, use cost basis
+              const costBasis = position.long * position.long_cost_basis + position.short * position.short_cost_basis;
+              totalPositionsValue += Math.abs(costBasis);
+              totalCostBasis += Math.abs(costBasis);
+            }
+          });
+
+          const totalValue = (portfolio.cash || 0) + totalPositionsValue;
+          const unrealizedGains = totalPositionsValue - totalCostBasis;
+
+          historyData.push({
+            date: date,
+            timestamp: new Date(date).getTime(),
+            total_value: totalValue,
+            cash: portfolio.cash || 0,
+            positions_value: totalPositionsValue,
+            unrealized_gains: unrealizedGains
+          });
+        });
+
+        // Sort by date to ensure proper chronological order
+        historyData.sort((a, b) => a.timestamp - b.timestamp);
+        setPortfolioHistory(historyData);
+
+      } else {
+        console.error('Failed to fetch historical stock data');
+        // Fallback to mock data
+        generateMockPortfolioHistory();
+      }
+    } catch (error) {
+      console.error('Error fetching historical stock data:', error);
+      // Fallback to mock data
+      generateMockPortfolioHistory();
+    } finally {
+      setIsLoadingChart(false);
+    }
+  };
+
+  const generateMockPortfolioHistory = () => {
+    if (!portfolio) return;
+
+    const days = chartPeriod === '1mo' ? 30 : chartPeriod === '3mo' ? 90 : chartPeriod === '6mo' ? 180 : chartPeriod === '1y' ? 365 : 30;
+    const historyData: PortfolioChartData[] = [];
+    
+    // Calculate current portfolio value
+    let currentPositionsValue = 0;
+    let totalCostBasis = 0;
+    
+    Object.entries(portfolio.positions || {}).forEach(([ticker, position]) => {
+      if (position.long > 0 || position.short > 0) {
+        const currentPrice = getCurrentPrice(ticker);
+        const costBasisValue = position.long * position.long_cost_basis + position.short * position.short_cost_basis;
+        totalCostBasis += Math.abs(costBasisValue);
+        
+        if (currentPrice && currentPrice > 0) {
+          const currentValue = position.long * currentPrice - position.short * currentPrice;
+          currentPositionsValue += Math.abs(currentValue);
+        } else {
+          currentPositionsValue += Math.abs(costBasisValue);
+        }
+      }
+    });
+
+    const baseCash = portfolio.cash || 100000;
+    const basePositionsValue = currentPositionsValue || totalCostBasis || 0;
+
+    // Generate daily data points with more realistic market-like progression
+    for (let i = days; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      
+      // Create a more realistic market progression
+      const progressRatio = (days - i) / days;
+      const volatility = 0.02; // 2% daily volatility
+      const trendComponent = Math.sin(progressRatio * Math.PI * 2) * 0.1; // Long-term trend
+      const randomComponent = (Math.random() - 0.5) * volatility;
+      const dailyReturn = trendComponent + randomComponent;
+      
+      // Calculate portfolio value for this day
+      const dayMultiplier = 1 + (dailyReturn * progressRatio);
+      const positionValue = basePositionsValue * dayMultiplier;
+      const totalValue = baseCash + positionValue;
+      
+      historyData.push({
+        date: date.toISOString().split('T')[0],
+        timestamp: date.getTime(),
+        total_value: Math.max(totalValue, baseCash), // Ensure it doesn't go below cash
+        cash: baseCash,
+        positions_value: Math.max(positionValue, 0),
+        unrealized_gains: positionValue - totalCostBasis
+      });
+    }
+
+    setPortfolioHistory(historyData);
+    setIsLoadingChart(false);
+  };
+
   const createPortfolio = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/portfolio/create', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PORTFOLIO_CREATE}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -217,7 +870,7 @@ export function Portfolio() {
     if (!newPosition.ticker || !portfolio) return;
 
     try {
-      const response = await fetch('http://localhost:8000/portfolio/positions', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PORTFOLIO_POSITIONS}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -249,6 +902,95 @@ export function Portfolio() {
     }
   };
 
+  const removePosition = async (ticker: string) => {
+    if (!portfolio) return;
+
+    // Confirm deletion
+    if (!confirm(`Are you sure you want to remove ${ticker} from your portfolio? This will set all positions to 0.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PORTFOLIO_POSITIONS}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          positions: [{
+            ticker: ticker,
+            long_shares: 0,
+            short_shares: 0,
+            long_cost_basis: 0,
+            short_cost_basis: 0,
+          }],
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPortfolio(data.portfolio);
+      } else {
+        const errorData = await response.json();
+        console.error('Error removing position:', errorData);
+        alert(`Failed to remove position: ${errorData.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error removing position:', error);
+      alert('Failed to remove position. Please check your connection and try again.');
+    }
+  };
+
+  const removeAllPositions = async () => {
+    if (!portfolio) return;
+
+    const activeTickers = Object.entries(portfolio.positions || {})
+      .filter(([, position]) => hasActivePositions(position))
+      .map(([ticker]) => ticker);
+
+    if (activeTickers.length === 0) {
+      alert('No active positions to remove.');
+      return;
+    }
+
+    // Confirm deletion
+    if (!confirm(`Are you sure you want to remove ALL positions from your portfolio? This will set all ${activeTickers.length} positions to 0.`)) {
+      return;
+    }
+
+    try {
+      const positions = activeTickers.map(ticker => ({
+        ticker: ticker,
+        long_shares: 0,
+        short_shares: 0,
+        long_cost_basis: 0,
+        short_cost_basis: 0,
+      }));
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PORTFOLIO_POSITIONS}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          positions: positions,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPortfolio(data.portfolio);
+      } else {
+        const errorData = await response.json();
+        console.error('Error removing positions:', errorData);
+        alert(`Failed to remove positions: ${errorData.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error removing positions:', error);
+      alert('Failed to remove positions. Please check your connection and try again.');
+    }
+  };
+
   const runAnalysisForTicker = async (ticker: string) => {
     // Prevent multiple analyses from running simultaneously
     if (runningAnalyses.size > 0) {
@@ -277,7 +1019,7 @@ export function Portfolio() {
       // Simulate API call to hedge fund endpoint
       const { start_date, end_date } = getDateRange();
       
-      const response = await fetch('http://localhost:8000/hedge-fund/run', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.HEDGE_FUND_RUN}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -367,10 +1109,10 @@ export function Portfolio() {
                       const divisor = activeAgents > 0 ? Math.max(activeAgents, selectedAgents.length) : selectedAgents.length;
                       const overallProgress = Math.round(totalProgress / divisor);
                       
-                      console.log(`Selected agents: [${selectedAgents.join(', ')}] (${selectedAgents.length})`);
-                      console.log(`Expected progress agents: [${expectedProgressAgents.join(', ')}]`);
-                      console.log(`Active agent progresses:`, newAgentProgresses);
-                      console.log(`Overall progress: ${totalProgress}/${divisor} = ${overallProgress}%`);
+                    //   console.log(`Selected agents: [${selectedAgents.join(', ')}] (${selectedAgents.length})`);
+                    //   console.log(`Expected progress agents: [${expectedProgressAgents.join(', ')}]`);
+                    //   console.log(`Active agent progresses:`, newAgentProgresses);
+                    //   console.log(`Overall progress: ${totalProgress}/${divisor} = ${overallProgress}%`);
                       
                       return {
                         ...prev,
@@ -576,7 +1318,7 @@ export function Portfolio() {
     let totalGain = 0;
     let totalCostBasis = 0;
     
-    Object.entries(portfolio.positions)
+    Object.entries(portfolio.positions || {})
       .filter(([, position]) => hasActivePositions(position))
       .forEach(([ticker, position]) => {
         const currentPrice = getCurrentPrice(ticker);
@@ -696,7 +1438,7 @@ export function Portfolio() {
   };
 
   return (
-    <div className="p-6 space-y-6 bg-white min-h-screen">
+    <div className="p-6 space-y-6 bg-white min-h-screen max-h-screen overflow-y-auto">
       <div>
         <h1 className="text-3xl font-bold mb-2 text-gray-900">Portfolio Management</h1>
         <p className="text-gray-600">Create and manage your trading portfolio</p>
@@ -750,35 +1492,48 @@ export function Portfolio() {
             {/* Portfolio Overview */}
             <Card className="bg-white border-gray-200">
               <CardHeader>
-                <CardTitle className="text-gray-900">Portfolio Overview</CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-gray-900">Portfolio Overview</CardTitle>
+                  <Button
+                    onClick={fetchRealTimeStockData}
+                    disabled={isRefreshingPrices}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {isRefreshingPrices ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                    )}
+                    {isRefreshingPrices ? 'Updating...' : 'Refresh Prices'}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="bg-white">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-gray-700">Cash:</span>
-                      <span className="font-medium text-gray-900">${portfolio.cash.toLocaleString()}</span>
+                      <span className="font-semibold text-gray-900">${(portfolio.cash || 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
                       <FinancialTooltip term="Margin Requirement">
                         <span className="text-gray-700 underline decoration-dotted decoration-gray-400">Margin Requirement:</span>
                       </FinancialTooltip>
-                      <span className="font-medium text-gray-900">{(portfolio.margin_requirement * 100).toFixed(1)}%</span>
+                      <span className="font-medium text-gray-900">{((portfolio.margin_requirement || 0) * 100).toFixed(1)}%</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-700">Margin Used:</span>
-                      <span className="font-medium text-gray-900">${portfolio.margin_used.toLocaleString()}</span>
+                      <span className="font-medium text-gray-900">${(portfolio.margin_used || 0).toLocaleString()}</span>
                     </div>
-                  </div>
-                  <div className="space-y-2">
                     {(() => {
                       const { totalGain, totalPercent } = getTotalUnrealizedGains();
                       return (
-                        <div className="bg-gray-50 rounded-lg p-3">
+                        <div className="pt-2 border-t border-gray-200">
                           <FinancialTooltip term="Unrealized Gains">
                             <div className="text-sm text-gray-600 mb-1 underline decoration-dotted decoration-gray-400">Total Unrealized Gains</div>
                           </FinancialTooltip>
-                          <div className={`text-lg font-bold ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          <div className={`text-xl font-bold ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {totalGain >= 0 ? '+' : ''}${totalGain.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
                           <div className={`text-sm ${totalGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -787,6 +1542,14 @@ export function Portfolio() {
                         </div>
                       );
                     })()}
+                  </div>
+                  <div>
+                    <CompactPortfolioChart 
+                      data={portfolioHistory} 
+                      period={chartPeriod}
+                      onPeriodChange={setChartPeriod}
+                      isLoading={isLoadingChart}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -886,6 +1649,24 @@ export function Portfolio() {
             </Card>
           </div>
 
+          {/* Portfolio Chart - Full Width */}
+          {/* <div className="w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-2xl font-bold text-gray-900">Portfolio Performance</h3>
+              <select
+                value={chartPeriod}
+                onChange={(e) => setChartPeriod(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-900"
+              >
+                <option value="1mo">1 Month</option>
+                <option value="3mo">3 Months</option>
+                <option value="6mo">6 Months</option>
+                <option value="1y">1 Year</option>
+              </select>
+            </div>
+            <PortfolioChart data={portfolioHistory} period={chartPeriod} isLoading={isLoadingChart} />
+          </div> */}
+
           {/* Current Positions with Analysis */}
           <Card className="bg-white border-gray-200">
             <CardHeader>
@@ -904,7 +1685,7 @@ export function Portfolio() {
             </CardHeader>
             <CardContent className="bg-white">
               <div className="space-y-3">
-                {Object.entries(portfolio.positions)
+                {Object.entries(portfolio.positions || {})
                   .filter(([, position]) => hasActivePositions(position))
                   .map(([ticker, position]) => {
                     const { isRunning, result } = getAnalysisStatus(ticker);
@@ -1009,6 +1790,15 @@ export function Portfolio() {
                               </>
                             )}
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => removePosition(ticker)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300 bg-red-50"
+                            title={`Remove ${ticker} from portfolio`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
                     );
@@ -1063,7 +1853,7 @@ export function Portfolio() {
                 })}
 
                 {/* Empty state */}
-                {Object.entries(portfolio.positions).filter(([, position]) => hasActivePositions(position)).length === 0 && 
+                {Object.entries(portfolio.positions || {}).filter(([, position]) => hasActivePositions(position)).length === 0 && 
                  Object.keys(analysisProgress).length === 0 && (
                   <div className="text-center py-8 text-gray-500">
                     No active positions found. Add some positions below to get started.
@@ -1130,6 +1920,15 @@ export function Portfolio() {
               </div>
               <Button onClick={updatePosition} className="mt-4" disabled={!newPosition.ticker}>
                 Update Position
+              </Button>
+              <Button 
+                onClick={removeAllPositions} 
+                variant="outline" 
+                className="mt-4 ml-4 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300 bg-red-50"
+                disabled={!portfolio || Object.entries(portfolio.positions || {}).filter(([, position]) => hasActivePositions(position)).length === 0}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Remove All Positions
               </Button>
             </CardContent>
           </Card>
@@ -1451,21 +2250,21 @@ export function Portfolio() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                       <div className="bg-gray-50 rounded p-3">
                         <div className="text-sm text-gray-600">Available Cash</div>
-                        <div className="text-lg font-semibold text-gray-900">${portfolio.cash.toLocaleString()}</div>
+                        <div className="text-lg font-semibold text-gray-900">${(portfolio.cash || 0).toLocaleString()}</div>
                       </div>
                       <div className="bg-gray-50 rounded p-3">
                         <div className="text-sm text-gray-600">Margin Used</div>
-                        <div className="text-lg font-semibold text-gray-900">${portfolio.margin_used.toLocaleString()}</div>
+                        <div className="text-lg font-semibold text-gray-900">${(portfolio.margin_used || 0).toLocaleString()}</div>
                       </div>
                       <div className="bg-gray-50 rounded p-3">
                         <div className="text-sm text-gray-600">Margin Requirement</div>
-                        <div className="text-lg font-semibold text-gray-900">{(portfolio.margin_requirement * 100).toFixed(1)}%</div>
+                        <div className="text-lg font-semibold text-gray-900">{((portfolio.margin_requirement || 0) * 100).toFixed(1)}%</div>
                       </div>
                     </div>
                     
                     <div className="space-y-2">
                       <h5 className="font-medium text-gray-900">Current Positions</h5>
-                      {Object.entries(portfolio.positions)
+                      {Object.entries(portfolio.positions || {})
                         .filter(([, position]) => hasActivePositions(position))
                         .map(([ticker, position]) => (
                           <div key={ticker} className="flex justify-between items-center p-2 bg-gray-50 rounded">

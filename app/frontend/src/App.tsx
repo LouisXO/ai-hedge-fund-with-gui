@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Flow } from './components/Flow';
 import { Layout } from './components/Layout';
 import { Portfolio } from './components/Portfolio';
+import { StockDashboard } from './components/StockDashboard';
 import { Button } from './components/ui/button';
-import { PieChart, TrendingUp } from 'lucide-react';
+import { PieChart, TrendingUp, Activity } from 'lucide-react';
 
-type ViewType = 'flow' | 'portfolio';
+type ViewType = 'flow' | 'portfolio' | 'dashboard';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewType>('portfolio');
@@ -14,6 +15,7 @@ export default function App() {
   const navigationItems = [
     { id: 'flow', label: 'Agent Flow', icon: TrendingUp },
     { id: 'portfolio', label: 'Portfolio', icon: PieChart },
+    { id: 'dashboard', label: 'Stock Dashboard', icon: Activity },
   ] as const;
 
   console.log(showLeftSidebar);
@@ -77,6 +79,8 @@ export default function App() {
         return <Flow />;
       case 'portfolio':
         return <Portfolio />;
+      case 'dashboard':
+        return <StockDashboard />;
       default:
         return <Portfolio />;
     }
