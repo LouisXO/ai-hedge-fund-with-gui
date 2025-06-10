@@ -149,144 +149,144 @@ const wrapFinancialTerms = (text: string) => {
   });
 };
 
-// Portfolio Performance Chart Component
-const PortfolioChart = ({ data, period, isLoading }: { data: PortfolioChartData[]; period: string; isLoading?: boolean }) => {
-  if (isLoading) {
-    return (
-      <div className="bg-white rounded-lg p-4 border border-gray-200 flex items-center justify-center h-64">
-        <div className="text-center text-gray-500">
-          <Loader2 className="w-8 h-8 mx-auto mb-2 text-blue-500 animate-spin" />
-          <p>Loading portfolio data...</p>
-          <p className="text-sm">Fetching {period} historical data</p>
-        </div>
-      </div>
-    );
-  }
+// // Portfolio Performance Chart Component
+// const PortfolioChart = ({ data, period, isLoading }: { data: PortfolioChartData[]; period: string; isLoading?: boolean }) => {
+//   if (isLoading) {
+//     return (
+//       <div className="bg-white rounded-lg p-4 border border-gray-200 flex items-center justify-center h-64">
+//         <div className="text-center text-gray-500">
+//           <Loader2 className="w-8 h-8 mx-auto mb-2 text-blue-500 animate-spin" />
+//           <p>Loading portfolio data...</p>
+//           <p className="text-sm">Fetching {period} historical data</p>
+//         </div>
+//       </div>
+//     );
+//   }
 
-  if (!data || data.length === 0) {
-    return (
-      <div className="bg-white rounded-lg p-4 border border-gray-200 flex items-center justify-center h-64">
-        <div className="text-center text-gray-500">
-          <LineChart className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-          <p>No historical data available yet</p>
-          <p className="text-sm">Data will appear as you make trades</p>
-        </div>
-      </div>
-    );
-  }
+//   if (!data || data.length === 0) {
+//     return (
+//       <div className="bg-white rounded-lg p-4 border border-gray-200 flex items-center justify-center h-64">
+//         <div className="text-center text-gray-500">
+//           <LineChart className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+//           <p>No historical data available yet</p>
+//           <p className="text-sm">Data will appear as you make trades</p>
+//         </div>
+//       </div>
+//     );
+//   }
 
-  const maxValue = Math.max(...data.map(d => d.total_value));
-  const minValue = Math.min(...data.map(d => d.total_value));
-  const valueRange = maxValue - minValue || 1; // Prevent division by zero
+//   const maxValue = Math.max(...data.map(d => d.total_value));
+//   const minValue = Math.min(...data.map(d => d.total_value));
+//   const valueRange = maxValue - minValue || 1; // Prevent division by zero
   
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+//   const formatCurrency = (amount: number) => {
+//     return new Intl.NumberFormat('en-US', {
+//       style: 'currency',
+//       currency: 'USD',
+//       minimumFractionDigits: 0,
+//       maximumFractionDigits: 0,
+//     }).format(amount);
+//   };
 
-  return (
-    <div className="w-full">
-      <div className="mb-6">
-        <h4 className="text-xl font-semibold text-gray-900 mb-2">Portfolio Performance ({period})</h4>
-      </div>
+//   return (
+//     <div className="w-full">
+//       <div className="mb-6">
+//         <h4 className="text-xl font-semibold text-gray-900 mb-2">Portfolio Performance ({period})</h4>
+//       </div>
       
-      <div className="w-full bg-white rounded-lg border border-gray-200 p-6">
-        <div className="w-full overflow-x-auto">
-          <svg 
-            viewBox="0 0 1000 400" 
-            className="w-full h-auto min-w-[800px]"
-            preserveAspectRatio="xMidYMid meet"
-          >
-            {/* Grid lines */}
-            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
-              <g key={ratio}>
-                <line
-                  x1={60}
-                  y1={50 + ratio * 300}
-                  x2={940}
-                  y2={50 + ratio * 300}
-                  stroke="#f3f4f6"
-                  strokeWidth="1"
-                />
-                {/* Y-axis labels */}
-                <text
-                  x={50}
-                  y={50 + ratio * 300 + 5}
-                  textAnchor="end"
-                  className="fill-gray-600"
-                  fontSize="12"
-                >
-                  {formatCurrency(maxValue - ratio * valueRange)}
-                </text>
-              </g>
-            ))}
+//       <div className="w-full bg-white rounded-lg border border-gray-200 p-6">
+//         <div className="w-full overflow-x-auto">
+//           <svg 
+//             viewBox="0 0 1000 400" 
+//             className="w-full h-auto min-w-[800px]"
+//             preserveAspectRatio="xMidYMid meet"
+//           >
+//             {/* Grid lines */}
+//             {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
+//               <g key={ratio}>
+//                 <line
+//                   x1={60}
+//                   y1={50 + ratio * 300}
+//                   x2={940}
+//                   y2={50 + ratio * 300}
+//                   stroke="#f3f4f6"
+//                   strokeWidth="1"
+//                 />
+//                 {/* Y-axis labels */}
+//                 <text
+//                   x={50}
+//                   y={50 + ratio * 300 + 5}
+//                   textAnchor="end"
+//                   className="fill-gray-600"
+//                   fontSize="12"
+//                 >
+//                   {formatCurrency(maxValue - ratio * valueRange)}
+//                 </text>
+//               </g>
+//             ))}
             
-            {/* Total value line */}
-            <polyline
-              points={data.map((point, index) => {
-                const x = 60 + (index / (data.length - 1)) * 880;
-                const y = 50 + (1 - (point.total_value - minValue) / valueRange) * 300;
-                return `${x},${y}`;
-              }).join(' ')}
-              fill="none"
-              stroke="#2563eb"
-              strokeWidth="3"
-            />
+//             {/* Total value line */}
+//             <polyline
+//               points={data.map((point, index) => {
+//                 const x = 60 + (index / (data.length - 1)) * 880;
+//                 const y = 50 + (1 - (point.total_value - minValue) / valueRange) * 300;
+//                 return `${x},${y}`;
+//               }).join(' ')}
+//               fill="none"
+//               stroke="#2563eb"
+//               strokeWidth="3"
+//             />
             
-            {/* Cost Basis line */}
-            <polyline
-              points={data.map((point, index) => {
-                const baseValue = point.total_value - point.unrealized_gains;
-                const x = 60 + (index / (data.length - 1)) * 880;
-                const y = 50 + (1 - (baseValue - minValue) / valueRange) * 300;
-                return `${x},${y}`;
-              }).join(' ')}
-              fill="none"
-              stroke="#6b7280"
-              strokeWidth="2"
-              strokeDasharray="8,4"
-            />
+//             {/* Cost Basis line */}
+//             <polyline
+//               points={data.map((point, index) => {
+//                 const baseValue = point.total_value - point.unrealized_gains;
+//                 const x = 60 + (index / (data.length - 1)) * 880;
+//                 const y = 50 + (1 - (baseValue - minValue) / valueRange) * 300;
+//                 return `${x},${y}`;
+//               }).join(' ')}
+//               fill="none"
+//               stroke="#6b7280"
+//               strokeWidth="2"
+//               strokeDasharray="8,4"
+//             />
             
-            {/* Data points */}
-            {data.map((point, index) => {
-              const x = 60 + (index / (data.length - 1)) * 880;
-              const y = 50 + (1 - (point.total_value - minValue) / valueRange) * 300;
-              return (
-                <circle
-                  key={index}
-                  cx={x}
-                  cy={y}
-                  r="4"
-                  fill="#2563eb"
-                  className="hover:r-6 transition-all cursor-pointer"
-                />
-              );
-            })}
-          </svg>
-        </div>
+//             {/* Data points */}
+//             {data.map((point, index) => {
+//               const x = 60 + (index / (data.length - 1)) * 880;
+//               const y = 50 + (1 - (point.total_value - minValue) / valueRange) * 300;
+//               return (
+//                 <circle
+//                   key={index}
+//                   cx={x}
+//                   cy={y}
+//                   r="4"
+//                   fill="#2563eb"
+//                   className="hover:r-6 transition-all cursor-pointer"
+//                 />
+//               );
+//             })}
+//           </svg>
+//         </div>
         
-        <div className="mt-6 flex justify-between items-center text-sm text-gray-700">
-          <span className="font-medium">{data[0]?.date}</span>
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-1 bg-blue-600 rounded"></div>
-              <span className="font-medium">Total Value</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-1 bg-gray-600 rounded opacity-60" style={{ backgroundImage: 'repeating-linear-gradient(to right, #6b7280 0, #6b7280 4px, transparent 4px, transparent 8px)' }}></div>
-              <span className="font-medium">Cost Basis</span>
-            </div>
-          </div>
-          <span className="font-medium">{data[data.length - 1]?.date}</span>
-        </div>
-      </div>
-    </div>
-  );
-};
+//         <div className="mt-6 flex justify-between items-center text-sm text-gray-700">
+//           <span className="font-medium">{data[0]?.date}</span>
+//           <div className="flex items-center gap-8">
+//             <div className="flex items-center gap-2">
+//               <div className="w-6 h-1 bg-blue-600 rounded"></div>
+//               <span className="font-medium">Total Value</span>
+//             </div>
+//             <div className="flex items-center gap-2">
+//               <div className="w-6 h-1 bg-gray-600 rounded opacity-60" style={{ backgroundImage: 'repeating-linear-gradient(to right, #6b7280 0, #6b7280 4px, transparent 4px, transparent 8px)' }}></div>
+//               <span className="font-medium">Cost Basis</span>
+//             </div>
+//           </div>
+//           <span className="font-medium">{data[data.length - 1]?.date}</span>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// };
 
 // Compact Portfolio Chart for Overview Section
 const CompactPortfolioChart = ({ data, period, onPeriodChange, isLoading }: { 
