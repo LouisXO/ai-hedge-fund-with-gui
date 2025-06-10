@@ -10,12 +10,12 @@ const getApiBaseUrl = (): string => {
     return import.meta.env.VITE_API_BASE_URL;
   }
   
-  // For production deployment with Cloudflare Tunnel
-  // Replace this with your actual Cloudflare tunnel domain
-  const CLOUDFLARE_TUNNEL_DOMAIN = 'your-api-domain.your-domain.com';
+  // TEMPORARY: Use direct IP for production while tunnel is being debugged
+  return 'http://100.110.174.98:8000';
   
-  // Use HTTPS for Cloudflare tunnel
-  return `https://${CLOUDFLARE_TUNNEL_DOMAIN}`;
+  // TODO: Switch back to Cloudflare tunnel when working:
+  // const CLOUDFLARE_TUNNEL_DOMAIN = 'api.hedge-fund.louisleng.com';
+  // return `https://${CLOUDFLARE_TUNNEL_DOMAIN}`;
   
   // Fallback options (uncomment if needed):
   
