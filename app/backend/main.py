@@ -10,7 +10,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",  # Development
-        "https://hedge-fund.louisleng.com",  # Production
+        "https://hedge-fund.louisleng.com",  # Production frontend
+        "https://api.hedge-fund.louisleng.com",  # API domain
         # "https://your-custom-domain.com",  # Custom domain
     ],
     allow_credentials=True,
