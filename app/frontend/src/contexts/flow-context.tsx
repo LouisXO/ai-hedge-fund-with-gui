@@ -52,7 +52,7 @@ export function FlowProvider({ children }: FlowProviderProps) {
     }
     
     if (addRandomness) {
-      position.x += Math.random() * 100 - 50;
+      position.x += Math.random() * 300;
       position.y = 0;
     }
     
@@ -139,9 +139,14 @@ export function FlowProvider({ children }: FlowProviderProps) {
     }).filter((edge): edge is NonNullable<typeof edge> => edge !== null);
 
     // Add nodes and edges to flow
-    reactFlowInstance.setNodes(newNodes);
-    reactFlowInstance.setEdges(newEdges);
-  }, [reactFlowInstance, getViewportPosition, clearFlow]);
+    reactFlowInstance.setNodes((nodes) => [...nodes, ...newNodes]);
+    reactFlowInstance.setEdges((edges) => [...edges, ...newEdges]);
+    
+    // Fit view to show all nodes after a short delay to ensure nodes are rendered
+    setTimeout(() => {
+      reactFlowInstance.fitView({ padding: 0.1, duration: 500 });
+    }, 100);
+  }, [reactFlowInstance, getViewportPosition]);
 
   // Main entry point - route to single node or multi node
   const addComponentToFlow = useCallback((componentName: string) => {

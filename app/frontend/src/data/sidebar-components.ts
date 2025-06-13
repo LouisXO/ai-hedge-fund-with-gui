@@ -2,17 +2,13 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   BadgeDollarSign,
+  BarChart,
   Bot,
   Brain,
   FileJson,
+  FileText,
   LucideIcon,
-  Type,
-  Users,
-  TrendingUp,
-  Shield,
-  BarChart3,
-  Globe,
-  Crown
+  Users
 } from 'lucide-react';
 import { agents } from './agents';
 
@@ -56,7 +52,7 @@ export const componentGroups: ComponentGroup[] = [
     iconColor: "text-green-400",
     items: [
       { name: "JSON Output", icon: FileJson },
-      { name: "Text Output", icon: Type },
+      { name: "Investment Report", icon: FileText },
     ]
   },
   {
@@ -64,6 +60,7 @@ export const componentGroups: ComponentGroup[] = [
     icon: Users,
     iconColor: "text-yellow-400",
     items: [
+      { name: "Data Wizards", icon: BarChart },
       { name: "Value Investors", icon: BadgeDollarSign },
       { name: "Growth Investors", icon: TrendingUp },
       { name: "Contrarian Investors", icon: Shield },
