@@ -3,11 +3,16 @@ import {
   ArrowUpFromLine,
   BadgeDollarSign,
   BarChart,
+  BarChart3,
   Bot,
   Brain,
+  Crown,
   FileJson,
   FileText,
+  Globe,
   LucideIcon,
+  Shield,
+  TrendingUp,
   Users
 } from 'lucide-react';
 import { agents } from './agents';

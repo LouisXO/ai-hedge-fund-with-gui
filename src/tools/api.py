@@ -166,7 +166,7 @@ def search_line_items(
     period: str = "ttm",
     limit: int = 10,
 ) -> list[LineItem]:
-    """Fetch line items from Yahoo Finance financial statements (FREE)."""
+    """Fetch line items from Yahoo Finance financial statements and structure them properly."""
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -176,40 +176,232 @@ def search_line_items(
         balance_sheet = stock.balance_sheet
         cashflow = stock.cashflow
         
-        line_items_results = []
+        # Mapping of expected attributes to possible Yahoo Finance line item names
+        line_item_mappings = {
+            'revenue': [
+                'Total Revenue', 'Operating Revenue', 'Revenue', 'Net Revenue'
+            ],
+            'operating_income': [
+                'Operating Income', 'Total Operating Income As Reported', 'Operating Profit'
+            ],
+            'net_income': [
+                'Net Income', 'Net Income Common Stockholders', 'Net Income From Continuing Operation Net Minority Interest',
+                'Net Income Including Noncontrolling Interests', 'Net Income Continuous Operations'
+            ],
+            'free_cash_flow': [
+                'Free Cash Flow', 'Operating Cash Flow', 'Cash Flow From Operations',
+                'Net Cash From Operating Activities'
+            ],
+            'total_assets': [
+                'Total Assets'
+            ],
+            'total_liabilities': [
+                'Total Liabilities Net Minority Interest', 'Total Liabilities'
+            ],
+            'total_debt': [
+                'Total Debt', 'Net Debt', 'Long Term Debt', 'Current Debt'
+            ],
+            'shareholders_equity': [
+                'Stockholders Equity', 'Total Stockholders Equity', 'Common Stockholders Equity',
+                'Total Equity Gross Minority Interest'
+            ],
+            'cash_and_equivalents': [
+                'Cash And Cash Equivalents', 'Cash Cash Equivalents And Short Term Investments',
+                'Cash Financial'
+            ],
+            'dividends_and_other_cash_distributions': [
+                'Cash Dividends Paid', 'Common Stock Dividend Paid', 'Dividends Paid'
+            ],
+            'outstanding_shares': [
+                'Ordinary Shares Number', 'Share Issued', 'Common Stock Shares Outstanding',
+                'Weighted Average Shares Outstanding'
+            ],
+            'gross_profit': [
+                'Gross Profit'
+            ],
+            'ebitda': [
+                'EBITDA', 'Normalized EBITDA'
+            ],
+            'research_and_development': [
+                'Research And Development'
+            ],
+            'intangible_assets': [
+                'Goodwill And Other Intangible Assets', 'Other Intangible Assets', 'Goodwill'
+            ],
+            'earnings_per_share': [
+                'Basic EPS', 'Diluted EPS', 'Basic Earnings Per Share', 'Diluted Earnings Per Share',
+                'Earnings Per Share'
+            ],
+            'book_value_per_share': [
+                'Book Value Per Share', 'Tangible Book Value Per Share'
+            ],
+            'revenue_per_share': [
+                'Revenue Per Share', 'Sales Per Share'
+            ],
+            'gross_margin': [
+                'Gross Margin', 'Gross Profit Margin'
+            ],
+            'current_assets': [
+                'Current Assets', 'Total Current Assets'
+            ],
+            'current_liabilities': [
+                'Current Liabilities', 'Total Current Liabilities'
+            ],
+            'working_capital': [
+                'Working Capital', 'Net Working Capital'
+            ],
+            'capital_expenditure': [
+                'Capital Expenditure', 'Capital Expenditures', 'Capex',
+                'Purchase Of Investment', 'Capital Spending'
+            ],
+            'depreciation_and_amortization': [
+                'Depreciation And Amortization', 'Depreciation', 'Amortization',
+                'Depreciation Amortization Depletion'
+            ],
+            'ebit': [
+                'EBIT', 'Earnings Before Interest And Taxes', 'Operating Income'
+            ]
+        }
         
-        # Search through all statements for requested line items
+        # Create a consolidated results list - one LineItem per period
+        period_data = {}
+        
+        # Search through all statements
         statements = {
             'income_statement': income_stmt,
             'balance_sheet': balance_sheet,
             'cash_flow': cashflow
         }
         
+        # Get all available dates across statements
+        all_dates = set()
+        for df in statements.values():
+            if not df.empty:
+                all_dates.update(df.columns)
+        
+        # Initialize period data structure
+        for date in all_dates:
+            period_data[date] = {
+                'report_period': date.strftime('%Y-%m-%d') if hasattr(date, 'strftime') else str(date),
+                'raw_matches': {}
+            }
+        
+        # Search for each requested line item across all statements
         for statement_name, df in statements.items():
             if df.empty:
                 continue
-                
-            for line_item in line_items:
-                # Search for line item in the dataframe index (case insensitive)
-                matching_items = [idx for idx in df.index if line_item.lower() in idx.lower()]
-                
-                for match in matching_items:
-                    # Get the most recent value (first column)
-                    if not df.columns.empty:
-                        recent_date = df.columns[0]
-                        value = df.loc[match, recent_date]
+            
+            # For each expected attribute, find matching line items
+            for attr_name, search_terms in line_item_mappings.items():
+                # Only search for this attribute if it was requested
+                if any(term.lower() in attr_name.lower() or attr_name.lower() in term.lower() 
+                       for term in line_items):
+                    
+                    # Find matching line items in this statement
+                    for search_term in search_terms:
+                        # First try exact match
+                        exact_matches = [idx for idx in df.index if search_term.lower() == idx.lower()]
+                        if exact_matches:
+                            match = exact_matches[0]
+                        else:
+                            # Then try contains match
+                            contains_matches = [idx for idx in df.index if search_term.lower() in idx.lower()]
+                            if contains_matches:
+                                match = contains_matches[0]
+                            else:
+                                continue
                         
-                        if pd.notna(value):
-                            line_item_obj = LineItem(
-                                ticker=ticker,
-                                report_period=recent_date.strftime('%Y-%m-%d') if hasattr(recent_date, 'strftime') else str(recent_date),
-                                period=period,
-                                currency=info.get('currency', 'USD'),  # Required field
-                                line_item=match,
-                                value=float(value),
-                                statement_type=statement_name
-                            )
-                            line_items_results.append(line_item_obj)
+                        # Get values for all available periods
+                        for date in df.columns:
+                            if date in period_data:
+                                value = df.loc[match, date]
+                                if pd.notna(value):
+                                    period_data[date]['raw_matches'][attr_name] = {
+                                        'line_item': match,
+                                        'value': float(value),
+                                        'statement': statement_name
+                                    }
+                        break  # Use first matching search term
+        
+        # Create LineItem objects for each period
+        line_items_results = []
+        for date, data in period_data.items():
+            if data['raw_matches']:  # Only create if we found some data
+                # Calculate derived metrics
+                line_item_values = {}
+                raw_values = {}
+                
+                # Extract raw values
+                for attr_name, match_data in data['raw_matches'].items():
+                    line_item_values[attr_name] = match_data['value']
+                    raw_values[match_data['line_item']] = match_data['value']
+                
+                # Calculate operating margin if we have operating income and revenue
+                if ('operating_income' in line_item_values and 
+                    'revenue' in line_item_values and 
+                    line_item_values['revenue'] != 0):
+                    line_item_values['operating_margin'] = (
+                        line_item_values['operating_income'] / line_item_values['revenue']
+                    )
+                
+                # Calculate debt-to-equity if we have total debt and shareholders equity
+                if ('total_debt' in line_item_values and 
+                    'shareholders_equity' in line_item_values and 
+                    line_item_values['shareholders_equity'] != 0):
+                    line_item_values['debt_to_equity'] = (
+                        line_item_values['total_debt'] / line_item_values['shareholders_equity']
+                    )
+                
+                # Calculate per-share metrics if we have shares outstanding
+                shares = line_item_values.get('outstanding_shares')
+                if shares and shares > 0:
+                    # Calculate EPS if we have net income
+                    if 'net_income' in line_item_values and line_item_values['net_income']:
+                        line_item_values['earnings_per_share'] = line_item_values['net_income'] / shares
+                    
+                    # Calculate book value per share
+                    if 'shareholders_equity' in line_item_values and line_item_values['shareholders_equity']:
+                        line_item_values['book_value_per_share'] = line_item_values['shareholders_equity'] / shares
+                    
+                    # Calculate revenue per share
+                    if 'revenue' in line_item_values and line_item_values['revenue']:
+                        line_item_values['revenue_per_share'] = line_item_values['revenue'] / shares
+                    
+                    # Calculate free cash flow per share
+                    if 'free_cash_flow' in line_item_values and line_item_values['free_cash_flow']:
+                        line_item_values['free_cash_flow_per_share'] = line_item_values['free_cash_flow'] / shares
+                
+                # Calculate gross margin if we have gross profit and revenue
+                if ('gross_profit' in line_item_values and 
+                    'revenue' in line_item_values and 
+                    line_item_values['revenue'] != 0):
+                    line_item_values['gross_margin'] = (
+                        line_item_values['gross_profit'] / line_item_values['revenue']
+                    )
+                
+                # Calculate working capital if we have current assets and current liabilities
+                if ('current_assets' in line_item_values and 
+                    'current_liabilities' in line_item_values):
+                    line_item_values['working_capital'] = (
+                        line_item_values['current_assets'] - line_item_values['current_liabilities']
+                    )
+                
+                # Create LineItem object
+                line_item_obj = LineItem(
+                    ticker=ticker,
+                    report_period=data['report_period'],
+                    period=period,
+                    currency=info.get('currency', 'USD'),
+                    raw_line_items=raw_values,
+                    **line_item_values  # Unpack all the found values
+                )
+                line_items_results.append(line_item_obj)
+        
+        # Sort by date (newest first) and return limited results
+        line_items_results.sort(
+            key=lambda x: x.report_period, 
+            reverse=True
+        )
         
         return line_items_results[:limit]
         
