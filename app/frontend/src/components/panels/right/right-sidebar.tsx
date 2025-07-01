@@ -1,4 +1,4 @@
-import { ComponentGroup, getComponentGroups } from '@/data/sidebar-components';
+import { ComponentGroup, componentGroups as defaultComponentGroups } from '@/data/sidebar-components';
 import { useComponentGroups } from '@/hooks/use-component-groups';
 import { useResizable } from '@/hooks/use-resizable';
 import { cn } from '@/lib/utils';
@@ -11,13 +11,11 @@ interface RightSidebarProps {
   isCollapsed: boolean;
   onCollapse: () => void;
   onExpand: () => void;
-  onToggleCollapse: () => void;
   onWidthChange?: (width: number) => void;
 }
 
 export function RightSidebar({
   isCollapsed,
-  onToggleCollapse,
   onWidthChange,
 }: RightSidebarProps) {
   // Use our custom hooks
@@ -42,7 +40,7 @@ export function RightSidebar({
     const loadComponentGroups = async () => {
       try {
         setIsLoading(true);
-        const groups = await getComponentGroups();
+        const groups = defaultComponentGroups;
         setComponentGroups(groups);
       } catch (error) {
         console.error('Failed to load component groups:', error);
@@ -75,7 +73,7 @@ export function RightSidebar({
         width: `${width}px`
       }}
     >
-      <ComponentActions onToggleCollapse={onToggleCollapse} />
+              <ComponentActions />
       
       <ComponentList
         componentGroups={componentGroups}

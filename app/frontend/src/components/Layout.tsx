@@ -51,7 +51,6 @@ export function Layout({ leftSidebar, rightSidebar, children, currentView }: Lay
                     isCollapsed={isCollapsed}
                     onCollapse={() => setIsCollapsed(true)}
                     onExpand={() => setIsCollapsed(false)}
-                    onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
                   />
                 </div>
               )}

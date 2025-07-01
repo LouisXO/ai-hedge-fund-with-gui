@@ -1,78 +1,60 @@
 import {
-  BadgeDollarSign,
+  ArrowDownToLine,
+  ArrowUpFromLine,
   BarChart3,
   Bot,
   Brain,
-  Crown,
-  Calculator,
-  FileJson,
   FileText,
-  Globe,
-  LucideIcon,
-  Shield,
+  Lightbulb,
   TrendingUp,
-  Monitor,
-  Network,
-  Play
+  Users,
+  Zap
 } from 'lucide-react';
-import { Agent, getAgents } from './agents';
 
 // Define component items by group
 export interface ComponentItem {
   name: string;
-  icon: LucideIcon;
+  icon: React.ComponentType;
+  description?: string;
 }
 
 export interface ComponentGroup {
   name: string;
-  icon: LucideIcon;
-  iconColor: string;
   items: ComponentItem[];
+  icon: React.ComponentType;
 }
 
 // Define all component groups and items
 export const componentGroups: ComponentGroup[] = [
   {
-    name: "agents",
+    name: "AI Agents",
     icon: Bot,
-    iconColor: "text-red-400",
-    items: agents.map(agent => ({
-      name: agent.display_name,
-      icon: Bot
-    }))
+    items: [] // Will be populated dynamically from API
   },
   {
-    name: "inputs",
+    name: "Data Sources",
     icon: ArrowDownToLine,
-    iconColor: "text-blue-400",
     items: [
-      // { name: "Chat Input", icon: MessageSquare },
-      { name: "Portfolio Manager", icon: Brain },
-      // { name: "File Input", icon: FileText }
+      { name: "Stock Data", icon: TrendingUp },
+      { name: "News Feed", icon: FileText },
+      { name: "Market Data", icon: BarChart3 }
     ]
   },
   {
-    name: "outputs",
+    name: "Outputs",
     icon: ArrowUpFromLine,
-    iconColor: "text-green-400",
     items: [
-      { name: "JSON Output", icon: FileJson },
-      { name: "Investment Report", icon: FileText },
+      { name: "Portfolio Report", icon: FileText },
+      { name: "Trading Signals", icon: Zap },
+      { name: "Risk Analysis", icon: Brain }
     ]
   },
   {
-    name: "swarms",
+    name: "Collaboration",
     icon: Users,
-    iconColor: "text-yellow-400",
     items: [
-      { name: "Data Wizards", icon: BarChart },
-      { name: "Value Investors", icon: BadgeDollarSign },
-      { name: "Growth Investors", icon: TrendingUp },
-      { name: "Contrarian Investors", icon: Shield },
-      { name: "Technical Analysis Team", icon: BarChart3 },
-      { name: "Fundamental Analysis Team", icon: Brain },
-      { name: "Macro Strategy Team", icon: Globe },
-      { name: "All Agents", icon: Crown },
+      { name: "Data Wizards", icon: BarChart3 },
+      { name: "Insight Agents", icon: Lightbulb }
     ]
   }
 ]; 

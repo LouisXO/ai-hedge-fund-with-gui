@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { LucideIcon, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useState } from "react";
 
 interface ComponentItemProps {
-  icon: LucideIcon;
+  icon: React.ComponentType<any>;
   label: string;
   onClick?: () => void;
   className?: string;
@@ -45,7 +45,9 @@ export default function ComponentItem({
       }}
     >
       <div className="flex-shrink-0">
-        <Icon size={16} className={isActive ? "text-white" : "text-gray-400"} />
+        <div className={`w-4 h-4 ${isActive ? "text-white" : "text-gray-400"}`}>
+          <Icon />
+        </div>
       </div>
       <span className="truncate">{label}</span>
       

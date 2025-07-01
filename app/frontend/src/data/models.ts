@@ -5,7 +5,7 @@ export interface LanguageModel {
 }
 
 // Define ModelItem type (same as LanguageModel but allowing "Gemini" as provider)
-interface ModelItem {
+export interface ModelItem {
   display_name: string;
   model_name: string;
   provider: "Anthropic" | "DeepSeek" | "Google" | "Gemini" | "Groq" | "OpenAI";

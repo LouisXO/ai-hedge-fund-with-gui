@@ -6,10 +6,9 @@ import { Plus, Save } from 'lucide-react';
 interface FlowActionsProps {
   onSave: () => Promise<void>;
   onCreate: () => void;
-  onToggleCollapse: () => void;
 }
 
-export function FlowActions({ onSave, onCreate, onToggleCollapse }: FlowActionsProps) {
+export function FlowActions({ onSave, onCreate }: FlowActionsProps) {
   const { currentFlowName, isUnsaved } = useFlowContext();
 
   return (

@@ -28,7 +28,7 @@ type FlowProps = {
 
 export function Flow({ className = '' }: FlowProps) {
   const [colorMode] = useState<ColorMode>('dark');
-  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
+  const [nodes, , onNodesChange] = useNodesState<AppNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const proOptions = { hideAttribution: true };
@@ -40,7 +40,7 @@ export function Flow({ className = '' }: FlowProps) {
   const { success, error } = useToastManager();
 
   // Initialize flow history
-  const { takeSnapshot, undo, redo, canUndo, canRedo, clearHistory } = useFlowHistory();
+  const { takeSnapshot, undo, redo } = useFlowHistory();
 
   // Take initial snapshot when flow is initialized
   useEffect(() => {
@@ -135,12 +135,7 @@ export function Flow({ className = '' }: FlowProps) {
     [setEdges]
   );
 
-  // Reset the flow to initial state
-  const resetFlow = useCallback(() => {
-    setNodes([]);
-    setEdges([]);
-    clearHistory();
-  }, [setNodes, setEdges, clearHistory]);
+
 
   return (
     <div className={`w-full h-full ${className}`}>
