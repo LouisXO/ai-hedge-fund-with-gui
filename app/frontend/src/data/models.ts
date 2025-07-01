@@ -1,9 +1,24 @@
-import { api } from '@/services/api';
-
 export interface LanguageModel {
   display_name: string;
   model_name: string;
   provider: "Anthropic" | "DeepSeek" | "Google" | "Groq" | "OpenAI";
+}
+
+// Define ModelItem type (same as LanguageModel but allowing "Gemini" as provider)
+interface ModelItem {
+  display_name: string;
+  model_name: string;
+  provider: "Anthropic" | "DeepSeek" | "Google" | "Gemini" | "Groq" | "OpenAI";
+}
+
+// Define ModelProvider enum to match backend
+export enum ModelProvider {
+  OPENAI = "OPENAI",
+  ANTHROPIC = "ANTHROPIC",
+  GOOGLE = "GOOGLE",
+  AZURE = "AZURE",
+  DEEPSEEK = "DEEPSEEK",
+  GROQ = "GROQ"
 }
 
 // Helper function to map frontend provider strings to backend ModelProvider enum
@@ -56,12 +71,12 @@ export const apiModels: ModelItem[] = [
   {
     "display_name": "Gemini 2.5 Flash",
     "model_name": "gemini-2.5-flash-preview-05-20",
-    "provider": "Gemini"
+    "provider": "Google"
   },
   {
     "display_name": "Gemini 2.5 Pro",
     "model_name": "gemini-2.5-pro-preview-06-05",
-    "provider": "Gemini"
+    "provider": "Google"
   },
   {
     "display_name": "Llama 4 Scout (17b)",
@@ -100,5 +115,25 @@ export const apiModels: ModelItem[] = [
   }
 ];
 
+// Convert ModelItem to LanguageModel (normalize provider names)
+function normalizeModel(model: ModelItem): LanguageModel {
+  return {
+    ...model,
+    provider: model.provider === "Gemini" ? "Google" : model.provider as LanguageModel["provider"]
+  };
+}
+
 // Find the Gemini 2.5 Flash model to use as default
-export const defaultModel = apiModels.find(model => model.model_name === "gemini-2.5-flash-preview-05-20") || null; 
+export const defaultModel = apiModels.find(model => model.model_name === "gemini-2.5-flash-preview-05-20") || null;
+
+// Async function to get all models (expected by components)
+export async function getModels(): Promise<LanguageModel[]> {
+  // For now, return the static list. In the future, this could fetch from API
+  return apiModels.map(normalizeModel);
+}
+
+// Async function to get default model (expected by components)
+export async function getDefaultModel(): Promise<LanguageModel | null> {
+  // For now, return the static default. In the future, this could fetch from API
+  return defaultModel ? normalizeModel(defaultModel) : null;
+} 

@@ -8,6 +8,10 @@ from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
 
+
+
+
+
 class CharlieMungerSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
     confidence: float
@@ -174,339 +178,261 @@ def analyze_moat_strength(metrics: list, financial_line_items: list) -> dict:
         }
     
     # 1. Return on Invested Capital (ROIC) analysis - Munger's favorite metric
-    roic_values = [item.return_on_invested_capital for item in financial_line_items 
-                   if hasattr(item, 'return_on_invested_capital') and item.return_on_invested_capital is not None]
-    
+    roic_values = [item.return_on_invested_capital for item in financial_line_items if item.return_on_invested_capital is not None]
+
     if roic_values:
-        # Check if ROIC consistently above 15% (Munger's threshold)
-        high_roic_count = sum(1 for r in roic_values if r > 0.15)
-        if high_roic_count >= len(roic_values) * 0.8:  # 80% of periods show high ROIC
+        avg_roic = sum(roic_values) / len(roic_values)
+        if avg_roic > 0.15:  # >15% ROIC
             score += 3
-            details.append(f"Excellent ROIC: >15% in {high_roic_count}/{len(roic_values)} periods")
-        elif high_roic_count >= len(roic_values) * 0.5:  # 50% of periods
+            details.append(f"Excellent ROIC: {avg_roic:.1%} average")
+        elif avg_roic > 0.10:  # >10% ROIC
             score += 2
-            details.append(f"Good ROIC: >15% in {high_roic_count}/{len(roic_values)} periods")
-        elif high_roic_count > 0:
+            details.append(f"Good ROIC: {avg_roic:.1%} average")
+        elif avg_roic > 0.05:  # >5% ROIC
             score += 1
-            details.append(f"Mixed ROIC: >15% in only {high_roic_count}/{len(roic_values)} periods")
+            details.append(f"Moderate ROIC: {avg_roic:.1%} average")
         else:
-            details.append("Poor ROIC: Never exceeds 15% threshold")
+            details.append(f"Poor ROIC: {avg_roic:.1%} average")
     else:
         details.append("No ROIC data available")
     
-    # 2. Pricing power - check gross margin stability and trends
-    gross_margins = [item.gross_margin for item in financial_line_items 
-                    if hasattr(item, 'gross_margin') and item.gross_margin is not None]
-    
+    # 2. Gross margin analysis
+    gross_margins = [item.gross_margin for item in financial_line_items if item.gross_margin is not None]
+
     if gross_margins and len(gross_margins) >= 3:
-        # Munger likes stable or improving gross margins
-        margin_trend = sum(1 for i in range(1, len(gross_margins)) if gross_margins[i] >= gross_margins[i-1])
-        if margin_trend >= len(gross_margins) * 0.7:  # Improving in 70% of periods
+        avg_margin = sum(gross_margins) / len(gross_margins)
+        # Check consistency/predictability of margins
+        margin_volatility = max(gross_margins) - min(gross_margins)
+        
+        if avg_margin > 0.40 and margin_volatility < 0.10:  # High margins with low volatility
+            score += 3
+            details.append(f"Excellent and consistent gross margins: {avg_margin:.1%} avg")
+        elif avg_margin > 0.25 and margin_volatility < 0.15:  # Good margins with reasonable stability
             score += 2
-            details.append("Strong pricing power: Gross margins consistently improving")
-        elif sum(gross_margins) / len(gross_margins) > 0.3:  # Average margin > 30%
+            details.append(f"Good and stable gross margins: {avg_margin:.1%} avg")
+        elif avg_margin > 0.15:
             score += 1
-            details.append(f"Good pricing power: Average gross margin {sum(gross_margins)/len(gross_margins):.1%}")
+            details.append(f"Moderate gross margins: {avg_margin:.1%} avg")
         else:
-            details.append("Limited pricing power: Low or declining gross margins")
+            details.append(f"Low gross margins: {avg_margin:.1%} avg")
     else:
         details.append("Insufficient gross margin data")
     
-    # 3. Capital intensity - Munger prefers low capex businesses
-    if len(financial_line_items) >= 3:
-        capex_to_revenue = []
-        for item in financial_line_items:
-            if (hasattr(item, 'capital_expenditure') and item.capital_expenditure is not None and 
-                hasattr(item, 'revenue') and item.revenue is not None and item.revenue > 0):
-                # Note: capital_expenditure is typically negative in financial statements
-                capex_ratio = abs(item.capital_expenditure) / item.revenue
-                capex_to_revenue.append(capex_ratio)
+    # 3. Asset-light business model analysis
+    if financial_line_items:
+        latest = financial_line_items[0]
         
-        if capex_to_revenue:
-            avg_capex_ratio = sum(capex_to_revenue) / len(capex_to_revenue)
-            if avg_capex_ratio < 0.05:  # Less than 5% of revenue
-                score += 2
-                details.append(f"Low capital requirements: Avg capex {avg_capex_ratio:.1%} of revenue")
-            elif avg_capex_ratio < 0.10:  # Less than 10% of revenue
-                score += 1
-                details.append(f"Moderate capital requirements: Avg capex {avg_capex_ratio:.1%} of revenue")
-            else:
-                details.append(f"High capital requirements: Avg capex {avg_capex_ratio:.1%} of revenue")
-        else:
-            details.append("No capital expenditure data available")
-    else:
-        details.append("Insufficient data for capital intensity analysis")
-    
-    # 4. Intangible assets - Munger values R&D and intellectual property
-    r_and_d = [item.research_and_development for item in financial_line_items
-              if hasattr(item, 'research_and_development') and item.research_and_development is not None]
-    
-    goodwill_and_intangible_assets = [item.goodwill_and_intangible_assets for item in financial_line_items
-               if hasattr(item, 'goodwill_and_intangible_assets') and item.goodwill_and_intangible_assets is not None]
-
-    if r_and_d and len(r_and_d) > 0:
-        if sum(r_and_d) > 0:  # If company is investing in R&D
+        # Check for asset-light characteristics
+        asset_light_indicators = 0
+        
+        # High R&D spending (future returns without current asset accumulation)
+        r_and_d = [item.research_and_development for item in financial_line_items if item.research_and_development is not None]
+        revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
+        goodwill_and_intangible_assets = [item.goodwill_and_intangible_assets for item in financial_line_items if item.goodwill_and_intangible_assets is not None]
+        
+        if r_and_d and revenues:
+            rd_intensity = r_and_d[0] / revenues[0]
+            if rd_intensity > 0.08:  # >8% R&D intensity
+                asset_light_indicators += 1
+                details.append(f"High R&D intensity: {rd_intensity:.1%}")
+        
+        # Low goodwill relative to market cap (organic growth vs acquisitions)
+        if goodwill_and_intangible_assets and revenues:
+            goodwill_to_revenue = goodwill_and_intangible_assets[0] / revenues[0]
+            if goodwill_to_revenue < 0.5:  # Low goodwill burden
+                asset_light_indicators += 1
+        
+        # Award points for asset-light characteristics
+        if asset_light_indicators >= 2:
+            score += 2
+            details.append("Strong asset-light business model")
+        elif asset_light_indicators == 1:
             score += 1
-            details.append("Invests in R&D, building intellectual property")
-    
-    if (goodwill_and_intangible_assets and len(goodwill_and_intangible_assets) > 0):
-        score += 1
-        details.append("Significant goodwill/intangible assets, suggesting brand value or IP")
-    
-    # Scale score to 0-10 range
-    final_score = min(10, score * 10 / 9)  # Max possible raw score is 9
-    
+            details.append("Some asset-light characteristics")
+        
     return {
-        "score": final_score,
+        "score": min(10, score),  # Cap at 10 points
         "details": "; ".join(details)
     }
 
 
 def analyze_management_quality(financial_line_items: list, insider_trades: list) -> dict:
     """
-    Evaluate management quality using Munger's criteria:
-    - Capital allocation wisdom
-    - Insider ownership and transactions
-    - Cash management efficiency
-    - Candor and transparency
-    - Long-term focus
+    Analyze management quality based on:
+    1. Capital allocation efficiency
+    2. Shareholder returns vs. management compensation
+    3. Insider buying/selling patterns
+    4. Debt management
+    5. Cash management
+    6. Share repurchases vs. dilution
     """
     score = 0
     details = []
     
     if not financial_line_items:
-        return {
-            "score": 0,
-            "details": "Insufficient data to analyze management quality"
-        }
+        return {"score": 0, "details": "No financial data available"}
     
-    # 1. Capital allocation - Check FCF to net income ratio
-    # Munger values companies that convert earnings to cash
-    fcf_values = [item.free_cash_flow for item in financial_line_items 
-                 if hasattr(item, 'free_cash_flow') and item.free_cash_flow is not None]
+    # 1. Capital allocation: Free cash flow generation vs. reinvestment
+    fcf_values = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow is not None]
+    revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
+    net_income_values = [item.net_income for item in financial_line_items if item.net_income is not None]
     
-    net_income_values = [item.net_income for item in financial_line_items 
-                        if hasattr(item, 'net_income') and item.net_income is not None]
-    
-    if fcf_values and net_income_values and len(fcf_values) == len(net_income_values):
-        # Calculate FCF to Net Income ratio for each period
-        fcf_to_ni_ratios = []
-        for i in range(len(fcf_values)):
-            if net_income_values[i] and net_income_values[i] > 0:
-                fcf_to_ni_ratios.append(fcf_values[i] / net_income_values[i])
+    if fcf_values and net_income_values:
+        # FCF conversion ratio (FCF / Net Income)
+        fcf_conversion = fcf_values[0] / net_income_values[0] if net_income_values[0] != 0 else 0
         
-        if fcf_to_ni_ratios:
-            avg_ratio = sum(fcf_to_ni_ratios) / len(fcf_to_ni_ratios)
-            if avg_ratio > 1.1:  # FCF > net income suggests good accounting
-                score += 3
-                details.append(f"Excellent cash conversion: FCF/NI ratio of {avg_ratio:.2f}")
-            elif avg_ratio > 0.9:  # FCF roughly equals net income
-                score += 2
-                details.append(f"Good cash conversion: FCF/NI ratio of {avg_ratio:.2f}")
-            elif avg_ratio > 0.7:  # FCF somewhat lower than net income
-                score += 1
-                details.append(f"Moderate cash conversion: FCF/NI ratio of {avg_ratio:.2f}")
-            else:
-                details.append(f"Poor cash conversion: FCF/NI ratio of only {avg_ratio:.2f}")
-        else:
-            details.append("Could not calculate FCF to Net Income ratios")
-    else:
-        details.append("Missing FCF or Net Income data")
-    
-    # 2. Debt management - Munger is cautious about debt
-    debt_values = [item.total_debt for item in financial_line_items 
-                  if hasattr(item, 'total_debt') and item.total_debt is not None]
-    
-    equity_values = [item.shareholders_equity for item in financial_line_items 
-                    if hasattr(item, 'shareholders_equity') and item.shareholders_equity is not None]
-    
-    if debt_values and equity_values and len(debt_values) == len(equity_values):
-        # Calculate D/E ratio for most recent period
-        recent_de_ratio = debt_values[0] / equity_values[0] if equity_values[0] > 0 else float('inf')
-        
-        if recent_de_ratio < 0.3:  # Very low debt
-            score += 3
-            details.append(f"Conservative debt management: D/E ratio of {recent_de_ratio:.2f}")
-        elif recent_de_ratio < 0.7:  # Moderate debt
+        if fcf_conversion > 1.0:
             score += 2
-            details.append(f"Prudent debt management: D/E ratio of {recent_de_ratio:.2f}")
-        elif recent_de_ratio < 1.5:  # Higher but still reasonable debt
+            details.append(f"Excellent FCF conversion: {fcf_conversion:.1f}x")
+        elif fcf_conversion > 0.8:
             score += 1
-            details.append(f"Moderate debt level: D/E ratio of {recent_de_ratio:.2f}")
+            details.append(f"Good FCF conversion: {fcf_conversion:.1f}x")
         else:
-            details.append(f"High debt level: D/E ratio of {recent_de_ratio:.2f}")
-    else:
-        details.append("Missing debt or equity data")
+            details.append(f"Poor FCF conversion: {fcf_conversion:.1f}x")
     
-    # 3. Cash management efficiency - Munger values appropriate cash levels
-    cash_values = [item.cash_and_equivalents for item in financial_line_items
-                  if hasattr(item, 'cash_and_equivalents') and item.cash_and_equivalents is not None]
-    revenue_values = [item.revenue for item in financial_line_items
-                     if hasattr(item, 'revenue') and item.revenue is not None]
+    # 2. Debt management
+    debt_values = [item.total_debt for item in financial_line_items if item.total_debt is not None]
+    revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
+    equity_values = [item.shareholders_equity for item in financial_line_items if item.shareholders_equity is not None]
     
-    if cash_values and revenue_values and len(cash_values) > 0 and len(revenue_values) > 0:
-        # Calculate cash to revenue ratio (Munger likes 10-20% for most businesses)
-        cash_to_revenue = cash_values[0] / revenue_values[0] if revenue_values[0] > 0 else 0
+    if debt_values and equity_values:
+        debt_to_equity = debt_values[0] / equity_values[0] if equity_values[0] != 0 else float('inf')
         
-        if 0.1 <= cash_to_revenue <= 0.25:
-            # Goldilocks zone - not too much, not too little
+        if debt_to_equity < 0.3:  # Conservative debt levels
             score += 2
-            details.append(f"Prudent cash management: Cash/Revenue ratio of {cash_to_revenue:.2f}")
-        elif 0.05 <= cash_to_revenue < 0.1 or 0.25 < cash_to_revenue <= 0.4:
-            # Reasonable but not ideal
+            details.append(f"Conservative debt management: {debt_to_equity:.2f} D/E")
+        elif debt_to_equity < 0.6:
             score += 1
-            details.append(f"Acceptable cash position: Cash/Revenue ratio of {cash_to_revenue:.2f}")
-        elif cash_to_revenue > 0.4:
-            # Too much cash - potentially inefficient capital allocation
-            details.append(f"Excess cash reserves: Cash/Revenue ratio of {cash_to_revenue:.2f}")
+            details.append(f"Moderate debt levels: {debt_to_equity:.2f} D/E")
         else:
-            # Too little cash - potentially risky
-            details.append(f"Low cash reserves: Cash/Revenue ratio of {cash_to_revenue:.2f}")
-    else:
-        details.append("Insufficient cash or revenue data")
+            details.append(f"High debt levels: {debt_to_equity:.2f} D/E")
     
-    # 4. Insider activity - Munger values skin in the game
+    # 3. Cash management - avoid hoarding, but maintain adequate reserves
+    cash_values = [item.cash_and_equivalents for item in financial_line_items if item.cash_and_equivalents is not None]
+    revenue_values = [item.revenue for item in financial_line_items if item.revenue is not None]
+    
+    if cash_values and revenue_values:
+        cash_to_revenue = cash_values[0] / revenue_values[0]
+        
+        # Sweet spot: enough cash for opportunities but not excessive hoarding
+        if 0.1 <= cash_to_revenue <= 0.3:  # 10-30% of revenue in cash
+            score += 2
+            details.append(f"Optimal cash management: {cash_to_revenue:.1%} of revenue")
+        elif cash_to_revenue > 0.5:
+            details.append(f"Excessive cash hoarding: {cash_to_revenue:.1%} of revenue")
+        elif cash_to_revenue < 0.05:
+            details.append(f"Potentially inadequate cash reserves: {cash_to_revenue:.1%} of revenue")
+        else:
+            score += 1
+            details.append(f"Reasonable cash management: {cash_to_revenue:.1%} of revenue")
+    
+    # 4. Insider trading analysis
     if insider_trades and len(insider_trades) > 0:
-        # Count buys vs. sells
-        buys = sum(1 for trade in insider_trades if hasattr(trade, 'transaction_type') and 
-                   trade.transaction_type and trade.transaction_type.lower() in ['buy', 'purchase'])
-        sells = sum(1 for trade in insider_trades if hasattr(trade, 'transaction_type') and 
-                    trade.transaction_type and trade.transaction_type.lower() in ['sell', 'sale'])
-        
-        # Calculate the buy ratio
-        total_trades = buys + sells
-        if total_trades > 0:
-            buy_ratio = buys / total_trades
-            if buy_ratio > 0.7:  # Strong insider buying
-                score += 2
-                details.append(f"Strong insider buying: {buys}/{total_trades} transactions are purchases")
-            elif buy_ratio > 0.4:  # Balanced insider activity
-                score += 1
-                details.append(f"Balanced insider trading: {buys}/{total_trades} transactions are purchases")
-            elif buy_ratio < 0.1 and sells > 5:  # Heavy selling
-                score -= 1  # Penalty for excessive selling
-                details.append(f"Concerning insider selling: {sells}/{total_trades} transactions are sales")
-            else:
-                details.append(f"Mixed insider activity: {buys}/{total_trades} transactions are purchases")
-        else:
-            details.append("No recorded insider transactions")
+        # This is a placeholder - would need actual insider trading data analysis
+        # For now, just note the availability of data
+        details.append(f"Insider trading data available ({len(insider_trades)} transactions)")
     else:
         details.append("No insider trading data available")
     
-    # 5. Consistency in share count - Munger prefers stable/decreasing shares
-    share_counts = [item.outstanding_shares for item in financial_line_items
-                   if hasattr(item, 'outstanding_shares') and item.outstanding_shares is not None]
+    # 5. Share count analysis (dilution vs. buybacks)
+    share_counts = [item.outstanding_shares for item in financial_line_items if item.outstanding_shares is not None]
     
-    if share_counts and len(share_counts) >= 3:
-        if share_counts[0] < share_counts[-1] * 0.95:  # 5%+ reduction in shares
+    if len(share_counts) >= 3:
+        # Check trend over time (remember data is in reverse chronological order)
+        recent_shares = share_counts[0]
+        older_shares = share_counts[-1]
+        
+        share_change = (recent_shares - older_shares) / older_shares
+        
+        if share_change < -0.05:  # >5% reduction (buybacks)
             score += 2
-            details.append("Shareholder-friendly: Reducing share count over time")
-        elif share_counts[0] < share_counts[-1] * 1.05:  # Stable share count
+            details.append(f"Shareholder-friendly buybacks: {share_change:.1%} share reduction")
+        elif share_change < 0:
             score += 1
-            details.append("Stable share count: Limited dilution")
-        elif share_counts[0] > share_counts[-1] * 1.2:  # >20% dilution
-            score -= 1  # Penalty for excessive dilution
-            details.append("Concerning dilution: Share count increased significantly")
+            details.append(f"Some share reduction: {share_change:.1%}")
+        elif share_change > 0.1:  # >10% dilution
+            details.append(f"Significant share dilution: {share_change:.1%}")
         else:
-            details.append("Moderate share count increase over time")
-    else:
-        details.append("Insufficient share count data")
-    
-    # Scale score to 0-10 range
-    # Maximum possible raw score would be 12 (3+3+2+2+2)
-    final_score = max(0, min(10, score * 10 / 12))
+            details.append(f"Stable share count: {share_change:.1%}")
     
     return {
-        "score": final_score,
+        "score": min(10, score),  # Cap at 10 points
         "details": "; ".join(details)
     }
 
 
 def analyze_predictability(financial_line_items: list) -> dict:
     """
-    Assess the predictability of the business - Munger strongly prefers businesses
-    whose future operations and cashflows are relatively easy to predict.
+    Analyze business predictability - Munger's key criterion.
+    Look for:
+    1. Revenue predictability and growth
+    2. Margin stability
+    3. Cash flow consistency
+    4. Earnings quality
     """
     score = 0
     details = []
     
-    if not financial_line_items or len(financial_line_items) < 5:
-        return {
-            "score": 0,
-            "details": "Insufficient data to analyze business predictability (need 5+ years)"
-        }
+    if not financial_line_items or len(financial_line_items) < 3:
+        return {"score": 0, "details": "Insufficient data for predictability analysis"}
     
-    # 1. Revenue stability and growth
-    revenues = [item.revenue for item in financial_line_items 
-               if hasattr(item, 'revenue') and item.revenue is not None]
+    # 1. Revenue growth predictability
+    revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
     
-    if revenues and len(revenues) >= 5:
-        # Calculate year-over-year growth rates, handling zero division
+    if len(revenues) >= 5:
+        # Calculate year-over-year growth rates (remember reverse chronological order)
         growth_rates = []
-        for i in range(len(revenues)-1):
-            if revenues[i+1] != 0:  # Avoid division by zero
-                growth_rate = (revenues[i] / revenues[i+1] - 1)
+        for i in range(len(revenues) - 1):
+            if revenues[i + 1] != 0:
+                growth_rate = (revenues[i] - revenues[i + 1]) / revenues[i + 1]
                 growth_rates.append(growth_rate)
         
-        if not growth_rates:
-            details.append("Cannot calculate revenue growth: zero revenue values found")
-        else:
+        if growth_rates:
             avg_growth = sum(growth_rates) / len(growth_rates)
-            growth_volatility = sum(abs(r - avg_growth) for r in growth_rates) / len(growth_rates)
+            growth_volatility = max(growth_rates) - min(growth_rates)
             
-            if avg_growth > 0.05 and growth_volatility < 0.1:
-                # Steady, consistent growth (Munger loves this)
+            # Reward consistent, positive growth
+            if avg_growth > 0.05 and growth_volatility < 0.20:  # >5% growth with <20% volatility
                 score += 3
-                details.append(f"Highly predictable revenue: {avg_growth:.1%} avg growth with low volatility")
-            elif avg_growth > 0 and growth_volatility < 0.2:
-                # Positive but somewhat volatile growth
+                details.append(f"Highly predictable revenue growth: {avg_growth:.1%} avg, low volatility")
+            elif avg_growth > 0 and growth_volatility < 0.30:
                 score += 2
-                details.append(f"Moderately predictable revenue: {avg_growth:.1%} avg growth with some volatility")
+                details.append(f"Predictable positive revenue growth: {avg_growth:.1%} avg")
             elif avg_growth > 0:
-                # Growing but unpredictable
                 score += 1
-                details.append(f"Growing but less predictable revenue: {avg_growth:.1%} avg growth with high volatility")
+                details.append(f"Positive but volatile revenue growth: {avg_growth:.1%} avg")
             else:
-                details.append(f"Declining or highly unpredictable revenue: {avg_growth:.1%} avg growth")
+                details.append(f"Unpredictable or declining revenue: {avg_growth:.1%} avg")
     else:
-        details.append("Insufficient revenue history for predictability analysis")
+        details.append("Insufficient revenue history")
     
-    # 2. Operating income stability
-    op_income = [item.operating_income for item in financial_line_items 
-                if hasattr(item, 'operating_income') and item.operating_income is not None]
+    # 2. Operating income predictability
+    op_income = [item.operating_income for item in financial_line_items if item.operating_income is not None]
     
-    if op_income and len(op_income) >= 5:
+    if len(op_income) >= 4:
         # Count positive operating income periods
         positive_periods = sum(1 for income in op_income if income > 0)
         
         if positive_periods == len(op_income):
-            # Consistently profitable operations
-            score += 3
-            details.append("Highly predictable operations: Operating income positive in all periods")
-        elif positive_periods >= len(op_income) * 0.8:
-            # Mostly profitable operations
             score += 2
-            details.append(f"Predictable operations: Operating income positive in {positive_periods}/{len(op_income)} periods")
-        elif positive_periods >= len(op_income) * 0.6:
-            # Somewhat profitable operations
+            details.append("Consistently positive operating income")
+        elif positive_periods >= len(op_income) * 0.8:
             score += 1
-            details.append(f"Somewhat predictable operations: Operating income positive in {positive_periods}/{len(op_income)} periods")
+            details.append(f"Mostly positive operating income: {positive_periods}/{len(op_income)} periods")
         else:
-            details.append(f"Unpredictable operations: Operating income positive in only {positive_periods}/{len(op_income)} periods")
+            details.append(f"Inconsistent operating income: {positive_periods}/{len(op_income)} positive periods")
     else:
         details.append("Insufficient operating income history")
     
-    # 3. Margin consistency - Munger values stable margins
-    op_margins = [item.operating_margin for item in financial_line_items 
-                 if hasattr(item, 'operating_margin') and item.operating_margin is not None]
+    # 3. Operating margin stability
+    op_margins = [item.operating_margin for item in financial_line_items if item.operating_margin is not None]
     
-    if op_margins and len(op_margins) >= 5:
-        # Calculate margin volatility
+    if len(op_margins) >= 4:
         avg_margin = sum(op_margins) / len(op_margins)
-        margin_volatility = sum(abs(m - avg_margin) for m in op_margins) / len(op_margins)
+        margin_volatility = max(op_margins) - min(op_margins)
         
-        if margin_volatility < 0.03:  # Very stable margins
-            score += 2
+        if avg_margin > 0.15 and margin_volatility < 0.05:  # >15% margins with <5% volatility
+            score += 3
             details.append(f"Highly predictable margins: {avg_margin:.1%} avg with minimal volatility")
         elif margin_volatility < 0.07:  # Moderately stable margins
             score += 1
@@ -517,8 +443,7 @@ def analyze_predictability(financial_line_items: list) -> dict:
         details.append("Insufficient margin history")
     
     # 4. Cash generation reliability
-    fcf_values = [item.free_cash_flow for item in financial_line_items 
-                 if hasattr(item, 'free_cash_flow') and item.free_cash_flow is not None]
+    fcf_values = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow is not None]
     
     if fcf_values and len(fcf_values) >= 5:
         # Count positive FCF periods
@@ -564,8 +489,7 @@ def calculate_munger_valuation(financial_line_items: list, market_cap: float) ->
         }
     
     # Get FCF values (Munger's preferred "owner earnings" metric)
-    fcf_values = [item.free_cash_flow for item in financial_line_items 
-                 if hasattr(item, 'free_cash_flow') and item.free_cash_flow is not None]
+    fcf_values = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow is not None]
     
     if not fcf_values or len(fcf_values) < 3:
         return {

@@ -14,6 +14,10 @@ from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
 import statistics
+from typing import List
+
+
+
 
 
 class PhilFisherSignal(BaseModel):
@@ -168,127 +172,130 @@ def phil_fisher_agent(state: AgentState):
 
 def analyze_fisher_growth_quality(financial_line_items: list) -> dict:
     """
-    Evaluate growth & quality:
-      - Consistent Revenue Growth
-      - Consistent EPS Growth
-      - R&D as a % of Revenue (if relevant, indicative of future-oriented spending)
+    Phil Fisher emphasizes growth and quality. We'll check:
+      - Revenue growth
+      - EPS growth
+      - R&D spending as proxy for innovation
     """
     if not financial_line_items or len(financial_line_items) < 2:
         return {
             "score": 0,
-            "details": "Insufficient financial data for growth/quality analysis",
-        }
-
-    details = []
-    raw_score = 0  # up to 9 raw points => scale to 0–10
-
-    # 1. Revenue Growth (YoY)
-    revenues = [fi.revenue for fi in financial_line_items if fi.revenue is not None]
-    if len(revenues) >= 2:
-        # We'll look at the earliest vs. latest to gauge multi-year growth if possible
-        latest_rev = revenues[0]
-        oldest_rev = revenues[-1]
-        if oldest_rev > 0:
-            rev_growth = (latest_rev - oldest_rev) / abs(oldest_rev)
-            if rev_growth > 0.80:
-                raw_score += 3
-                details.append(f"Very strong multi-period revenue growth: {rev_growth:.1%}")
-            elif rev_growth > 0.40:
-                raw_score += 2
-                details.append(f"Moderate multi-period revenue growth: {rev_growth:.1%}")
-            elif rev_growth > 0.10:
-                raw_score += 1
-                details.append(f"Slight multi-period revenue growth: {rev_growth:.1%}")
-            else:
-                details.append(f"Minimal or negative multi-period revenue growth: {rev_growth:.1%}")
-        else:
-            details.append("Oldest revenue is zero/negative; cannot compute growth.")
-    else:
-        details.append("Not enough revenue data points for growth calculation.")
-
-    # 2. EPS Growth (YoY)
-    eps_values = [fi.earnings_per_share for fi in financial_line_items if fi.earnings_per_share is not None]
-    if len(eps_values) >= 2:
-        latest_eps = eps_values[0]
-        oldest_eps = eps_values[-1]
-        if abs(oldest_eps) > 1e-9:
-            eps_growth = (latest_eps - oldest_eps) / abs(oldest_eps)
-            if eps_growth > 0.80:
-                raw_score += 3
-                details.append(f"Very strong multi-period EPS growth: {eps_growth:.1%}")
-            elif eps_growth > 0.40:
-                raw_score += 2
-                details.append(f"Moderate multi-period EPS growth: {eps_growth:.1%}")
-            elif eps_growth > 0.10:
-                raw_score += 1
-                details.append(f"Slight multi-period EPS growth: {eps_growth:.1%}")
-            else:
-                details.append(f"Minimal or negative multi-period EPS growth: {eps_growth:.1%}")
-        else:
-            details.append("Oldest EPS near zero; skipping EPS growth calculation.")
-    else:
-        details.append("Not enough EPS data points for growth calculation.")
-
-    # 3. R&D as % of Revenue (if we have R&D data)
-    rnd_values = [fi.research_and_development for fi in financial_line_items if fi.research_and_development is not None]
-    if rnd_values and revenues and len(rnd_values) == len(revenues):
-        # We'll just look at the most recent for a simple measure
-        recent_rnd = rnd_values[0]
-        recent_rev = revenues[0] if revenues[0] else 1e-9
-        rnd_ratio = recent_rnd / recent_rev
-        # Generally, Fisher admired companies that invest aggressively in R&D,
-        # but it must be appropriate. We'll assume "3%-15%" is healthy, just as an example.
-        if 0.03 <= rnd_ratio <= 0.15:
-            raw_score += 3
-            details.append(f"R&D ratio {rnd_ratio:.1%} indicates significant investment in future growth")
-        elif rnd_ratio > 0.15:
-            raw_score += 2
-            details.append(f"R&D ratio {rnd_ratio:.1%} is very high (could be good if well-managed)")
-        elif rnd_ratio > 0.0:
-            raw_score += 1
-            details.append(f"R&D ratio {rnd_ratio:.1%} is somewhat low but still positive")
-        else:
-            details.append("No meaningful R&D expense ratio")
-    else:
-        details.append("Insufficient R&D data to evaluate")
-
-    # scale raw_score (max 9) to 0–10
-    final_score = min(10, (raw_score / 9) * 10)
-    return {"score": final_score, "details": "; ".join(details)}
-
-
-def analyze_margins_stability(financial_line_items: list) -> dict:
-    """
-    Looks at margin consistency (gross/operating margin) and general stability over time.
-    """
-    if not financial_line_items or len(financial_line_items) < 2:
-        return {
-            "score": 0,
-            "details": "Insufficient data for margin stability analysis",
+            "details": "Insufficient data for growth/quality analysis",
         }
 
     details = []
     raw_score = 0  # up to 6 => scale to 0-10
 
-    # 1. Operating Margin Consistency
-    op_margins = [fi.operating_margin for fi in financial_line_items if fi.operating_margin is not None]
-    if len(op_margins) >= 2:
-        # Check if margins are stable or improving (comparing oldest to newest)
-        oldest_op_margin = op_margins[-1]
-        newest_op_margin = op_margins[0]
-        if newest_op_margin >= oldest_op_margin > 0:
+    # 1. Revenue growth consistency
+    revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
+
+    if len(revenues) >= 3:
+        growth_rates = []
+        for i in range(len(revenues) - 1):
+            if revenues[i + 1] != 0:
+                growth_rate = (revenues[i] - revenues[i + 1]) / revenues[i + 1]
+                growth_rates.append(growth_rate)
+
+        if growth_rates:
+            avg_growth = sum(growth_rates) / len(growth_rates)
+            growth_consistency = len([r for r in growth_rates if r > 0])
+
+            if avg_growth > 0.15 and growth_consistency >= 2:
+                raw_score += 5
+                details.append(f"Excellent revenue growth: {avg_growth:.1%} avg with consistency")
+            elif avg_growth > 0.10:
+                raw_score += 3
+                details.append(f"Strong revenue growth: {avg_growth:.1%} avg")
+            elif avg_growth > 0.05:
+                raw_score += 2
+                details.append(f"Good revenue growth: {avg_growth:.1%} avg")
+            elif avg_growth > 0:
+                raw_score += 1
+                details.append(f"Modest revenue growth: {avg_growth:.1%} avg")
+            else:
+                details.append(f"Declining revenue: {avg_growth:.1%}")
+
+    # 2. Earnings per share growth
+    eps_values = [item.earnings_per_share for item in financial_line_items if item.earnings_per_share is not None]
+
+    if len(eps_values) >= 3:
+        eps_growth_rates = []
+        for i in range(len(eps_values) - 1):
+            if eps_values[i + 1] != 0:
+                eps_growth = (eps_values[i] - eps_values[i + 1]) / eps_values[i + 1]
+                eps_growth_rates.append(eps_growth)
+
+        if eps_growth_rates:
+            avg_eps_growth = sum(eps_growth_rates) / len(eps_growth_rates)
+            if avg_eps_growth > 0.15:
+                raw_score += 5
+                details.append(f"Outstanding EPS growth: {avg_eps_growth:.1%} avg")
+            elif avg_eps_growth > 0.10:
+                raw_score += 3
+                details.append(f"Strong EPS growth: {avg_eps_growth:.1%} avg")
+            elif avg_eps_growth > 0:
+                raw_score += 1
+                details.append(f"Positive EPS growth: {avg_eps_growth:.1%} avg")
+
+    # 3. R&D investment analysis
+    rnd_values = [item.research_and_development for item in financial_line_items if item.research_and_development is not None]
+    if rnd_values and revenues:
+        rnd_intensity = rnd_values[0] / revenues[0] if revenues[0] != 0 else 0
+        
+        if rnd_intensity > 0.15:  # >15% R&D intensity
+            raw_score += 4
+            details.append(f"Heavy R&D investment: {rnd_intensity:.1%} of revenue")
+        elif rnd_intensity > 0.08:  # >8% R&D intensity
             raw_score += 2
-            details.append(f"Operating margin stable or improving ({oldest_op_margin:.1%} -> {newest_op_margin:.1%})")
-        elif newest_op_margin > 0:
+            details.append(f"Substantial R&D investment: {rnd_intensity:.1%} of revenue")
+        elif rnd_intensity > 0.03:  # >3% R&D intensity
             raw_score += 1
-            details.append(f"Operating margin positive but slightly declined")
+            details.append(f"Moderate R&D investment: {rnd_intensity:.1%} of revenue")
+        else:
+            details.append(f"Low R&D investment: {rnd_intensity:.1%} of revenue")
+
+    # scale raw_score (max 6) to 0-10
+    final_score = min(10, (raw_score / 6) * 10)
+    return {"score": final_score, "details": "; ".join(details)}
+
+
+def analyze_margins_stability(financial_line_items: list) -> dict:
+    """
+    Evaluate margins & stability:
+      - Check operating margin trend
+      - Look at gross margin level
+      - Multi-year margin stability
+    """
+    if not financial_line_items:
+        return {
+            "score": 0,
+            "details": "No financial data for margin analysis",
+        }
+
+    details = []
+    raw_score = 0
+
+    # 1. Operating Margin
+    # Use safe attribute access for dynamic fields
+    op_margins = [item.operating_margin for item in financial_line_items if item.operating_margin is not None]
+
+    if op_margins:
+        recent_om = op_margins[0]
+        if recent_om > 0.2:
+            raw_score += 2
+            details.append(f"Strong operating margin: {recent_om:.1%}")
+        elif recent_om > 0.1:
+            raw_score += 1
+            details.append(f"Moderate operating margin: {recent_om:.1%}")
         else:
             details.append(f"Operating margin may be negative or uncertain")
     else:
         details.append("Not enough operating margin data points")
 
     # 2. Gross Margin Level
-    gm_values = [fi.gross_margin for fi in financial_line_items if fi.gross_margin is not None]
+    # Use safe attribute access for dynamic fields
+    gm_values = [item.gross_margin for item in financial_line_items if item.gross_margin is not None]
+
     if gm_values:
         # We'll just take the most recent
         recent_gm = gm_values[0]
@@ -340,8 +347,9 @@ def analyze_management_efficiency_leverage(financial_line_items: list) -> dict:
     raw_score = 0  # up to 6 => scale to 0–10
 
     # 1. Return on Equity (ROE)
-    ni_values = [fi.net_income for fi in financial_line_items if fi.net_income is not None]
-    eq_values = [fi.shareholders_equity for fi in financial_line_items if fi.shareholders_equity is not None]
+    ni_values = [item.net_income for item in financial_line_items if item.net_income is not None]
+    eq_values = [item.shareholders_equity for item in financial_line_items if item.shareholders_equity is not None]
+
     if ni_values and eq_values and len(ni_values) == len(eq_values):
         recent_ni = ni_values[0]
         recent_eq = eq_values[0] if eq_values[0] else 1e-9
@@ -364,7 +372,8 @@ def analyze_management_efficiency_leverage(financial_line_items: list) -> dict:
         details.append("Insufficient data for ROE calculation")
 
     # 2. Debt-to-Equity
-    debt_values = [fi.total_debt for fi in financial_line_items if fi.total_debt is not None]
+    debt_values = [item.total_debt for item in financial_line_items if item.total_debt is not None]
+
     if debt_values and eq_values and len(debt_values) == len(eq_values):
         recent_debt = debt_values[0]
         recent_equity = eq_values[0] if eq_values[0] else 1e-9
@@ -381,7 +390,8 @@ def analyze_management_efficiency_leverage(financial_line_items: list) -> dict:
         details.append("Insufficient data for debt/equity analysis")
 
     # 3. FCF Consistency
-    fcf_values = [fi.free_cash_flow for fi in financial_line_items if fi.free_cash_flow is not None]
+    fcf_values = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow is not None]
+
     if fcf_values and len(fcf_values) >= 2:
         # Check if FCF is positive in recent years
         positive_fcf_count = sum(1 for x in fcf_values if x and x > 0)
@@ -414,8 +424,8 @@ def analyze_fisher_valuation(financial_line_items: list, market_cap: float | Non
     raw_score = 0
 
     # Gather needed data
-    net_incomes = [fi.net_income for fi in financial_line_items if fi.net_income is not None]
-    fcf_values = [fi.free_cash_flow for fi in financial_line_items if fi.free_cash_flow is not None]
+    net_incomes = [item.net_income for item in financial_line_items if item.net_income is not None]
+    fcf_values = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow is not None]
 
     # 1) P/E
     recent_net_income = net_incomes[0] if net_incomes else None

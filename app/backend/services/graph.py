@@ -26,16 +26,39 @@ def create_graph(selected_agents: list[str]) -> StateGraph:
     for agent_name in selected_agents:
         node_name, node_func = analyst_nodes[agent_name]
         graph.add_node(node_name, node_func)
-        graph.add_edge("start_node", node_name)
+
+    # Smart execution strategy based on number of agents
+    # For Google Gemini free tier (10 requests/minute):
+    # - Up to 6 agents: Run in parallel (6 agents + risk + portfolio = 8 total calls)
+    # - 7+ agents: Run sequentially to avoid rate limits
+    
+    if len(selected_agents) <= 6:
+        # PARALLEL execution for small numbers - much faster!
+        print(f"🚀 Running {len(selected_agents)} agents in PARALLEL for faster execution")
+        for agent_name in selected_agents:
+            node_name = analyst_nodes[agent_name][0]
+            graph.add_edge("start_node", node_name)
+            graph.add_edge(node_name, "risk_management_agent")
+    else:
+        # Sequential execution only for large numbers (7+ agents)
+        print(f"⏳ Running {len(selected_agents)} agents SEQUENTIALLY to respect rate limits")
+        graph.add_edge("start_node", f"{selected_agents[0]}_agent")
+        for i in range(len(selected_agents) - 1):
+            current_agent = f"{selected_agents[i]}_agent"
+            next_agent = f"{selected_agents[i + 1]}_agent"
+            graph.add_edge(current_agent, next_agent)
+        
+        # Connect last agent to risk management
+        last_agent = f"{selected_agents[-1]}_agent"
+        graph.add_edge(last_agent, "risk_management_agent")
 
     # Always add risk and portfolio management (for now)
     graph.add_node("risk_management_agent", risk_management_agent)
     graph.add_node("portfolio_manager", portfolio_management_agent)
 
-    # Connect selected agents to risk management
-    for agent_name in selected_agents:
-        node_name = analyst_nodes[agent_name][0]
-        graph.add_edge(node_name, "risk_management_agent")
+    # If no selected agents, connect start directly to risk management
+    if not selected_agents:
+        graph.add_edge("start_node", "risk_management_agent")
 
     # Connect the risk management agent to the portfolio management agent
     graph.add_edge("risk_management_agent", "portfolio_manager")

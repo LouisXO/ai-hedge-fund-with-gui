@@ -10,6 +10,9 @@ from src.utils.progress import progress
 from src.utils.llm import call_llm
 
 
+
+
+
 class BillAckmanSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
     confidence: float
@@ -149,20 +152,29 @@ def analyze_business_quality(metrics: list, financial_line_items: list) -> dict:
     
     # 1. Multi-period revenue growth analysis
     revenues = [item.revenue for item in financial_line_items if item.revenue is not None]
-    if len(revenues) >= 2:
-        initial, final = revenues[-1], revenues[0]
-        if initial and final and final > initial:
-            growth_rate = (final - initial) / abs(initial)
-            if growth_rate > 0.5:  # e.g., 50% cumulative growth
+
+    if len(revenues) >= 3:
+        rev_growth_rates = []
+        for i in range(len(revenues) - 1):
+            if revenues[i + 1] != 0:
+                growth_rate = (revenues[i] - revenues[i + 1]) / revenues[i + 1]
+                rev_growth_rates.append(growth_rate)
+
+        if rev_growth_rates:
+            avg_growth = sum(rev_growth_rates) / len(rev_growth_rates)
+            if avg_growth > 0.10:  # 10%+ growth
+                score += 4
+                details.append(f"Strong revenue growth: {avg_growth:.1%}")
+            elif avg_growth > 0.05:  # 5%+ growth
                 score += 2
-                details.append(f"Revenue grew by {(growth_rate*100):.1f}% over the full period (strong growth).")
-            else:
+                details.append(f"Moderate revenue growth: {avg_growth:.1%}")
+            elif avg_growth > 0:
                 score += 1
-                details.append(f"Revenue growth is positive but under 50% cumulatively ({(growth_rate*100):.1f}%).")
-        else:
-            details.append("Revenue did not grow significantly or data insufficient.")
+                details.append(f"Positive revenue growth: {avg_growth:.1%}")
+            else:
+                details.append(f"Declining revenue: {avg_growth:.1%}")
     else:
-        details.append("Not enough revenue data for multi-period trend.")
+        details.append("Insufficient revenue history")
     
     # 2. Operating margin and free cash flow consistency
     fcf_vals = [item.free_cash_flow for item in financial_line_items if item.free_cash_flow is not None]
@@ -252,11 +264,7 @@ def analyze_financial_discipline(metrics: list, financial_line_items: list) -> d
             details.append("No consistent leverage ratio data available.")
     
     # 2. Capital allocation approach (dividends + share counts)
-    dividends_list = [
-        item.dividends_and_other_cash_distributions
-        for item in financial_line_items
-        if item.dividends_and_other_cash_distributions is not None
-    ]
+    dividends_list = [item.dividends_and_other_cash_distributions for item in financial_line_items if item.dividends_and_other_cash_distributions is not None]
     if dividends_list:
         paying_dividends_count = sum(1 for d in dividends_list if d < 0)
         if paying_dividends_count >= (len(dividends_list) // 2 + 1):

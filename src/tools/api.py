@@ -5,6 +5,9 @@ import requests
 import yfinance as yf
 from typing import List, Dict, Optional
 import time
+import json
+import re
+import statistics
 
 from src.data.cache import get_cache
 from src.data.models import (
@@ -57,6 +60,88 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         
         # Return the response (whether success, other errors, or final 429)
         return response
+
+
+def safe_json_parse(response_text: str) -> dict:
+    """
+    Safely parse JSON, handling invalid control characters and other common issues.
+    This is more robust than the standard json.loads() for real-world API responses.
+    """
+    if not response_text or not isinstance(response_text, str):
+        return {}
+    
+    try:
+        # First attempt: try standard JSON parsing
+        return json.loads(response_text)
+    except json.JSONDecodeError as e:
+        print(f"Initial JSON parse failed: {e}")
+        
+        try:
+            # Clean up common problematic characters
+            cleaned_text = response_text
+            
+            # Remove or replace common control characters that cause issues
+            control_chars = {
+                '\x00': '',  # null
+                '\x01': '',  # start of heading
+                '\x02': '',  # start of text
+                '\x03': '',  # end of text
+                '\x04': '',  # end of transmission
+                '\x05': '',  # enquiry
+                '\x06': '',  # acknowledge
+                '\x07': '',  # bell
+                '\x08': '',  # backspace
+                '\x0b': '',  # vertical tab
+                '\x0c': '',  # form feed
+                '\x0e': '',  # shift out
+                '\x0f': '',  # shift in
+                '\x10': '',  # data link escape
+                '\x11': '',  # device control 1
+                '\x12': '',  # device control 2
+                '\x13': '',  # device control 3
+                '\x14': '',  # device control 4
+                '\x15': '',  # negative acknowledge
+                '\x16': '',  # synchronous idle
+                '\x17': '',  # end of transmission block
+                '\x18': '',  # cancel
+                '\x19': '',  # end of medium
+                '\x1a': '',  # substitute
+                '\x1b': '',  # escape
+                '\x1c': '',  # file separator
+                '\x1d': '',  # group separator
+                '\x1e': '',  # record separator
+                '\x1f': '',  # unit separator
+            }
+            
+            # Replace control characters
+            for char, replacement in control_chars.items():
+                cleaned_text = cleaned_text.replace(char, replacement)
+            
+            # Remove any remaining non-printable characters (except allowed JSON whitespace)
+            cleaned_text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', cleaned_text)
+            
+            # Try parsing the cleaned text
+            return json.loads(cleaned_text)
+            
+        except json.JSONDecodeError:
+            try:
+                # Last resort: try to extract JSON-like content using regex
+                import re
+                json_pattern = r'\{.*\}'
+                match = re.search(json_pattern, cleaned_text, re.DOTALL)
+                if match:
+                    potential_json = match.group(0)
+                    return json.loads(potential_json)
+            except:
+                pass
+            
+            # If all else fails, return empty dict
+            print(f"All JSON parsing attempts failed for response: {response_text[:200]}...")
+            return {}
+    
+    except Exception as e:
+        print(f"Unexpected error in safe_json_parse: {e}")
+        return {}
 
 
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
@@ -210,102 +295,174 @@ def search_line_items(
         income_stmt = stock.financials
         balance_sheet = stock.balance_sheet
         cashflow = stock.cashflow
+        quarterly_income = stock.quarterly_financials
+        quarterly_balance = stock.quarterly_balance_sheet
+        quarterly_cashflow = stock.quarterly_cashflow
         
-        # Mapping of expected attributes to possible Yahoo Finance line item names
+        # Comprehensive mapping based on yfinance documentation
         line_item_mappings = {
+            # Revenue metrics
             'revenue': [
                 'Total Revenue', 'Operating Revenue', 'Revenue', 'Net Revenue'
             ],
+            'operating_revenue': [
+                'Operating Revenue', 'Total Revenue'
+            ],
+            
+            # Income metrics
             'operating_income': [
                 'Operating Income', 'Total Operating Income As Reported', 'Operating Profit'
             ],
             'net_income': [
-                'Net Income', 'Net Income Common Stockholders', 'Net Income From Continuing Operation Net Minority Interest',
+                'Net Income', 'Net Income Common Stockholders', 
+                'Net Income From Continuing Operation Net Minority Interest',
                 'Net Income Including Noncontrolling Interests', 'Net Income Continuous Operations'
             ],
+            'gross_profit': [
+                'Gross Profit'
+            ],
+            'ebit': [
+                'EBIT', 'Earnings Before Interest And Taxes'
+            ],
+            'ebitda': [
+                'EBITDA', 'Normalized EBITDA'
+            ],
+            'pretax_income': [
+                'Pretax Income', 'Income Before Tax'
+            ],
+            
+            # Cash flow metrics
             'free_cash_flow': [
                 'Free Cash Flow', 'Operating Cash Flow', 'Cash Flow From Operations',
                 'Net Cash From Operating Activities'
             ],
+            'operating_cash_flow': [
+                'Operating Cash Flow', 'Net Cash From Operating Activities'
+            ],
+            'capital_expenditure': [
+                'Capital Expenditure', 'Capital Expenditures', 'Capex'
+            ],
+            'cash_dividends_paid': [
+                'Cash Dividends Paid', 'Common Stock Dividend Paid', 'Dividends Paid'
+            ],
+            'dividends_and_other_cash_distributions': [
+                'Cash Dividends Paid', 'Common Stock Dividend Paid', 'Dividends Paid'
+            ],
+            
+            # Balance sheet - Assets
             'total_assets': [
                 'Total Assets'
             ],
-            'total_liabilities': [
-                'Total Liabilities Net Minority Interest', 'Total Liabilities'
-            ],
-            'total_debt': [
-                'Total Debt', 'Net Debt', 'Long Term Debt', 'Current Debt'
-            ],
-            'shareholders_equity': [
-                'Stockholders Equity', 'Total Stockholders Equity', 'Common Stockholders Equity',
-                'Total Equity Gross Minority Interest'
+            'current_assets': [
+                'Current Assets', 'Total Current Assets'
             ],
             'cash_and_equivalents': [
                 'Cash And Cash Equivalents', 'Cash Cash Equivalents And Short Term Investments',
                 'Cash Financial'
             ],
-            'dividends_and_other_cash_distributions': [
-                'Cash Dividends Paid', 'Common Stock Dividend Paid', 'Dividends Paid'
+            'cash_and_cash_equivalents': [
+                'Cash And Cash Equivalents', 'Cash Cash Equivalents And Short Term Investments',
+                'Cash Financial'
             ],
-            'outstanding_shares': [
-                'Ordinary Shares Number', 'Share Issued', 'Common Stock Shares Outstanding',
-                'Weighted Average Shares Outstanding'
+            'accounts_receivable': [
+                'Accounts Receivable', 'Gross Accounts Receivable'
             ],
-            'gross_profit': [
-                'Gross Profit'
+            'inventory': [
+                'Inventory'
             ],
-            'ebitda': [
-                'EBITDA', 'Normalized EBITDA'
-            ],
-            'research_and_development': [
-                'Research And Development'
+            'property_plant_equipment': [
+                'Net PPE', 'Properties Plant And Equipment Net', 'MachineryFurnitureEquipment'
             ],
             'intangible_assets': [
                 'Goodwill And Other Intangible Assets', 'Other Intangible Assets', 'Goodwill'
             ],
-            'earnings_per_share': [
-                'Basic EPS', 'Diluted EPS', 'Basic Earnings Per Share', 'Diluted Earnings Per Share',
-                'Earnings Per Share'
-            ],
-            'book_value_per_share': [
-                'Book Value Per Share', 'Tangible Book Value Per Share'
-            ],
-            'revenue_per_share': [
-                'Revenue Per Share', 'Sales Per Share'
-            ],
-            'gross_margin': [
-                'Gross Margin', 'Gross Profit Margin'
-            ],
-            'current_assets': [
-                'Current Assets', 'Total Current Assets'
+            
+            # Balance sheet - Liabilities
+            'total_liabilities': [
+                'Total Liabilities Net Minority Interest', 'Total Liabilities'
             ],
             'current_liabilities': [
                 'Current Liabilities', 'Total Current Liabilities'
             ],
-            'working_capital': [
-                'Working Capital', 'Net Working Capital'
+            'accounts_payable': [
+                'Accounts Payable'
             ],
-            'capital_expenditure': [
-                'Capital Expenditure', 'Capital Expenditures', 'Capex',
-                'Purchase Of Investment', 'Capital Spending'
+            'total_debt': [
+                'Total Debt', 'Net Debt', 'Long Term Debt And Capital Lease Obligation'
+            ],
+            'long_term_debt': [
+                'Long Term Debt', 'Long Term Debt And Capital Lease Obligation'
+            ],
+            'current_debt': [
+                'Current Debt', 'Current Debt And Capital Lease Obligation'
+            ],
+            
+            # Balance sheet - Equity
+            'shareholders_equity': [
+                'Stockholders Equity', 'Total Stockholders Equity', 'Common Stockholders Equity',
+                'Total Equity Gross Minority Interest'
+            ],
+            'retained_earnings': [
+                'Retained Earnings'
+            ],
+            
+            # Share metrics
+            'outstanding_shares': [
+                'Ordinary Shares Number', 'Share Issued', 'Common Stock Shares Outstanding',
+                'Weighted Average Shares Outstanding', 'Basic Average Shares', 'Diluted Average Shares'
+            ],
+            'weighted_average_shares': [
+                'Basic Average Shares', 'Diluted Average Shares', 'Weighted Average Shares Outstanding'
+            ],
+            
+            # Expense metrics
+            'cost_of_revenue': [
+                'Cost Of Revenue', 'Total Costs And Expenses'
+            ],
+            'research_and_development': [
+                'Research And Development'
+            ],
+            'selling_general_administrative': [
+                'Selling General And Administration', 'General And Administrative Expense'
             ],
             'depreciation_and_amortization': [
                 'Depreciation And Amortization', 'Depreciation', 'Amortization',
                 'Depreciation Amortization Depletion'
             ],
-            'ebit': [
-                'EBIT', 'Earnings Before Interest And Taxes', 'Operating Income'
-            ]
+            'interest_expense': [
+                'Interest Expense', 'Interest Expense Non Operating'
+            ],
+            'tax_provision': [
+                'Tax Provision', 'Income Tax Expense'
+            ],
+            
+            # Calculated metrics (we'll compute these)
+            'working_capital': [],  # current_assets - current_liabilities
+            'operating_margin': [],  # operating_income / revenue
+            'gross_margin': [],  # gross_profit / revenue
+            'net_margin': [],  # net_income / revenue
+            'debt_to_equity': [],  # total_debt / shareholders_equity
+            'current_ratio': [],  # current_assets / current_liabilities
+            'earnings_per_share': [],  # net_income / weighted_average_shares
+            'book_value_per_share': [],  # shareholders_equity / outstanding_shares
+            'revenue_per_share': [],  # revenue / outstanding_shares
+            'free_cash_flow_per_share': [],  # free_cash_flow / outstanding_shares
+            'goodwill_and_intangible_assets': [
+                'Goodwill And Other Intangible Assets', 'Other Intangible Assets', 'Goodwill'
+            ],
         }
         
         # Create a consolidated results list - one LineItem per period
         period_data = {}
         
-        # Search through all statements
+        # Search through all statements (prioritize annual over quarterly for consistency)
         statements = {
             'income_statement': income_stmt,
             'balance_sheet': balance_sheet,
-            'cash_flow': cashflow
+            'cash_flow': cashflow,
+            'quarterly_income_statement': quarterly_income,
+            'quarterly_balance_sheet': quarterly_balance,
+            'quarterly_cash_flow': quarterly_cashflow
         }
         
         # Get all available dates across statements
@@ -321,114 +478,165 @@ def search_line_items(
                 'raw_matches': {}
             }
         
-        # Search for each requested line item across all statements
+        # Search for each mapped line item across all statements
         for statement_name, df in statements.items():
             if df.empty:
                 continue
             
             # For each expected attribute, find matching line items
             for attr_name, search_terms in line_item_mappings.items():
-                # Only search for this attribute if it was requested
-                if any(term.lower() in attr_name.lower() or attr_name.lower() in term.lower() 
-                       for term in line_items):
+                # Skip calculated metrics - we'll compute them later
+                if not search_terms:
+                    continue
                     
-                    # Find matching line items in this statement
-                    for search_term in search_terms:
-                        # First try exact match
-                        exact_matches = [idx for idx in df.index if search_term.lower() == idx.lower()]
-                        if exact_matches:
-                            match = exact_matches[0]
+                # Find matching line items in this statement
+                for search_term in search_terms:
+                    # First try exact match
+                    exact_matches = [idx for idx in df.index if search_term.lower() == idx.lower()]
+                    if exact_matches:
+                        match = exact_matches[0]
+                    else:
+                        # Then try contains match
+                        contains_matches = [idx for idx in df.index if search_term.lower() in idx.lower()]
+                        if contains_matches:
+                            match = contains_matches[0]
                         else:
-                            # Then try contains match
-                            contains_matches = [idx for idx in df.index if search_term.lower() in idx.lower()]
-                            if contains_matches:
-                                match = contains_matches[0]
-                            else:
-                                continue
-                        
-                        # Get values for all available periods
-                        for date in df.columns:
-                            if date in period_data:
-                                value = df.loc[match, date]
-                                if pd.notna(value):
+                            continue
+                    
+                    # Get values for all available periods
+                    for date in df.columns:
+                        if date in period_data:
+                            value = df.loc[match, date]
+                            if pd.notna(value) and value != 0:
+                                # Only store if we don't already have this field or if this is from annual statements (preferred)
+                                if (attr_name not in period_data[date]['raw_matches'] or 
+                                    'quarterly' not in statement_name):
                                     period_data[date]['raw_matches'][attr_name] = {
                                         'line_item': match,
                                         'value': float(value),
                                         'statement': statement_name
                                     }
-                        break  # Use first matching search term
+                    break  # Use first matching search term
         
         # Create LineItem objects for each period
         line_items_results = []
+        
+        # Define all expected fields that agents might access
+        all_expected_fields = [
+            'revenue', 'operating_revenue', 'operating_income', 'net_income', 'gross_profit',
+            'ebit', 'ebitda', 'pretax_income', 'free_cash_flow', 'operating_cash_flow',
+            'capital_expenditure', 'cash_dividends_paid', 'dividends_and_other_cash_distributions',
+            'total_assets', 'current_assets', 'cash_and_equivalents', 'cash_and_cash_equivalents',
+            'accounts_receivable', 'inventory', 'property_plant_equipment', 'intangible_assets',
+            'goodwill_and_intangible_assets', 'total_liabilities', 'current_liabilities',
+            'accounts_payable', 'total_debt', 'long_term_debt', 'current_debt',
+            'shareholders_equity', 'retained_earnings', 'outstanding_shares', 'weighted_average_shares',
+            'cost_of_revenue', 'research_and_development', 'selling_general_administrative',
+            'depreciation_and_amortization', 'interest_expense', 'tax_provision',
+            'working_capital', 'operating_margin', 'gross_margin', 'net_margin',
+            'debt_to_equity', 'current_ratio', 'earnings_per_share', 'book_value_per_share',
+            'revenue_per_share', 'free_cash_flow_per_share', 'return_on_invested_capital'
+        ]
+        
         for date, data in period_data.items():
             if data['raw_matches']:  # Only create if we found some data
-                # Calculate derived metrics
+                # Extract raw values
                 line_item_values = {}
                 raw_values = {}
                 
-                # Extract raw values
+                # Initialize all expected fields to None
+                for field in all_expected_fields:
+                    line_item_values[field] = None
+                
+                # Populate with actual found values
                 for attr_name, match_data in data['raw_matches'].items():
                     line_item_values[attr_name] = match_data['value']
                     raw_values[match_data['line_item']] = match_data['value']
                 
-                # Calculate operating margin if we have operating income and revenue
-                if ('operating_income' in line_item_values and 
-                    'revenue' in line_item_values and 
+                # Calculate derived/computed metrics (only if base values exist)
+                
+                # Working capital = current_assets - current_liabilities
+                if (line_item_values.get('current_assets') is not None and 
+                    line_item_values.get('current_liabilities') is not None):
+                    line_item_values['working_capital'] = (
+                        line_item_values['current_assets'] - line_item_values['current_liabilities']
+                    )
+                
+                # Operating margin = operating_income / revenue
+                if (line_item_values.get('operating_income') is not None and 
+                    line_item_values.get('revenue') is not None and 
                     line_item_values['revenue'] != 0):
                     line_item_values['operating_margin'] = (
                         line_item_values['operating_income'] / line_item_values['revenue']
                     )
                 
-                # Calculate debt-to-equity if we have total debt and shareholders equity
-                if ('total_debt' in line_item_values and 
-                    'shareholders_equity' in line_item_values and 
-                    line_item_values['shareholders_equity'] != 0):
-                    line_item_values['debt_to_equity'] = (
-                        line_item_values['total_debt'] / line_item_values['shareholders_equity']
-                    )
-                
-                # Calculate per-share metrics if we have shares outstanding
-                shares = line_item_values.get('outstanding_shares')
-                if shares and shares > 0:
-                    # Calculate EPS if we have net income
-                    if 'net_income' in line_item_values and line_item_values['net_income']:
-                        line_item_values['earnings_per_share'] = line_item_values['net_income'] / shares
-                    
-                    # Calculate book value per share
-                    if 'shareholders_equity' in line_item_values and line_item_values['shareholders_equity']:
-                        line_item_values['book_value_per_share'] = line_item_values['shareholders_equity'] / shares
-                    
-                    # Calculate revenue per share
-                    if 'revenue' in line_item_values and line_item_values['revenue']:
-                        line_item_values['revenue_per_share'] = line_item_values['revenue'] / shares
-                    
-                    # Calculate free cash flow per share
-                    if 'free_cash_flow' in line_item_values and line_item_values['free_cash_flow']:
-                        line_item_values['free_cash_flow_per_share'] = line_item_values['free_cash_flow'] / shares
-                
-                # Calculate gross margin if we have gross profit and revenue
-                if ('gross_profit' in line_item_values and 
-                    'revenue' in line_item_values and 
+                # Gross margin = gross_profit / revenue
+                if (line_item_values.get('gross_profit') is not None and 
+                    line_item_values.get('revenue') is not None and 
                     line_item_values['revenue'] != 0):
                     line_item_values['gross_margin'] = (
                         line_item_values['gross_profit'] / line_item_values['revenue']
                     )
                 
-                # Calculate working capital if we have current assets and current liabilities
-                if ('current_assets' in line_item_values and 
-                    'current_liabilities' in line_item_values):
-                    line_item_values['working_capital'] = (
-                        line_item_values['current_assets'] - line_item_values['current_liabilities']
+                # Net margin = net_income / revenue
+                if (line_item_values.get('net_income') is not None and 
+                    line_item_values.get('revenue') is not None and 
+                    line_item_values['revenue'] != 0):
+                    line_item_values['net_margin'] = (
+                        line_item_values['net_income'] / line_item_values['revenue']
                     )
                 
-                # Create LineItem object
+                # Debt-to-equity = total_debt / shareholders_equity
+                if (line_item_values.get('total_debt') is not None and 
+                    line_item_values.get('shareholders_equity') is not None and 
+                    line_item_values['shareholders_equity'] != 0):
+                    line_item_values['debt_to_equity'] = (
+                        line_item_values['total_debt'] / line_item_values['shareholders_equity']
+                    )
+                
+                # Current ratio = current_assets / current_liabilities
+                if (line_item_values.get('current_assets') is not None and 
+                    line_item_values.get('current_liabilities') is not None and 
+                    line_item_values['current_liabilities'] != 0):
+                    line_item_values['current_ratio'] = (
+                        line_item_values['current_assets'] / line_item_values['current_liabilities']
+                    )
+                
+                # Calculate free cash flow if not available directly
+                if (line_item_values.get('free_cash_flow') is None and 
+                    line_item_values.get('operating_cash_flow') is not None and 
+                    line_item_values.get('capital_expenditure') is not None):
+                    line_item_values['free_cash_flow'] = (
+                        line_item_values['operating_cash_flow'] - abs(line_item_values['capital_expenditure'])
+                    )
+                
+                # Per-share metrics calculations
+                shares = line_item_values.get('outstanding_shares') or line_item_values.get('weighted_average_shares')
+                if shares and shares > 0:
+                    # Earnings per share = net_income / shares
+                    if line_item_values.get('net_income') is not None:
+                        line_item_values['earnings_per_share'] = line_item_values['net_income'] / shares
+                    
+                    # Book value per share = shareholders_equity / shares
+                    if line_item_values.get('shareholders_equity') is not None:
+                        line_item_values['book_value_per_share'] = line_item_values['shareholders_equity'] / shares
+                    
+                    # Revenue per share = revenue / shares
+                    if line_item_values.get('revenue') is not None:
+                        line_item_values['revenue_per_share'] = line_item_values['revenue'] / shares
+                    
+                    # Free cash flow per share = free_cash_flow / shares
+                    if line_item_values.get('free_cash_flow') is not None:
+                        line_item_values['free_cash_flow_per_share'] = line_item_values['free_cash_flow'] / shares
+                
+                # Create LineItem object with all expected fields (including None values)
                 line_item_obj = LineItem(
                     ticker=ticker,
                     report_period=data['report_period'],
                     period=period,
                     currency=info.get('currency', 'USD'),
                     raw_line_items=raw_values,
-                    **line_item_values  # Unpack all the found values
+                    **line_item_values  # Unpack all values (including None for missing fields)
                 )
                 line_items_results.append(line_item_obj)
         
@@ -442,6 +650,8 @@ def search_line_items(
         
     except Exception as e:
         print(f"Error fetching Yahoo Finance line items for {ticker}: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 
@@ -515,7 +725,8 @@ def get_company_news(
             print(f"NewsAPI error: {response.status_code}")
             return []
         
-        data = response.json()
+        # Use safe JSON parsing to handle control characters
+        data = safe_json_parse(response.text)
         articles = data.get('articles', [])
         
         # Convert to CompanyNews objects
