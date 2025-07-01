@@ -7,9 +7,9 @@ from app.backend.models.events import StartEvent, ProgressUpdateEvent, ErrorEven
 from app.backend.services.graph import create_graph, parse_hedge_fund_response, run_graph_async
 from app.backend.services.portfolio import create_portfolio
 from src.utils.progress import progress
+from src.utils.analysts import get_agents_list
 
 router = APIRouter(prefix="/hedge-fund")
-
 
 @router.post(
     path="/run",
@@ -109,3 +109,18 @@ async def run_hedge_fund(request: HedgeFundRequest):
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while processing the request: {str(e)}")
+
+@router.get(
+    path="/agents",
+    responses={
+        200: {"description": "List of available agents"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+async def get_agents():
+    """Get the list of available agents."""
+    try:
+        return {"agents": get_agents_list()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve agents: {str(e)}")
+

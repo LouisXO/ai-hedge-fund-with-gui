@@ -1,21 +1,21 @@
 import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
   BadgeDollarSign,
-  BarChart,
   BarChart3,
   Bot,
   Brain,
   Crown,
+  Calculator,
   FileJson,
   FileText,
   Globe,
   LucideIcon,
   Shield,
   TrendingUp,
-  Users
+  Monitor,
+  Network,
+  Play
 } from 'lucide-react';
-import { agents } from './agents';
+import { Agent, getAgents } from './agents';
 
 // Define component items by group
 export interface ComponentItem {

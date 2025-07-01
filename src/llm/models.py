@@ -15,10 +15,13 @@ from pathlib import Path
 class ModelProvider(str, Enum):
     """Enum for supported LLM providers"""
 
+    ALIBABA = "Alibaba"
     ANTHROPIC = "Anthropic"
     DEEPSEEK = "DeepSeek"
-    GEMINI = "Gemini"
+    GOOGLE = "Google"
     GROQ = "Groq"
+    META = "Meta"
+    MISTRAL = "Mistral"
     OPENAI = "OpenAI"
     OLLAMA = "Ollama"
 
@@ -104,6 +107,18 @@ def get_model_info(model_name: str, model_provider: str) -> LLMModel | None:
     return next((model for model in all_models if model.model_name == model_name and model.provider == model_provider), None)
 
 
+def get_models_list():
+    """Get the list of models for API responses."""
+    return [
+        {
+            "display_name": model.display_name,
+            "model_name": model.model_name,
+            "provider": model.provider.value
+        }
+        for model in AVAILABLE_MODELS
+    ]
+
+
 def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | ChatGroq | ChatOllama | None:
     if model_provider == ModelProvider.GROQ:
         api_key = os.getenv("GROQ_API_KEY")
@@ -133,7 +148,7 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
             print(f"API Key Error: Please make sure DEEPSEEK_API_KEY is set in your .env file.")
             raise ValueError("DeepSeek API key not found.  Please make sure DEEPSEEK_API_KEY is set in your .env file.")
         return ChatDeepSeek(model=model_name, api_key=api_key)
-    elif model_provider == ModelProvider.GEMINI:
+    elif model_provider == ModelProvider.GOOGLE:
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
             print(f"API Key Error: Please make sure GOOGLE_API_KEY is set in your .env file.")

@@ -1,9 +1,9 @@
-import { ModelProvider } from '@/services/types';
+import { api } from '@/services/api';
 
-export interface ModelItem {
+export interface LanguageModel {
   display_name: string;
   model_name: string;
-  provider: "Anthropic" | "DeepSeek" | "Gemini" | "Groq" | "OpenAI";
+  provider: "Anthropic" | "DeepSeek" | "Google" | "Groq" | "OpenAI";
 }
 
 // Helper function to map frontend provider strings to backend ModelProvider enum
