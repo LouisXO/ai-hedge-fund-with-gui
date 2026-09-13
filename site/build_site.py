@@ -73,6 +73,12 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 color:var(--dim)}
 .arch a:hover{color:var(--tx);border-color:var(--acc);text-decoration:none}
 .empty{color:var(--dim);font-size:14px}
+details.orig{margin-top:8px}
+details.orig summary{cursor:pointer;font-size:11px;color:#6e7681;list-style:none;
+display:inline-block;border:1px solid var(--line);border-radius:4px;padding:2px 8px}
+details.orig summary::-webkit-details-marker{display:none}
+details.orig summary:hover{color:var(--tx);border-color:var(--acc)}
+.rz.en{margin-top:8px;color:#7d8590;font-size:12.5px;font-style:italic}
 """
 
 JS = """
@@ -127,10 +133,15 @@ def render(date: str, masters: dict | None, anomalies: list, dates: list[str]) -
             p.append(f"<span class='tag'>分歧 {t['disagreement']:.2f}</span>")
             p.append("</div><div class='detail'>")
             for s in sorted(votes, key=lambda x: -x["value"]):
+                cn, en = s.get("reasoning_cn"), s.get("reasoning") or ""
+                body = f"<div class='rz'>{e(cn or en)}</div>"
+                if cn and en:  # keep the original one click away
+                    body += (f"<details class='orig'><summary>原文</summary>"
+                             f"<div class='rz en'>{e(en)}</div></details>")
                 p.append("<div class='op'><div class='oph'>"
                          f"<span class='nm'>{PERSONA_CN.get(s['persona'], s['persona'])}</span>"
                          f"<span class='sc {cls(s['value'])}'>{s['value']:+.2f}</span></div>"
-                         f"<div class='rz'>{e(s.get('reasoning') or '')}</div></div>")
+                         f"{body}</div>")
             p.append("</div></div>")
     else:
         p.append("<p class='empty'>今日无信号。</p>")
