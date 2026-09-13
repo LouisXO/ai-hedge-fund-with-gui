@@ -61,3 +61,7 @@ outputs/
 
 # Local-only release tooling
 scripts/release.sh
+
+# 私有层数据绝不入库(持仓/盈亏/期权结构)
+site-data/private/
+*.private.json

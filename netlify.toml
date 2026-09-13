@@ -1,0 +1,16 @@
+# 公开层:纯静态,内容由本机每日生成并提交,Netlify 直接发布,无需构建。
+[build]
+  publish = "site/public"
+  command = "echo 'prebuilt static site — nothing to build'"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

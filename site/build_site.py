@@ -1,0 +1,195 @@
+#!/usr/bin/env python
+"""公开层静态站生成器 — 只输出观点与市场事实。
+
+铁律:不写入任何持仓、金额、盈亏或具体期权结构(那些只进私有层)。
+输入: site-data/masters/<date>.json (大师信号)
+      /Users/louis/optradar/out/<date>.json (仅取 anomalies 的市场事实)
+输出: site/public/index.html + site/public/<date>.html + archive 索引
+"""
+from __future__ import annotations
+
+import datetime as dt
+import glob
+import html
+import json
+import os
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MASTERS = os.path.join(ROOT, "site-data", "masters")
+RADAR = "/Users/louis/optradar/out"
+OUT = os.path.join(ROOT, "site", "public")
+
+PERSONA_CN = {"buffett": "Buffett", "munger": "Munger", "graham": "Graham",
+              "lynch": "Lynch", "druckenmiller": "Druckenmiller"}
+
+CSS = """
+:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--tx:#e6e8ec;--dim:#9aa3b2;
+--bull:#3fb950;--bear:#f85149;--neut:#8b949e;--acc:#58a6ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:32px 20px 80px}
+header{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:28px}
+h1{font-size:24px;margin:0 0 6px;letter-spacing:-.02em}
+.sub{color:var(--dim);font-size:13px}
+h2{font-size:16px;margin:36px 0 14px;display:flex;align-items:center;gap:8px}
+h2::before{content:"";width:3px;height:16px;background:var(--acc);border-radius:2px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+margin-bottom:10px;overflow:hidden}
+.row{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;
+user-select:none}
+.row:hover{background:#1c2029}
+.tk{font-weight:600;font-size:16px;min-width:64px;letter-spacing:-.01em}
+.bar{flex:1;height:6px;background:#21262d;border-radius:3px;position:relative;
+min-width:80px}
+.bar i{position:absolute;top:0;height:6px;border-radius:3px}
+.bar u{position:absolute;left:50%;top:-3px;width:1px;height:12px;background:#3d444d}
+.val{font-variant-numeric:tabular-nums;font-weight:600;min-width:56px;text-align:right}
+.tag{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:4px;
+padding:2px 6px;white-space:nowrap}
+.votes{font-size:12px;color:var(--dim);min-width:74px;text-align:right;
+font-variant-numeric:tabular-nums}
+.detail{display:none;border-top:1px solid var(--line);padding:4px 16px 14px;
+background:#13161c}
+.card.open .detail{display:block}
+.op{padding:12px 0;border-bottom:1px solid #1e222a}
+.op:last-child{border-bottom:0}
+.oph{display:flex;gap:10px;align-items:center;margin-bottom:5px}
+.nm{font-weight:600;font-size:13px}
+.sc{font-size:12px;font-variant-numeric:tabular-nums}
+.rz{color:var(--dim);font-size:13px;line-height:1.65}
+.bull{color:var(--bull)}.bear{color:var(--bear)}.neut{color:var(--neut)}
+.bull-bg{background:var(--bull)}.bear-bg{background:var(--bear)}.neut-bg{background:var(--neut)}
+ul.an{list-style:none;padding:0;margin:0}
+ul.an li{background:var(--card);border:1px solid var(--line);border-radius:8px;
+padding:11px 14px;margin-bottom:8px;font-size:14px}
+ul.an li b{color:var(--acc);font-weight:600;font-size:12px;margin-right:8px}
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);
+color:var(--dim);font-size:12px;line-height:1.8}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+.arch{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.arch a{font-size:12px;border:1px solid var(--line);border-radius:5px;padding:4px 9px;
+color:var(--dim)}
+.arch a:hover{color:var(--tx);border-color:var(--acc);text-decoration:none}
+.empty{color:var(--dim);font-size:14px}
+"""
+
+JS = """
+document.querySelectorAll('.row').forEach(r=>r.addEventListener('click',
+ ()=>r.parentElement.classList.toggle('open')));
+"""
+
+
+def e(x) -> str:
+    return html.escape(str(x)) if x is not None else ""
+
+
+def cls(v: float) -> str:
+    return "bull" if v > 0.15 else "bear" if v < -0.15 else "neut"
+
+
+def bar(v: float) -> str:
+    """Conviction bar centred at zero, -1..+1."""
+    pct = max(-1.0, min(1.0, v)) * 50
+    if v >= 0:
+        style = f"left:50%;width:{pct:.1f}%"
+    else:
+        style = f"left:{50 + pct:.1f}%;width:{-pct:.1f}%"
+    return f'<div class="bar"><u></u><i class="{cls(v)}-bg" style="{style}"></i></div>'
+
+
+def render(date: str, masters: dict | None, anomalies: list, dates: list[str]) -> str:
+    p = [f"<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>",
+         "<meta name='viewport' content='width=device-width,initial-scale=1'>",
+         "<meta name='robots' content='noindex'>",
+         f"<title>AI 对冲基金 · 大师信号 {date}</title>",
+         f"<style>{CSS}</style></head><body><div class='wrap'>",
+         "<header><h1>AI 对冲基金 · 大师信号</h1>",
+         f"<div class='sub'>{date} · 5 位投资大师 persona 独立评估 · "
+         "数据 moomoo OpenD,判断由 Claude 生成</div></header>"]
+
+    p.append("<h2>共识与分歧</h2>")
+    if masters and masters.get("tickers"):
+        p.append("<p class='sub' style='margin:-6px 0 14px'>"
+                 "共识 = 五家平均 conviction(−1 空 ↔ +1 多);按分歧从大到小排,"
+                 "<b>分歧越大越值得读</b>。点击展开各家理由。</p>")
+        for t in masters["tickers"]:
+            c = t.get("consensus")
+            if c is None:
+                continue
+            votes = [s for s in t["signals"] if not s.get("abstained")]
+            p.append("<div class='card'><div class='row'>")
+            p.append(f"<span class='tk'>{e(t['ticker'])}</span>")
+            p.append(bar(c))
+            p.append(f"<span class='val {cls(c)}'>{c:+.2f}</span>")
+            p.append(f"<span class='votes'>{t['bulls']}多 {t['bears']}空</span>")
+            p.append(f"<span class='tag'>分歧 {t['disagreement']:.2f}</span>")
+            p.append("</div><div class='detail'>")
+            for s in sorted(votes, key=lambda x: -x["value"]):
+                p.append("<div class='op'><div class='oph'>"
+                         f"<span class='nm'>{PERSONA_CN.get(s['persona'], s['persona'])}</span>"
+                         f"<span class='sc {cls(s['value'])}'>{s['value']:+.2f}</span></div>"
+                         f"<div class='rz'>{e(s.get('reasoning') or '')}</div></div>")
+            p.append("</div></div>")
+    else:
+        p.append("<p class='empty'>今日无信号。</p>")
+
+    p.append("<h2>市场异动</h2>")
+    if anomalies:
+        p.append("<ul class='an'>")
+        for a in anomalies:
+            p.append(f"<li><b>{e(a.get('kind', ''))}</b>{e(a.get('msg', ''))}</li>")
+        p.append("</ul>")
+    else:
+        p.append("<p class='empty'>今日无触发。</p>")
+
+    if dates:
+        p.append("<h2>历史</h2><div class='arch'>")
+        for d in dates[:30]:
+            p.append(f"<a href='{d}.html'>{d}</a>")
+        p.append("</div>")
+
+    p.append(
+        "<footer><b>免责声明</b><br>"
+        "本页为个人研究工具的自动输出,由 LLM 扮演投资大师风格生成,"
+        "<b>不构成投资建议</b>,不代表任何真实人物的观点。"
+        "作者可能持有页内标的。据此操作风险自担。<br>"
+        f"生成于 {dt.datetime.now().strftime('%Y-%m-%d %H:%M')} · "
+        "行情数据 moomoo OpenD</footer>")
+    p.append(f"</div><script>{JS}</script></body></html>")
+    return "".join(p)
+
+
+def main() -> int:
+    date = sys.argv[1] if len(sys.argv) > 1 else dt.date.today().isoformat()
+
+    def latest(pattern: str, d: str):
+        path = pattern.format(d=d)
+        if os.path.exists(path):
+            return json.load(open(path)), d
+        cands = sorted(glob.glob(pattern.format(d="*")))
+        if not cands:
+            return None, d
+        return json.load(open(cands[-1])), os.path.basename(cands[-1])[:10]
+
+    masters, mdate = latest(os.path.join(MASTERS, "{d}.json"), date)
+    radar, _ = latest(os.path.join(RADAR, "{d}.json"), date)
+    anomalies = (radar or {}).get("anomalies", [])
+    use = mdate if masters else date
+
+    dates = sorted((os.path.basename(f)[:10] for f in glob.glob(os.path.join(MASTERS, "*.json"))),
+                   reverse=True)
+    page = render(use, masters, anomalies, dates)
+
+    os.makedirs(OUT, exist_ok=True)
+    for name in ("index.html", f"{use}.html"):
+        with open(os.path.join(OUT, name), "w") as f:
+            f.write(page)
+    n = len(masters["tickers"]) if masters else 0
+    print(f"built {OUT}/index.html  (date={use}, {n} tickers, {len(anomalies)} anomalies)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
