@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import datetime as dt
 import signal
+import threading
 
 import moomoo as mm
 from moomoo import RET_OK, OpenQuoteContext, KLType, AuType
@@ -28,8 +29,17 @@ from hedge_fund.data.models import (
 
 
 def _alarm(sec):
+    """SIGALRM watchdog. No-op off the main thread — signal handlers can only be
+    installed there, and the pipeline runs these calls in a thread pool."""
+    if threading.current_thread() is not threading.main_thread():
+        return
     signal.signal(signal.SIGALRM, lambda s, f: (_ for _ in ()).throw(TimeoutError()))
     signal.alarm(sec)
+
+
+def _disarm():
+    if threading.current_thread() is threading.main_thread():
+        signal.alarm(0)
 
 
 class MoomooError(RuntimeError):
@@ -58,7 +68,7 @@ class MoomooDataClient:
         except TimeoutError:
             raise MoomooError(f"get_prices timeout for {code}")
         finally:
-            signal.alarm(0)
+            _disarm()
         if ret != RET_OK:
             raise MoomooError(f"request_history_kline failed for {code}: {df}")
         out = []
@@ -76,7 +86,7 @@ class MoomooDataClient:
         except TimeoutError:
             raise MoomooError(f"snapshot timeout for {code}")
         finally:
-            signal.alarm(0)
+            _disarm()
         if ret != RET_OK:
             raise MoomooError(f"snapshot failed for {code}: {df}")
         return df.iloc[0].to_dict() if len(df) else {}
@@ -92,7 +102,7 @@ class MoomooDataClient:
         except TimeoutError:
             raise MoomooError(f"financials timeout for {code}")
         finally:
-            signal.alarm(0)
+            _disarm()
         if ret != RET_OK:
             raise MoomooError(f"financials failed for {code}: {d}")
         return d.get("report_list", []) if isinstance(d, dict) else []
@@ -165,7 +175,7 @@ class MoomooDataClient:
         except TimeoutError:
             raise MoomooError(f"news timeout for {code}")
         finally:
-            signal.alarm(0)
+            _disarm()
         if ret != RET_OK:
             return []  # news absence is non-critical; treat as genuinely empty
         out = []

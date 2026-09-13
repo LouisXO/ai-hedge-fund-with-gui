@@ -1,0 +1,47 @@
+{
+ "date": "2026-09-11",
+ "generated_at": "2026-09-13T12:52:11",
+ "model": "opus",
+ "personas": [
+  "buffett",
+  "druckenmiller"
+ ],
+ "elapsed_secs": 30.6,
+ "tickers": [
+  {
+   "ticker": "RKLB",
+   "role": "manual",
+   "consensus": -0.04,
+   "disagreement": 0.74,
+   "bulls": 1,
+   "bears": 1,
+   "neutrals": 0,
+   "voted": 2,
+   "abstained": 0,
+   "signals": [
+    {
+     "persona": "buffett",
+     "ticker": "RKLB",
+     "value": -0.78,
+     "stance": "bearish",
+     "confidence": 78.0,
+     "abstained": false,
+     "reasoning": "I understand rockets about as well as I understand a cattle auction in a foreign language — and what I can read here is a business that has never earned a dollar for its owners. Every period shown carries an operating loss, the best of them still negative 25 percent, with no return on equity, no book value per share, and no free cash flow to speak of; the gross margin has improved to 36 percent, which is real progress, but progress from losing a great deal to losing somewhat less. Meanwhile Mr. Market has hung a 37.7 billion dollar price tag on it — a price that demands flawless execution for a decade running, in a capital-hungry business where competitors have deeper pockets than anyone in it. I'd sooner own a fine business at a fair price than a promising one at a price that already assumes the promise was kept.",
+     "cached": true,
+     "secs": 0.4
+    },
+    {
+     "persona": "druckenmiller",
+     "ticker": "RKLB",
+     "value": 0.7,
+     "stance": "bullish",
+     "confidence": 70.0,
+     "abstained": false,
+     "reasoning": "The whole engine inflected at once in the last two prints: TTM revenue growth re-accelerated from the 32-38% band that held through all of 2025 to 62-63% in 2026 Q1/Q2, gross margin went from 27-29% a year and a half ago to 36-38%, and operating margin compressed its loss from -50% to -25%. That's not drift, that's a business crossing over — volume scaling into a fixed cost base, which is exactly the shape that keeps surprising people to the upside for several quarters once it starts. What gives me pause is the other side of the ledger: a 37.7B cap on a company still running roughly -21% net margins means something on the order of fifty times revenue, so the market is not asleep on this story — it already believes in the trajectory, which is what caps the asymmetry rather than the trend. I'd own it and let the acceleration do the work, but I'm not backing up the truck at this price, and the gross margin tick from 38% to 36% is the first thing I'd watch for a crack.",
+     "cached": false,
+     "secs": 30.6
+    }
+   ]
+  }
+ ]
+}
