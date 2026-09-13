@@ -78,7 +78,9 @@ class _RateLimiter:
 
 
 # headroom under the documented ceilings
-_LIMITS = {"financials": _RateLimiter(12), "snapshot": _RateLimiter(30),
+_LIMITS = {"financials": _RateLimiter(12), "balance": _RateLimiter(12),
+           "ratios": _RateLimiter(12), "cashflow": _RateLimiter(12),
+           "snapshot": _RateLimiter(30),
            "kline": _RateLimiter(24), "news": _RateLimiter(8)}
 
 
@@ -173,57 +175,95 @@ class MoomooDataClient:
     _FID = {"revenue": 8001, "gross_profit": 8004,
             "operating_income": 8017, "net_income": 8037}
 
-    def _financials(self, code: str) -> list[dict]:
+    # statement_type: 1=income 2=balance sheet 3=cash flow 4=ratios
+    _STMT = {"financials": 1, "balance": 2, "cashflow": 3, "ratios": 4}
+
+    def _statement(self, code: str, kind: str) -> list[dict]:
+        st = self._STMT[kind]
+
         def fetch():
             try:
                 _alarm(self._t)
-                ret, d = self._q.get_financials_statements(code)  # income stmt, ~10 periods
+                ret, d = self._q.get_financials_statements(code, statement_type=st)
             except TimeoutError:
-                raise MoomooError(f"financials timeout for {code}")
+                raise MoomooError(f"{kind} timeout for {code}")
             finally:
                 _disarm()
             if ret != RET_OK:
-                raise MoomooError(f"financials failed for {code}: {d}")
+                raise MoomooError(f"{kind} failed for {code}: {d}")
             return d.get("report_list", []) if isinstance(d, dict) else []
-        return _cached((code, "financials"), fetch)
+        return _cached((code, kind), fetch)
+
+    def _financials(self, code: str) -> list[dict]:
+        return self._statement(code, "financials")
 
     def get_financial_metrics(self, ticker: str, end_date: str,
                               period: str = "ttm", limit: int = 10) -> list[FinancialMetrics]:
-        code = _norm(ticker)
-        reports = self._financials(code)
-        if not reports:
-            return []
-        s = self._snapshot(code)  # valuation ratios only exist "now" -> latest period
+        """Merge income statement + balance sheet + ratio table, aligned by period.
 
-        def num(v):
-            try:
-                f = float(v)
-                return f if f == f else None
-            except (TypeError, ValueError):
-                return None
+        The ratio table (statement_type=4) supplies ROE/ROA/ROIC/current ratio
+        directly; the balance sheet supplies equity and total liabilities for
+        D/E and book value per share. Without these the value personas
+        (Buffett/Graham/Munger) abstain or heavily discount their conviction.
+        """
+        code = _norm(ticker)
+        income = self._financials(code)
+        if not income:
+            return []
+        # optional tables: a failure here must not sink the whole metric set
+        try:
+            balance = {r.get("period_text"): r for r in self._statement(code, "balance")}
+        except MoomooError:
+            balance = {}
+        try:
+            ratios = {r.get("period_text"): r for r in self._statement(code, "ratios")}
+        except MoomooError:
+            ratios = {}
+        try:
+            cashflow = {r.get("period_text"): r for r in self._statement(code, "cashflow")}
+        except MoomooError:
+            cashflow = {}
+        s = self._snapshot(code)
+        shares = _num(s.get("issued_shares")) or _num(s.get("outstanding_shares"))
 
         out = []
-        for i, rpt in enumerate(reports[:limit]):
-            items = {it.get("field_id"): it for it in rpt.get("item_list", [])}
-            def val(key):
-                return num((items.get(self._FID[key]) or {}).get("data"))
-            rev, gp, oi, ni = val("revenue"), val("gross_profit"), val("operating_income"), val("net_income")
-            rev_yoy = num((items.get(self._FID["revenue"]) or {}).get("yoy"))
-            m = FinancialMetrics(
+        for i, rpt in enumerate(income[:limit]):
+            pt = rpt.get("period_text")
+            inc = _items(rpt)
+            bal = _items(balance.get(pt, {}))
+            rat = _items(ratios.get(pt, {}))
+            cf = _items(cashflow.get(pt, {}))
+
+            rev, gp = _f(inc, 8001), _f(inc, 8004)
+            oi, ni = _f(inc, 8017), _f(inc, 8037)
+            rev_yoy = _f(inc, 8001, "yoy")
+            equity, liabilities = _f(bal, 8081), _f(bal, 8048)
+            # ratio table reports percentages -> convert to fractions
+            roe, roa = _pct(rat, 14029), _pct(rat, 14030)
+            roic = _pct(rat, 14031)
+            current_ratio = _f(rat, 14020)  # a multiple, not a percentage
+
+            out.append(FinancialMetrics(
                 ticker=ticker,
-                report_period=str(rpt.get("period_text") or rpt.get("date_time_str") or end_date),
+                report_period=str(pt or rpt.get("date_time_str") or end_date),
                 period=("annual" if rpt.get("financial_type") == "ANNUAL" else "quarterly"),
                 gross_margin=(gp / rev) if (gp is not None and rev) else None,
                 operating_margin=(oi / rev) if (oi is not None and rev) else None,
                 net_margin=(ni / rev) if (ni is not None and rev) else None,
                 revenue_growth=(rev_yoy / 100.0) if rev_yoy is not None else None,
-                # valuation snapshot attaches to the most recent period only
-                market_cap=num(s.get("total_market_val")) if i == 0 else None,
-                price_to_earnings_ratio=(num(s.get("pe_ttm_ratio")) or num(s.get("pe_ratio"))) if i == 0 else None,
-                price_to_book_ratio=num(s.get("pb_ratio")) if i == 0 else None,
-                price_to_sales_ratio=(num(s.get("total_market_val")) / (rev * 4) if (i == 0 and rev) else None),
-            )
-            out.append(m)
+                return_on_equity=roe,
+                return_on_assets=roa,
+                return_on_invested_capital=roic,
+                current_ratio=current_ratio,
+                debt_to_equity=(liabilities / equity) if (liabilities is not None and equity) else None,
+                book_value_per_share=(equity / shares) if (equity is not None and shares) else None,
+                earnings_per_share=(ni / shares) if (ni is not None and shares) else None,
+                free_cash_flow_per_share=(_f(cf, 8072) / shares) if (_f(cf, 8072) is not None and shares) else None,
+                market_cap=_num(s.get("total_market_val")) if i == 0 else None,
+                price_to_earnings_ratio=(_num(s.get("pe_ttm_ratio")) or _num(s.get("pe_ratio"))) if i == 0 else None,
+                price_to_book_ratio=_num(s.get("pb_ratio")) if i == 0 else None,
+                price_to_sales_ratio=(_num(s.get("total_market_val")) / (rev * 4) if (i == 0 and rev) else None),
+            ))
         return out
 
     def get_market_cap(self, ticker: str, end_date: str) -> float | None:
@@ -278,6 +318,29 @@ class MoomooDataClient:
 
     def get_earnings_history(self, ticker: str, limit: int = 12) -> list[EarningsRecord]:
         return []
+
+
+def _num(v):
+    try:
+        f = float(v)
+        return f if f == f else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _items(rpt: dict) -> dict:
+    """field_id -> item. Note: moomoo returns field_id as an int."""
+    return {it.get("field_id"): it for it in (rpt or {}).get("item_list", [])}
+
+
+def _f(items: dict, fid: int, key: str = "data"):
+    return _num((items.get(fid) or {}).get(key))
+
+
+def _pct(items: dict, fid: int):
+    """Ratio table values are percentages; return a fraction."""
+    v = _f(items, fid)
+    return v / 100.0 if v is not None else None
 
 
 def _norm(ticker: str) -> str:
