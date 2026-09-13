@@ -29,7 +29,7 @@
 - 页面:**今日雷达**(哨兵/异动/机会+AI点评) · **大师信号**(5 persona 每票的 conviction+论点,历史时间线) · **我的组合**(持仓+盈亏+警报) · **回测实验室**(P4)
 - 部署:**两层架构**。
   - 公开层(Netlify 不动):大师信号、市场异动、回测 showcase——观点与市场事实,无仓位无金额,挂免责声明。
-  - 私有层(Tailscale):持仓/盈亏/哨兵/完整早报/具体期权结构,由 Mac 本机 `tailscale serve` 直出(数据不上传任何第三方);手机装 Tailscale App 访问。代价:Mac 睡着时私有页不可达,iMessage 文字早报兜底。
+  - 私有层(Tailscale,**现网已存在**):tailnet 已运行,Windows 常开机 `lx-pc`(100.90.46.88)在线。Mac 8:41 生成 site-data 后经 tailnet 推给 lx-pc,由 lx-pc 24/7 serve(`tailscale serve` 或小静态服务);手机(iphone-14-pro-max,已在 tailnet)随时可看,Mac 睡觉无影响。敏感数据不出自家设备。
   - CF Access 方案作废(Tailscale 对私有数据是降维打击:网络不可达 > 门禁拦截)。
 
 ## 2. 安全红线(先于一切上线动作)
