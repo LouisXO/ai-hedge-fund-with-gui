@@ -24,7 +24,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from integrations.claude_code_llm import ClaudeCodeLLM
-from integrations.moomoo_client import MoomooDataClient
+from integrations.moomoo_client import MoomooDataClient, prefetch
 
 from hedge_fund.signals.buffett import BuffettAgent
 from hedge_fund.signals.druckenmiller import DruckenmillerAgent
@@ -148,7 +148,19 @@ def main() -> int:
     print(f"{len(personas)} personas x {len(tickers)} tickers = {len(jobs)} calls "
           f"(workers={args.workers}, model={args.model})", flush=True)
 
-    rows, t0 = [], time.time()
+    # Warm the shared data cache serially first: personas analysing the same
+    # ticker need identical fundamentals, and OpenD rate-limits per 30s window.
+    t0 = time.time()
+    warm_client = MoomooDataClient()
+    try:
+        warm = prefetch(warm_client, tickers, args.date)
+        print(f"prefetch: {warm['warmed']}/{len(tickers)} warmed "
+              f"({time.time()-t0:.0f}s)" +
+              (f" | failed: {list(warm['failed'])}" if warm["failed"] else ""), flush=True)
+    finally:
+        warm_client.close()
+
+    rows = []
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futs = {ex.submit(run_one, p, t, args.date, args.model): (p, t) for p, t in jobs}
         for i, fut in enumerate(as_completed(futs), 1):
