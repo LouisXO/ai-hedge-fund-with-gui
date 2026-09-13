@@ -27,11 +27,14 @@
 
 - 前端:轻量静态站(Astro 或 Next.js static export),读 JSON 渲染。不复用 v1 React 组件(v1 绑死旧后端,重写三个页面更快)。
 - 页面:**今日雷达**(哨兵/异动/机会+AI点评) · **大师信号**(5 persona 每票的 conviction+论点,历史时间线) · **我的组合**(持仓+盈亏+警报) · **回测实验室**(P4)
-- 部署:**Netlify 不动**(现有 push-to-deploy;实测 DNS 已在 Cloudflare 且流量已走 CF 代理)+ **Cloudflare Access** 直接挂自定义域(免费邮箱 OTP);Netlify Edge Function 校验 Cf-Access-Jwt-Assertion 头封死 *.netlify.app 绕行;tunnel 留给 P4 的按需后端。
+- 部署:**两层架构**。
+  - 公开层(Netlify 不动):大师信号、市场异动、回测 showcase——观点与市场事实,无仓位无金额,挂免责声明。
+  - 私有层(Tailscale):持仓/盈亏/哨兵/完整早报/具体期权结构,由 Mac 本机 `tailscale serve` 直出(数据不上传任何第三方);手机装 Tailscale App 访问。代价:Mac 睡着时私有页不可达,iMessage 文字早报兜底。
+  - CF Access 方案作废(Tailscale 对私有数据是降维打击:网络不可达 > 门禁拦截)。
 
 ## 2. 安全红线(先于一切上线动作)
 
-1. **Cloudflare Access 必须先开**(免费,邮箱 OTP):新站含真实持仓,当前老站是公开的。Access 没配好之前,site-data 里不放持仓页。
+1. **敏感分层铁律**:含仓位/金额/具体下单结构的内容只进私有层(Tailscale,不出本机);公开层(Netlify)只放观点与市场事实。
 2. 工具链全程只读 moomoo:**永不下单**,交易解锁只在 OpenD 手动。
 3. 回测**不走订阅**:API+Haiku(几美元级)或仅 PEAD 量化 pod(零 LLM)。
 
