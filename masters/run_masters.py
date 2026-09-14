@@ -31,6 +31,7 @@ from hedge_fund.signals.druckenmiller import DruckenmillerAgent
 from hedge_fund.signals.graham import GrahamAgent
 from hedge_fund.signals.lynch import LynchAgent
 from hedge_fund.signals.munger import MungerAgent
+from hedge_fund.signals.pead import PEADModel
 
 PERSONAS = {
     "buffett": BuffettAgent,
@@ -38,6 +39,7 @@ PERSONAS = {
     "graham": GrahamAgent,
     "lynch": LynchAgent,
     "druckenmiller": DruckenmillerAgent,
+    "pead": PEADModel,          # quant, no LLM — free to run and to backtest
 }
 
 OPTRADAR_OUT = "/Users/louis/optradar/out"
@@ -72,7 +74,8 @@ def run_one(persona: str, ticker: str, date: str, model: str) -> dict:
     t0 = time.time()
     data = MoomooDataClient()
     try:
-        agent = PERSONAS[persona](llm=ClaudeCodeLLM(model=model))
+        cls_ = PERSONAS[persona]
+        agent = cls_() if persona == "pead" else cls_(llm=ClaudeCodeLLM(model=model))
         sig = agent.predict(ticker, date, data)
         meta = sig.metadata or {}
         return {

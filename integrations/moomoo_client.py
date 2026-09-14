@@ -79,6 +79,7 @@ class _RateLimiter:
 
 # headroom under the documented ceilings
 _LIMITS = {"financials": _RateLimiter(12), "balance": _RateLimiter(12),
+           "calendar": _RateLimiter(10),
            "filings": _RateLimiter(12),
            "ratios": _RateLimiter(12), "cashflow": _RateLimiter(12),
            "snapshot": _RateLimiter(30),
@@ -197,6 +198,32 @@ class MoomooDataClient:
 
     def _financials(self, code: str) -> list[dict]:
         return self._statement(code, "financials")
+
+    def _calendar_window(self, day: str) -> dict:
+        """Earnings calendar for the week containing *day*, keyed by security.
+
+        One call returns every US name reporting that week (~550 rows), so the
+        window is cached and shared across tickers. This is the only endpoint
+        exposing actual-vs-estimate — and it also carries the option
+        dimensions (iv_rank, iv_percentile, option_volume, iv).
+        """
+        d = dt.date.fromisoformat(day)
+        begin = (d - dt.timedelta(days=3)).isoformat()
+        end = (d + dt.timedelta(days=3)).isoformat()
+
+        def fetch():
+            try:
+                _alarm(self._t)
+                ret, df = self._q.get_earnings_calendar(
+                    mm.Market.US, begin_date=begin, end_date=end)
+            except TimeoutError:
+                raise MoomooError(f"calendar timeout for {begin}")
+            finally:
+                _disarm()
+            if ret != RET_OK or df is None or not len(df):
+                return {}
+            return {r.get("security"): r for r in df.to_dict("records")}
+        return _cached((begin, "calendar"), fetch)
 
     def _filing_dates(self, code: str) -> dict:
         """{period_text: {filing_date, window, iv_crush}} from the earnings
@@ -386,12 +413,11 @@ class MoomooDataClient:
         return None
 
     def get_earnings_history(self, ticker: str, limit: int = 12) -> list[EarningsRecord]:
-        """Historical earnings events with real filing dates.
+        """Historical earnings events with filing dates AND eps surprise.
 
-        EPS surprise (what PEAD keys on) is NOT available from this endpoint —
-        moomoo only exposes actual-vs-estimate through the 7-day earnings
-        calendar. Records carry dates and reported figures; `eps_surprise`
-        stays None, so PEAD will pass on these until the calendar is wired in.
+        report_period is the period-END date (not "2026/Q2") because PEAD
+        date-parses it to compute filing lag. source_type is "8-K": these are
+        announcement figures, not a later retrospective filing.
         """
         code = _norm(ticker)
         try:
@@ -407,18 +433,48 @@ class MoomooDataClient:
         records = []
         for pt, meta in sorted(filings.items(), key=lambda kv: kv[1]["filing_date"],
                                reverse=True)[:limit]:
-            inc = _items(income.get(pt, {}))
+            rpt = income.get(pt, {})
+            period_end = rpt.get("date_time_str")
+            if not period_end:
+                continue
+            inc = _items(rpt)
             ni, rev = _f(inc, 8037), _f(inc, 8001)
+
+            cal = {}
+            try:
+                cal = self._calendar_window(meta["filing_date"]).get(code) or {}
+            except MoomooError:
+                cal = {}
+            eps_a, eps_p = _num(cal.get("eps_actual")), _num(cal.get("eps_predict"))
+            rev_a, rev_p = _num(cal.get("revenue_actual")), _num(cal.get("revenue_predict"))
+
             records.append(EarningsRecord(
-                ticker=ticker, report_period=str(pt), source_type="moomoo",
+                ticker=ticker, report_period=str(period_end)[:10], source_type="8-K",
                 filing_date=meta["filing_date"],
                 filing_window=str(meta.get("window") or ""),
                 quarterly=EarningsData(
-                    revenue=rev, net_income=ni,
-                    earnings_per_share=(ni / shares) if (ni is not None and shares) else None,
+                    revenue=rev_a if rev_a is not None else rev,
+                    estimated_revenue=rev_p,
+                    revenue_surprise=_surprise(rev_a, rev_p),
+                    net_income=ni,
+                    earnings_per_share=eps_a if eps_a is not None else (
+                        (ni / shares) if (ni is not None and shares) else None),
+                    estimated_earnings_per_share=eps_p,
+                    eps_surprise=_surprise(eps_a, eps_p),
                 ),
             ))
         return records
+
+
+def _surprise(actual, estimate) -> str | None:
+    """BEAT / MISS / MEET, or None when either side is unavailable."""
+    if actual is None or estimate is None:
+        return None
+    if actual > estimate:
+        return "BEAT"
+    if actual < estimate:
+        return "MISS"
+    return "MEET"
 
 
 def _minus_days(date_str: str, n: int) -> str:

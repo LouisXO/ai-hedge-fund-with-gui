@@ -58,7 +58,10 @@ def main() -> int:
         benchmark=args.benchmark,
     )
     llm = ClaudeCodeLLM(model=args.model)
-    fund = Fund(spec, models={"desk": [PERSONAS[n](llm=llm) for n in names]})
+    def build(n):
+        cls_ = PERSONAS[n]
+        return cls_() if n == "pead" else cls_(llm=llm)
+    fund = Fund(spec, models={"desk": [build(n) for n in names]})
 
     data = MoomooDataClient()
     t0 = time.time()

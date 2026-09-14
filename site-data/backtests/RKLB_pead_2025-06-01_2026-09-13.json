@@ -1,0 +1,5557 @@
+{
+ "fund": "moomoo-backtest",
+ "start": "2025-06-06",
+ "end": "2026-09-11",
+ "rebalance": "weekly",
+ "benchmark": "SPY",
+ "universe": [
+  "RKLB"
+ ],
+ "capital": 100000.0,
+ "dates": [
+  "2025-06-06",
+  "2025-06-13",
+  "2025-06-20",
+  "2025-06-27",
+  "2025-07-03",
+  "2025-07-11",
+  "2025-07-18",
+  "2025-07-25",
+  "2025-08-01",
+  "2025-08-08",
+  "2025-08-15",
+  "2025-08-22",
+  "2025-08-29",
+  "2025-09-05",
+  "2025-09-12",
+  "2025-09-19",
+  "2025-09-26",
+  "2025-10-03",
+  "2025-10-10",
+  "2025-10-17",
+  "2025-10-24",
+  "2025-10-31",
+  "2025-11-07",
+  "2025-11-14",
+  "2025-11-21",
+  "2025-11-28",
+  "2025-12-05",
+  "2025-12-12",
+  "2025-12-19",
+  "2025-12-26",
+  "2026-01-02",
+  "2026-01-09",
+  "2026-01-16",
+  "2026-01-23",
+  "2026-01-30",
+  "2026-02-06",
+  "2026-02-13",
+  "2026-02-20",
+  "2026-02-27",
+  "2026-03-06",
+  "2026-03-13",
+  "2026-03-20",
+  "2026-03-27",
+  "2026-04-02",
+  "2026-04-10",
+  "2026-04-17",
+  "2026-04-24",
+  "2026-05-01",
+  "2026-05-08",
+  "2026-05-15",
+  "2026-05-22",
+  "2026-05-29",
+  "2026-06-05",
+  "2026-06-12",
+  "2026-06-18",
+  "2026-06-26",
+  "2026-07-02",
+  "2026-07-10",
+  "2026-07-17",
+  "2026-07-24",
+  "2026-07-31",
+  "2026-08-07",
+  "2026-08-14",
+  "2026-08-21",
+  "2026-08-28",
+  "2026-09-04",
+  "2026-09-11"
+ ],
+ "nav": [
+  100000.0,
+  100000.0,
+  100000.0,
+  100000.0,
+  100000.0,
+  100000.0,
+  100000.0,
+  100000.0,
+  100000.0,
+  100000.0,
+  100234.78,
+  100234.78,
+  100234.78,
+  100234.78,
+  100234.78,
+  100234.78,
+  100234.78,
+  100234.78,
+  100234.78,
+  100234.78,
+  100234.78,
+  100234.78,
+  100234.78,
+  100234.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  97352.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  101791.78,
+  104226.34,
+  104226.34,
+  104226.34,
+  104226.34
+ ],
+ "benchmark_nav": [
+  100000.0,
+  99642.82137742553,
+  99482.08849235566,
+  102935.53717903579,
+  104681.51244823296,
+  104393.5855581829,
+  105056.48700269709,
+  106650.12885912735,
+  104075.52678432973,
+  106663.52080761592,
+  107711.44076774913,
+  108024.47756102485,
+  107980.95372873319,
+  108347.55831545543,
+  110050.00975253021,
+  111410.99660272064,
+  111095.41324632437,
+  112335.92441841918,
+  109618.21455710162,
+  111526.82240897835,
+  113685.5468572883,
+  114492.97023185827,
+  112631.36415619602,
+  112792.51310413584,
+  110627.07411651178,
+  114716.22867001945,
+  115102.31469116056,
+  114442.61118556361,
+  114583.85791571505,
+  116220.313195484,
+  115018.22567509407,
+  116853.3452791038,
+  116447.5986510498,
+  116038.48483106525,
+  116499.79012605788,
+  116272.50467049211,
+  114779.155047856,
+  116072.1567503707,
+  115492.9997378089,
+  113201.62562678696,
+  111502.87729604902,
+  109491.18877133005,
+  107046.68407110064,
+  110716.81750912515,
+  114706.0195854845,
+  119885.39832882567,
+  120526.91199317572,
+  121659.6900690833,
+  124524.55503873598,
+  124786.22508616582,
+  125878.48650957036,
+  127708.4886468928,
+  124512.73768185468,
+  125221.77910048934,
+  126388.87985473684,
+  123384.6178392809,
+  126057.14162655128,
+  127778.456820759,
+  125804.95287145104,
+  125067.00456793622,
+  126437.96357217246,
+  130877.50118712512,
+  131398.804117131,
+  129601.32453379904,
+  130215.71727273453,
+  130357.89079909978,
+  129359.29103058203
+ ],
+ "metrics": {
+  "total_return_pct": 0.042263,
+  "annualized_return_pct": 0.033267,
+  "sharpe_ratio": 0.6412,
+  "max_drawdown_pct": 0.028752,
+  "benchmark_return_pct": 0.293593,
+  "excess_return_pct": -0.25133,
+  "n_cycles": 67,
+  "n_orders": 8
+ },
+ "records": [
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-06-06",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 28.92
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-06-06",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100000.0,
+   "cash_before": 100000.0,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100000.0,
+   "nav": 100000.0
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-06-13",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 25.41
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-06-13",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100000.0,
+   "cash_before": 100000.0,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100000.0,
+   "nav": 100000.0
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-06-20",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 30.04
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-06-20",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100000.0,
+   "cash_before": 100000.0,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100000.0,
+   "nav": 100000.0
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-06-27",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 35.38
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-06-27",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100000.0,
+   "cash_before": 100000.0,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100000.0,
+   "nav": 100000.0
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-07-03",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 35.66
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-07-03",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100000.0,
+   "cash_before": 100000.0,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100000.0,
+   "nav": 100000.0
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-07-11",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 39.03
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-07-11",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100000.0,
+   "cash_before": 100000.0,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100000.0,
+   "nav": 100000.0
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-07-18",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 51.39
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-07-18",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100000.0,
+   "cash_before": 100000.0,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100000.0,
+   "nav": 100000.0
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-07-25",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 47.43
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-07-25",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100000.0,
+   "cash_before": 100000.0,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100000.0,
+   "nav": 100000.0
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-08-01",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 44.81
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-08-01",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100000.0,
+   "cash_before": 100000.0,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100000.0,
+   "nav": 100000.0
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-08-08",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 44.69
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-08-08",
+       "value": -1.0,
+       "reasoning": "MISS on 2025-06-29 earnings (filed 2025-08-07, 8-K)",
+       "components": {},
+       "metadata": {
+        "eps_surprise": "MISS",
+        "source_type": "8-K",
+        "report_period": "2025-06-29",
+        "filing_date": "2025-08-07"
+       }
+      }
+     ],
+     "convictions": {
+      "RKLB": -1.0
+     },
+     "weights": {
+      "RKLB": -1.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": -1.0
+   },
+   "clamps": [
+    {
+     "limit": "max_position_pct",
+     "ticker": "RKLB",
+     "before": -1.0,
+     "after": -0.25
+    }
+   ],
+   "final_weights": {
+    "RKLB": -0.25
+   },
+   "equity_before": 100000.0,
+   "cash_before": 100000.0,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 559,
+     "price": 44.69
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 559,
+     "price": 44.69
+    }
+   ],
+   "positions": {
+    "RKLB": -559
+   },
+   "cash": 124981.70999999999,
+   "nav": 100000.0
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-08-15",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 44.27
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-08-15",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 124981.70999999999,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "buy",
+     "quantity": 559,
+     "price": 44.27
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "buy",
+     "quantity": 559,
+     "price": 44.27
+    }
+   ],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-08-22",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 44.38
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-08-22",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-08-29",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 48.6
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-08-29",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-09-05",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 45.84
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-09-05",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-09-12",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 53.34
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-09-12",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-09-19",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 47.79
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-09-19",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-09-26",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 46.26
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-09-26",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-10-03",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 56.16
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-10-03",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-10-10",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 64.26
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-10-10",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-10-17",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 66.27
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-10-17",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-10-24",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 64.56
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-10-24",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-10-31",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 62.98
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-10-31",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-11-07",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 51.64
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-11-07",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 100234.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-11-14",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 45.54
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-11-14",
+       "value": 1.0,
+       "reasoning": "BEAT on 2025-09-29 earnings (filed 2025-11-10, 8-K)",
+       "components": {},
+       "metadata": {
+        "eps_surprise": "BEAT",
+        "source_type": "8-K",
+        "report_period": "2025-09-29",
+        "filing_date": "2025-11-10"
+       }
+      }
+     ],
+     "convictions": {
+      "RKLB": 1.0
+     },
+     "weights": {
+      "RKLB": 1.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 1.0
+   },
+   "clamps": [
+    {
+     "limit": "max_position_pct",
+     "ticker": "RKLB",
+     "before": 1.0,
+     "after": 0.25
+    }
+   ],
+   "final_weights": {
+    "RKLB": 0.25
+   },
+   "equity_before": 100234.78,
+   "cash_before": 100234.78,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "buy",
+     "quantity": 550,
+     "price": 45.54
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "buy",
+     "quantity": 550,
+     "price": 45.54
+    }
+   ],
+   "positions": {
+    "RKLB": 550
+   },
+   "cash": 75187.78,
+   "nav": 100234.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-11-21",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 40.3
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-11-21",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 75187.78,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 550,
+     "price": 40.3
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 550,
+     "price": 40.3
+    }
+   ],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-11-28",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 42.14
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-11-28",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-12-05",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 49.055
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-12-05",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-12-12",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 61.49
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-12-12",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-12-19",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 70.52
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-12-19",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2025-12-26",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 70.65
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2025-12-26",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-01-02",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 75.99
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-01-02",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-01-09",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 84.85
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-01-09",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-01-16",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 96.3
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-01-16",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-01-23",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 88.9
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-01-23",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-01-30",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 80.07
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-01-30",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-02-06",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 72.32
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-02-06",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-02-13",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 67.44
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-02-13",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-02-20",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 70.86
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-02-20",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-02-27",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 69.1
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-02-27",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-03-06",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 70.11
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-03-06",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-03-13",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 68.41
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-03-13",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-03-20",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 67.23
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-03-20",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-03-27",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 60.93
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-03-27",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-04-02",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 67.73
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-04-02",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-04-10",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 68.05
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-04-10",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-04-17",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 84.8
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-04-17",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-04-24",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 79.68
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-04-24",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-05-01",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 78.81
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-05-01",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 97352.78,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-05-08",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 105.47
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-05-08",
+       "value": 1.0,
+       "reasoning": "BEAT on 2026-03-30 earnings (filed 2026-05-07, 8-K)",
+       "components": {},
+       "metadata": {
+        "eps_surprise": "BEAT",
+        "source_type": "8-K",
+        "report_period": "2026-03-30",
+        "filing_date": "2026-05-07"
+       }
+      }
+     ],
+     "convictions": {
+      "RKLB": 1.0
+     },
+     "weights": {
+      "RKLB": 1.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 1.0
+   },
+   "clamps": [
+    {
+     "limit": "max_position_pct",
+     "ticker": "RKLB",
+     "before": 1.0,
+     "after": 0.25
+    }
+   ],
+   "final_weights": {
+    "RKLB": 0.25
+   },
+   "equity_before": 97352.78,
+   "cash_before": 97352.78,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "buy",
+     "quantity": 230,
+     "price": 105.47
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "buy",
+     "quantity": 230,
+     "price": 105.47
+    }
+   ],
+   "positions": {
+    "RKLB": 230
+   },
+   "cash": 73094.68,
+   "nav": 97352.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-05-15",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 124.77
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-05-15",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 73094.68,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 230,
+     "price": 124.77
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 230,
+     "price": 124.77
+    }
+   ],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-05-22",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 135.76
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-05-22",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-05-29",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 143.48
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-05-29",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-06-05",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 110.08
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-06-05",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-06-12",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 102.39
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-06-12",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-06-18",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 107.24
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-06-18",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-06-26",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 84.54
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-06-26",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-07-02",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 100.46
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-07-02",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-07-10",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 81.04
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-07-10",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-07-17",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 67.62
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-07-17",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-07-24",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 63.91
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-07-24",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-07-31",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 64.95
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-07-31",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-08-07",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 82.83
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-08-07",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 101791.78,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-08-14",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 80.25
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-08-14",
+       "value": -1.0,
+       "reasoning": "MISS on 2026-06-29 earnings (filed 2026-08-10, 8-K)",
+       "components": {},
+       "metadata": {
+        "eps_surprise": "MISS",
+        "source_type": "8-K",
+        "report_period": "2026-06-29",
+        "filing_date": "2026-08-10"
+       }
+      }
+     ],
+     "convictions": {
+      "RKLB": -1.0
+     },
+     "weights": {
+      "RKLB": -1.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": -1.0
+   },
+   "clamps": [
+    {
+     "limit": "max_position_pct",
+     "ticker": "RKLB",
+     "before": -1.0,
+     "after": -0.25
+    }
+   ],
+   "final_weights": {
+    "RKLB": -0.25
+   },
+   "equity_before": 101791.78,
+   "cash_before": 101791.78,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 317,
+     "price": 80.25
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 317,
+     "price": 80.25
+    }
+   ],
+   "positions": {
+    "RKLB": -317
+   },
+   "cash": 127231.03,
+   "nav": 101791.78
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-08-21",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 72.57
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-08-21",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 104226.34,
+   "cash_before": 127231.03,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "buy",
+     "quantity": 317,
+     "price": 72.57
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "buy",
+     "quantity": 317,
+     "price": 72.57
+    }
+   ],
+   "positions": {},
+   "cash": 104226.34,
+   "nav": 104226.34
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-08-28",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 64.39
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-08-28",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 104226.34,
+   "cash_before": 104226.34,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 104226.34,
+   "nav": 104226.34
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-09-04",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 64.26
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-09-04",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 104226.34,
+   "cash_before": 104226.34,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 104226.34,
+   "nav": 104226.34
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-09-11",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "pead",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 62.95
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "pead",
+       "ticker": "RKLB",
+       "date": "2026-09-11",
+       "value": 0.0,
+       "reasoning": null,
+       "components": {},
+       "metadata": {}
+      }
+     ],
+     "convictions": {
+      "RKLB": 0.0
+     },
+     "weights": {
+      "RKLB": 0.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": 0.0
+   },
+   "clamps": [],
+   "final_weights": {
+    "RKLB": 0.0
+   },
+   "equity_before": 104226.34,
+   "cash_before": 104226.34,
+   "orders": [],
+   "fills": [],
+   "positions": {},
+   "cash": 104226.34,
+   "nav": 104226.34
+  }
+ ]
+}
