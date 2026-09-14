@@ -24,7 +24,7 @@ import moomoo as mm
 from moomoo import RET_OK, OpenQuoteContext, KLType, AuType
 
 from hedge_fund.data.models import (
-    CompanyFacts, CompanyNews, Earnings, EarningsRecord,
+    CompanyFacts, CompanyNews, Earnings, EarningsData, EarningsRecord,
     FinancialMetrics, InsiderTrade, Price,
 )
 
@@ -79,6 +79,7 @@ class _RateLimiter:
 
 # headroom under the documented ceilings
 _LIMITS = {"financials": _RateLimiter(12), "balance": _RateLimiter(12),
+           "filings": _RateLimiter(12),
            "ratios": _RateLimiter(12), "cashflow": _RateLimiter(12),
            "snapshot": _RateLimiter(30),
            "kline": _RateLimiter(24), "news": _RateLimiter(8)}
@@ -197,6 +198,40 @@ class MoomooDataClient:
     def _financials(self, code: str) -> list[dict]:
         return self._statement(code, "financials")
 
+    def _filing_dates(self, code: str) -> dict:
+        """{period_text: {filing_date, window, iv_crush}} from the earnings
+        price-history endpoint — the only source of the actual publication date.
+
+        Without it every metric row is undated and point-in-time filtering
+        (the thing that keeps a backtest honest) is impossible.
+        """
+        def fetch():
+            try:
+                _alarm(self._t)
+                ret, df = self._q.get_financials_earnings_price_history(code)
+            except TimeoutError:
+                raise MoomooError(f"filings timeout for {code}")
+            finally:
+                _disarm()
+            if ret != RET_OK or df is None or not len(df):
+                return {}
+            out = {}
+            for r in df.to_dict("records"):
+                pt = r.get("period_text")
+                fd = r.get("pub_trading_day_str")
+                if pt and fd and pt not in out:
+                    out[pt] = {"filing_date": str(fd)[:10],
+                               "window": r.get("pub_type"),
+                               "iv_crush": _num(r.get("option_iv_crush"))}
+            # An annual report ("2025/FY") ships with that year's Q4 print and
+            # carries no row of its own — without this alias it looks undated,
+            # and an undated row silently leaks future data into a backtest.
+            for pt, meta in list(out.items()):
+                if pt.endswith("/Q4"):
+                    out.setdefault(pt.replace("/Q4", "/FY"), meta)
+            return out
+        return _cached((code, "filings"), fetch)
+
     def get_financial_metrics(self, ticker: str, end_date: str,
                               period: str = "ttm", limit: int = 10) -> list[FinancialMetrics]:
         """Merge income statement + balance sheet + ratio table, aligned by period.
@@ -223,11 +258,40 @@ class MoomooDataClient:
             cashflow = {r.get("period_text"): r for r in self._statement(code, "cashflow")}
         except MoomooError:
             cashflow = {}
+        try:
+            filings = self._filing_dates(code)
+        except MoomooError:
+            filings = {}
         s = self._snapshot(code)
         shares = _num(s.get("issued_shares")) or _num(s.get("outstanding_shares"))
 
+        # Point-in-time filter (protocol requirement): drop anything not yet
+        # filed as of end_date. Without this a backtest reads future filings.
+        rows = []
+        for rpt in income:
+            pt = rpt.get("period_text")
+            filed = (filings.get(pt) or {}).get("filing_date")
+            if end_date and end_date < dt.date.today().isoformat():
+                # historical query: an undated row cannot be proven to have
+                # been public yet, so drop it rather than risk lookahead
+                if not filed or filed > end_date:
+                    continue
+            elif filed and end_date and filed > end_date:
+                continue
+            rows.append(rpt)
+
+        # Valuation must also be as-of, not "today". Use the close on end_date
+        # when we are looking at the past; the live snapshot only for today.
+        as_of_price = None
+        if end_date and end_date < dt.date.today().isoformat():
+            try:
+                bars = self.get_prices(ticker, _minus_days(end_date, 12), end_date)
+                as_of_price = bars[-1].close if bars else None
+            except MoomooError:
+                as_of_price = None
+
         out = []
-        for i, rpt in enumerate(income[:limit]):
+        for i, rpt in enumerate(rows[:limit]):
             pt = rpt.get("period_text")
             inc = _items(rpt)
             bal = _items(balance.get(pt, {}))
@@ -243,9 +307,11 @@ class MoomooDataClient:
             roic = _pct(rat, 14031)
             current_ratio = _f(rat, 14020)  # a multiple, not a percentage
 
+            filed = (filings.get(pt) or {}).get("filing_date")
             out.append(FinancialMetrics(
                 ticker=ticker,
                 report_period=str(pt or rpt.get("date_time_str") or end_date),
+                filing_date=filed,
                 period=("annual" if rpt.get("financial_type") == "ANNUAL" else "quarterly"),
                 gross_margin=(gp / rev) if (gp is not None and rev) else None,
                 operating_margin=(oi / rev) if (oi is not None and rev) else None,
@@ -259,10 +325,13 @@ class MoomooDataClient:
                 book_value_per_share=(equity / shares) if (equity is not None and shares) else None,
                 earnings_per_share=(ni / shares) if (ni is not None and shares) else None,
                 free_cash_flow_per_share=(_f(cf, 8072) / shares) if (_f(cf, 8072) is not None and shares) else None,
-                market_cap=_num(s.get("total_market_val")) if i == 0 else None,
-                price_to_earnings_ratio=(_num(s.get("pe_ttm_ratio")) or _num(s.get("pe_ratio"))) if i == 0 else None,
-                price_to_book_ratio=_num(s.get("pb_ratio")) if i == 0 else None,
-                price_to_sales_ratio=(_num(s.get("total_market_val")) / (rev * 4) if (i == 0 and rev) else None),
+                market_cap=_mcap(i, as_of_price, shares, s),
+                price_to_earnings_ratio=(_num(s.get("pe_ttm_ratio")) or _num(s.get("pe_ratio")))
+                    if (i == 0 and as_of_price is None) else None,
+                price_to_book_ratio=_num(s.get("pb_ratio"))
+                    if (i == 0 and as_of_price is None) else None,
+                price_to_sales_ratio=((_mcap(i, as_of_price, shares, s) or 0) / (rev * 4)
+                                      if (i == 0 and rev and _mcap(i, as_of_price, shares, s)) else None),
             ))
         return out
 
@@ -317,7 +386,53 @@ class MoomooDataClient:
         return None
 
     def get_earnings_history(self, ticker: str, limit: int = 12) -> list[EarningsRecord]:
-        return []
+        """Historical earnings events with real filing dates.
+
+        EPS surprise (what PEAD keys on) is NOT available from this endpoint —
+        moomoo only exposes actual-vs-estimate through the 7-day earnings
+        calendar. Records carry dates and reported figures; `eps_surprise`
+        stays None, so PEAD will pass on these until the calendar is wired in.
+        """
+        code = _norm(ticker)
+        try:
+            filings = self._filing_dates(code)
+        except MoomooError:
+            return []
+        if not filings:
+            return []
+        income = {r.get("period_text"): r for r in self._financials(code)}
+        s = self._snapshot(code)
+        shares = _num(s.get("issued_shares")) or _num(s.get("outstanding_shares"))
+
+        records = []
+        for pt, meta in sorted(filings.items(), key=lambda kv: kv[1]["filing_date"],
+                               reverse=True)[:limit]:
+            inc = _items(income.get(pt, {}))
+            ni, rev = _f(inc, 8037), _f(inc, 8001)
+            records.append(EarningsRecord(
+                ticker=ticker, report_period=str(pt), source_type="moomoo",
+                filing_date=meta["filing_date"],
+                filing_window=str(meta.get("window") or ""),
+                quarterly=EarningsData(
+                    revenue=rev, net_income=ni,
+                    earnings_per_share=(ni / shares) if (ni is not None and shares) else None,
+                ),
+            ))
+        return records
+
+
+def _minus_days(date_str: str, n: int) -> str:
+    return (dt.date.fromisoformat(date_str) - dt.timedelta(days=n)).isoformat()
+
+
+def _mcap(i: int, as_of_price, shares, snap: dict):
+    """Market cap for the newest row only: as-of price x shares when
+    backtesting, the live snapshot when running today."""
+    if i != 0:
+        return None
+    if as_of_price and shares:
+        return as_of_price * shares
+    return _num(snap.get("total_market_val"))
 
 
 def _num(v):
