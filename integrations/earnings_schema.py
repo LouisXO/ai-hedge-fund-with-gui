@@ -20,6 +20,11 @@ def _avg(vals):
     return round(statistics.mean(vals), 2) if vals else None
 
 
+def _med(vals):
+    vals = [v for v in vals if v is not None]
+    return round(statistics.median(vals), 2) if vals else None
+
+
 def _pct_pos(vals):
     vals = [v for v in vals if v is not None]
     return round(100.0 * sum(1 for v in vals if v > 0) / len(vals), 0) if vals else None
@@ -48,8 +53,10 @@ class EarningsSnapshot:
         return {
             "n": len(ev),
             "beat_rate": round(100.0 * len(beats) / len(ev), 0) if ev else None,
-            "d0_avg": _avg(d0), "d0_up_rate": _pct_pos(d0),
-            "d5_avg": _avg(d5), "d5_up_rate": _pct_pos(d5),
+            "d0_avg": _avg(d0), "d0_med": _med(d0), "d0_up_rate": _pct_pos(d0),
+            "d5_avg": _avg(d5), "d5_med": _med(d5), "d5_up_rate": _pct_pos(d5),
+            "d5_max": round(max([v for v in d5 if v is not None], default=0), 1) or None,
+            "d5_min": round(min([v for v in d5 if v is not None], default=0), 1) or None,
             "d0_abs_avg": _avg([abs(v) for v in d0 if v is not None]),
             "beat_d0_avg": _avg(beat_d0), "miss_d0_avg": _avg(miss_d0),
             "iv_crush_avg": _avg([e.get("iv_crush") for e in ev]),
@@ -82,8 +89,11 @@ class EarningsSnapshot:
         L += ["", "程序计算的统计:",
               f"  EPS 超预期比例 {s['beat_rate']}%  |  财报当日上涨比例 {s['d0_up_rate']}%"
               f"  |  +5日上涨比例 {s['d5_up_rate']}%",
-              f"  当日平均涨跌 {s['d0_avg']}%(绝对值均值 {s['d0_abs_avg']}%)"
-              f"  |  +5日平均 {s['d5_avg']}%",
+              f"  当日:中位数 {s['d0_med']}%  均值 {s['d0_avg']}%  (绝对值均值 {s['d0_abs_avg']}%)",
+              f"  +5日:中位数 {s['d5_med']}%  均值 {s['d5_avg']}%  "
+              f"(区间 {s['d5_min']}% ~ {s['d5_max']}%)",
+              "  ⚠️ 均值与中位数差异大时,说明分布被少数极端值主导 —— "
+              "以中位数和上涨比例判断典型情形,均值只说明尾部有多厚。",
               f"  超预期时当日均值 {s['beat_d0_avg']}%  |  不及预期时当日均值 {s['miss_d0_avg']}%",
               f"  财报前 IV 均值 {s['iv_pre_avg']}  |  平均 IV crush {s['iv_crush_avg']}"]
         return "\n".join(L)
