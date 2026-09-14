@@ -46,7 +46,8 @@
 | **P2 大师信号管线** | masters/run_masters.py:5 agents × (持仓+Top5) → site-data/masters/<date>.json;接进 8:41 wrapper;iMessage 摘要加一行"大师分歧" | P1 |
 | **P3 网站 v2** | 三页面静态站部署到现有 Netlify + **CF Access 门禁 + JWT 边缘校验** + 老站转 legacy 路径 | P2 |
 | **P4 回测实验室** | FastAPI(tunnel 按需启)+ 页面触发回测(Haiku/PEAD)+ 结果归档进站 | P3 |
-| **P5 期权回测(远期)** | OptRadar DuckDB 攒 3+ 个月期权链后,策略级期权回测(卖 strangle/价差胜率) | 数据积累 |
+| **P5 财报预测 schema(新,优先级提到 P4 之后)** | 建 `EarningsSnapshot`:把已有但未使用的期权维度喂进 LLM —— 财报日历的 `iv_rank`/`iv_percentile`/`option_volume`、财报历史的 `option_iv_crush`、`earnings_price_move` 的财报前后股价序列、OptRadar 累积的期权链快照。再用**历史财报回放**给 schema 打分(过去 N 次财报的方向准确率),形成校准闭环 | P4(回测框架已可复用) |
+| **P6 期权回测(远期)** | OptRadar DuckDB 攒 3+ 个月期权链后,策略级期权回测(卖 strangle/价差胜率) | 数据积累 |
 
 ## 4. Fork 治理
 
@@ -62,3 +63,15 @@
 | 回测 | API Haiku / PEAD-only | ~$2-5/次 / $0 |
 | 行情+基本面 | moomoo OpenD | $0 |
 | 托管 | Cloudflare Pages + Access | $0 |
+
+## 6. 方法论参考(2026-09-13)
+
+来源:@Balder13946731 关于 LLM 财报预测的公开说明。核心论点:
+**「没有结构性的输入就不会有结构性的输出」** —— 直接问 LLM「这个财报怎么看」无效,
+需要 schema 作为种子(含期权、订单流、历史),用同一 schema 重建历史输入,
+再以历史校准出预测规律,并监控提示词是否「强行记住不合理的记忆」以约束过拟合。
+
+**对本项目的诊断**:2026-09-13 的回测显示 BuffettAgent 对 RKLB 连续 67 周给出同一看空
+判断、跑输基准 59.75 个百分点。根因不是模型能力,而是 **schema 与标的错配** ——
+喂的是通用价值投资 schema(ROE/负债/安全边际),而 RKLB 是期权驱动的高成长标的。
+P5 即针对此:补期权维度 + 建历史评分闭环。缺口清单见上表(元学习与过拟合监控尚未实现)。
