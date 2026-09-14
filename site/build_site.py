@@ -74,6 +74,9 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 color:var(--dim)}
 .arch a:hover{color:var(--tx);border-color:var(--acc);text-decoration:none}
 .empty{color:var(--dim);font-size:14px}
+svg.nav{width:100%;height:150px;display:block;margin:6px 0 2px}
+svg.nav .zero{stroke:#30363d;stroke-dasharray:3 3;stroke-width:1}
+.card.bt .row:hover{background:none}
 .hist{padding:10px 0 4px;border-bottom:1px solid #1e222a;margin-bottom:4px}
 .hl{font-size:11px;color:var(--dim);margin-bottom:2px}
 svg.spark{width:100%;height:56px;display:block}
@@ -103,6 +106,21 @@ JS = """
 document.querySelectorAll('.row').forEach(r=>r.addEventListener('click',
  ()=>r.parentElement.classList.toggle('open')));
 """
+
+
+def load_backtests(limit: int = 6) -> list:
+    """Archived backtest results, newest file first."""
+    out = []
+    for f in sorted(glob.glob(os.path.join(ROOT, "site-data", "backtests", "*.json")),
+                    key=os.path.getmtime, reverse=True)[:limit]:
+        try:
+            d = json.load(open(f))
+        except (ValueError, OSError):
+            continue
+        base = os.path.basename(f)[:-5].split("_")
+        d["personas"] = base[1].replace("-", " + ") if len(base) > 1 else "?"
+        out.append(d)
+    return out
 
 
 def history_series() -> dict:
@@ -156,6 +174,42 @@ def spark(points: list, w: int = 300, h: int = 56) -> str:
             f"<span>{points[-1][0][5:]}</span></div></div>")
 
 
+def nav_chart(dates: list, nav: list, bench: list, w: int = 600, h: int = 150) -> str:
+    """Fund NAV vs benchmark, normalised to 100. Same hand-drawn approach as
+    the sparkline: text stays in HTML so nothing distorts when it stretches."""
+    if len(nav) < 2:
+        return ""
+    base_n, base_b = nav[0] or 1, (bench[0] if bench else 1) or 1
+    ns = [v / base_n * 100 for v in nav]
+    bs = [v / base_b * 100 for v in (bench or [])] or None
+    pool = ns + (bs or [])
+    lo, hi = min(pool), max(pool)
+    span = (hi - lo) or 1
+    pad = 8
+    iw, ih = w - pad * 2, h - pad * 2
+
+    def path_of(vals):
+        pts = []
+        n = len(vals)
+        for i, v in enumerate(vals):
+            x = pad + iw * i / (n - 1)
+            y = pad + ih * (1 - (v - lo) / span)
+            pts.append(f"{'M' if i == 0 else 'L'}{x:.1f},{y:.1f}")
+        return " ".join(pts)
+
+    hundred_y = pad + ih * (1 - (100 - lo) / span)
+    out = [f"<svg class='nav' viewBox='0 0 {w} {h}' preserveAspectRatio='none'>",
+           f"<line x1='{pad}' y1='{hundred_y:.1f}' x2='{pad+iw}' y2='{hundred_y:.1f}' class='zero'/>"]
+    if bs:
+        out.append(f"<path d='{path_of(bs)}' fill='none' stroke='#6e7681' "
+                   f"stroke-width='1.5' stroke-dasharray='4 3' vector-effect='non-scaling-stroke'/>")
+    final = ns[-1]
+    color = "bull" if final >= 100 else "bear"
+    out.append(f"<path d='{path_of(ns)}' fill='none' stroke='var(--{color})' "
+               f"stroke-width='2' vector-effect='non-scaling-stroke'/></svg>")
+    return "".join(out)
+
+
 def e(x) -> str:
     return html.escape(str(x)) if x is not None else ""
 
@@ -175,7 +229,7 @@ def bar(v: float) -> str:
 
 
 def render(date: str, masters: dict | None, anomalies: list,
-           dates: list[str], series: dict) -> str:
+           dates: list[str], series: dict, backtests: list) -> str:
     p = [f"<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>",
          "<meta name='viewport' content='width=device-width,initial-scale=1'>",
          "<meta name='robots' content='noindex'>",
@@ -229,6 +283,27 @@ def render(date: str, masters: dict | None, anomalies: list,
     else:
         p.append("<p class='empty'>今日无触发。</p>")
 
+    if backtests:
+        p.append("<h2>回测</h2>")
+        p.append("<p class='sub' style='margin:-6px 0 14px'>同一条 run_cycle 在历史上"
+                 "回放,数据为 point-in-time(不含未来财报)。实线 = 策略净值,"
+                 "虚线 = 基准。</p>")
+        for b in backtests:
+            m = b["metrics"]
+            tot, exc = m["total_return_pct"], m["excess_return_pct"]
+            p.append("<div class='card bt'><div class='row' style='cursor:default'>"
+                     f"<span class='tk'>{e('+'.join(b['universe']))}</span>"
+                     f"<span class='tag'>{e(b['personas'])}</span>"
+                     f"<span class='val {cls(tot)}'>{tot:+.1%}</span>"
+                     f"<span class='votes'>基准 {m['benchmark_return_pct']:+.1%}</span>"
+                     f"<span class='tag'>超额 {exc:+.1%}</span></div>"
+                     "<div class='detail' style='display:block'>"
+                     f"{nav_chart(b['dates'], b['nav'], b.get('benchmark_nav') or [])}"
+                     f"<div class='axl'><span>{e(b['start'])}</span>"
+                     f"<span>回撤 {m['max_drawdown_pct']:.1%} · 夏普 "
+                     f"{m['sharpe_ratio']:.2f} · {m['n_cycles']} 周期</span>"
+                     f"<span>{e(b['end'])}</span></div></div></div>")
+
     if dates:
         p.append("<h2>历史</h2><div class='arch'>")
         for d in dates[:30]:
@@ -261,6 +336,7 @@ def main() -> int:
     dates = [os.path.basename(f)[:10] for f in files]
 
     series = history_series()
+    backtests = load_backtests()
     os.makedirs(OUT, exist_ok=True)
     newest = dates[0]
     latest_date = want if want in dates else newest
@@ -275,7 +351,7 @@ def main() -> int:
                 anomalies = json.load(open(radar_path)).get("anomalies", [])
             except (ValueError, OSError):
                 anomalies = []
-        page = render(d, masters, anomalies, dates, series)
+        page = render(d, masters, anomalies, dates, series, backtests)
         with open(os.path.join(OUT, f"{d}.html"), "w") as fh:
             fh.write(page)
         if d == latest_date:
