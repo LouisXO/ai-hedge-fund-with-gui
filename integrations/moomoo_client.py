@@ -79,6 +79,7 @@ class _RateLimiter:
 
 # headroom under the documented ceilings
 _LIMITS = {"financials": _RateLimiter(12), "balance": _RateLimiter(12),
+           "pricemove": _RateLimiter(12),
            "calendar": _RateLimiter(10),
            "filings": _RateLimiter(12),
            "ratios": _RateLimiter(12), "cashflow": _RateLimiter(12),
@@ -224,6 +225,114 @@ class MoomooDataClient:
                 return {}
             return {r.get("security"): r for r in df.to_dict("records")}
         return _cached((begin, "calendar"), fetch)
+
+    def _price_move(self, code: str) -> dict:
+        """{period_text: [rows -5..+5]} — price and option IV/HV around each
+        earnings print. This is the raw material for an earnings-specific
+        schema: pre-event IV ramp, event-day move, post-event IV crush."""
+        def fetch():
+            try:
+                _alarm(self._t)
+                ret, df = self._q.get_financials_earnings_price_move(code)
+            except TimeoutError:
+                raise MoomooError(f"pricemove timeout for {code}")
+            finally:
+                _disarm()
+            if ret != RET_OK or df is None or not len(df):
+                return {}
+            out: dict[str, list] = {}
+            for r in df.to_dict("records"):
+                out.setdefault(r.get("period_text"), []).append(r)
+            for k in out:
+                out[k].sort(key=lambda r: r.get("day_offset", 0))
+            return out
+        return _cached((code, "pricemove"), fetch)
+
+    def earnings_events(self, ticker: str, as_of: str | None = None,
+                        limit: int = 12) -> list[dict]:
+        """Historical earnings events enriched with the option dimensions.
+
+        Everything here was observable AFTER each event, so it is training
+        material — the caller must not leak the outcome of an event that has
+        not happened yet. Honors `as_of`: only events already filed are returned.
+        """
+        code = _norm(ticker)
+        try:
+            filings = self._filing_dates(code)
+            moves = self._price_move(code)
+        except MoomooError:
+            return []
+        income = {r.get("period_text"): r for r in self._financials(code)}
+
+        events = []
+        for pt, meta in sorted(filings.items(), key=lambda kv: kv[1]["filing_date"],
+                               reverse=True):
+            filed = meta["filing_date"]
+            if as_of and filed > as_of:
+                continue
+            rows = moves.get(pt) or []
+            by_off = {r.get("day_offset"): r for r in rows}
+            pre, day0 = by_off.get(-1), by_off.get(0)
+            if not day0:
+                continue
+
+            def chg(off):
+                r, base = by_off.get(off), day0.get("last_close_price")
+                if not r or not base:
+                    return None
+                return (r.get("close_price") / base - 1) * 100
+
+            cal = {}
+            try:
+                cal = self._calendar_window(filed).get(code) or {}
+            except MoomooError:
+                pass
+            inc = _items(income.get(pt, {}))
+            rev_yoy = _f(inc, 8001, "yoy")
+
+            events.append({
+                "period": pt,
+                "period_end": (income.get(pt) or {}).get("date_time_str"),
+                "filed": filed,
+                "window": meta.get("window"),
+                # Pre-event option state, known BEFORE the print.
+                # NOTE: the calendar's iv_rank / iv_percentile / option_volume
+                # are the ticker's *current* values — identical across every
+                # historical row — so they are deliberately NOT recorded here.
+                # Only iv/hv sampled at day -1 are genuinely point-in-time.
+                "iv_pre": _num((pre or {}).get("option_iv")),
+                "hv_pre": _num((pre or {}).get("option_hv")),
+                "eps_est": _num(cal.get("eps_predict")),
+                "rev_est": _num(cal.get("revenue_predict")),
+                "rev_growth_yoy": rev_yoy,
+                # outcome (known AFTER)
+                "eps_actual": _num(cal.get("eps_actual")),
+                "rev_actual": _num(cal.get("revenue_actual")),
+                "eps_surprise": _surprise(_num(cal.get("eps_actual")),
+                                          _num(cal.get("eps_predict"))),
+                "rev_surprise": _surprise(_num(cal.get("revenue_actual")),
+                                          _num(cal.get("revenue_predict"))),
+                "move_d0": chg(0), "move_d1": chg(1),
+                "move_d3": chg(3), "move_d5": chg(5),
+                "iv_crush": meta.get("iv_crush"),
+            })
+            if len(events) >= limit:
+                break
+
+        # IV/HV richness, plus a point-in-time IV percentile computed from the
+        # ticker's OWN prior prints (the vendor's iv_rank cannot be used — see
+        # the note above). Events are newest-first, so "prior" means later in
+        # the list.
+        for i, ev in enumerate(events):
+            iv, hv = ev["iv_pre"], ev["hv_pre"]
+            ev["iv_hv_ratio"] = round(iv / hv, 2) if (iv and hv) else None
+            prior = [e["iv_pre"] for e in events[i + 1:] if e["iv_pre"]]
+            if iv and len(prior) >= 2:
+                ev["iv_pctile_pit"] = round(
+                    100.0 * sum(1 for v in prior if v < iv) / len(prior), 1)
+            else:
+                ev["iv_pctile_pit"] = None
+        return events
 
     def _filing_dates(self, code: str) -> dict:
         """{period_text: {filing_date, window, iv_crush}} from the earnings
