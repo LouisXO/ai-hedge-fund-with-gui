@@ -249,7 +249,7 @@ class MoomooDataClient:
         return _cached((code, "pricemove"), fetch)
 
     def earnings_events(self, ticker: str, as_of: str | None = None,
-                        limit: int = 12) -> list[dict]:
+                        limit: int = 12, fast: bool = False) -> list[dict]:
         """Historical earnings events enriched with the option dimensions.
 
         Everything here was observable AFTER each event, so it is training
@@ -262,7 +262,11 @@ class MoomooDataClient:
             moves = self._price_move(code)
         except MoomooError:
             return []
-        income = {r.get("period_text"): r for r in self._financials(code)}
+        # fast mode skips the income statement and the per-print calendar
+        # lookups. Those supply EPS/revenue surprise; the volatility stats
+        # (implied vs realised, IV crush) need neither, and the calendar is
+        # one call PER PRINT — the whole reason a full-universe crawl crawls.
+        income = {} if fast else {r.get("period_text"): r for r in self._financials(code)}
 
         events = []
         for pt, meta in sorted(filings.items(), key=lambda kv: kv[1]["filing_date"],
@@ -283,10 +287,11 @@ class MoomooDataClient:
                 return (r.get("close_price") / base - 1) * 100
 
             cal = {}
-            try:
-                cal = self._calendar_window(filed).get(code) or {}
-            except MoomooError:
-                pass
+            if not fast:
+                try:
+                    cal = self._calendar_window(filed).get(code) or {}
+                except MoomooError:
+                    pass
             inc = _items(income.get(pt, {}))
             rev_yoy = _f(inc, 8001, "yoy")
 

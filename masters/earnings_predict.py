@@ -35,7 +35,9 @@ VOL_SYSTEM = """你是期权波动率交易员(Euan Sinclair 那一派)。你不
   少数时候大亏(负偏)—— 这种情况要明确指出尾部风险。
 - IV crush 的历史幅度决定卖方能拿多少;近几期 crush 若在收敛,卖方边际变差。
 - IV/HV 比值说明当前溢价水平;IV 历史分位说明现在处在自身的什么位置。
-- 样本量小时要保守:n<6 时除非极端,否则给 neutral。
+- 样本 n>=4 且中位数口径有明确方向时就表态;只有 n<4、或中位数比值在
+  0.9~1.1 之间且没有其他证据时,才给 neutral。不要因为谨慎而放弃所有判断 ——
+  一个从不表态的模型没有价值。
 
 严格只输出 JSON:
 {"stance": "short_vol|long_vol|neutral",
@@ -204,14 +206,35 @@ def score_vol_one(ticker, args, client, llm) -> list:
         stance = p["stance"]
         hit = ((stance == "long_vol" and rich) or
                (stance == "short_vol" and not rich))
+        rs = rule_stance(snap)
+        rule_hit = ((rs == "long_vol" and rich) or (rs == "short_vol" and not rich))
         rows.append(dict(ticker=ticker, period=ev["period"], stance=stance,
                          conf=p["confidence"], implied=implied,
                          actual=round(abs(actual), 1), rich=rich, hit=hit,
+                         rule=rs, rule_hit=rule_hit,
                          pred_move=p.get("expected_move_5d_pct"),
                          edge=p.get("edge_reason")))
-        print(f"  {ticker:5} {ev['period']:9} {stance:10} 隐含{implied:5.1f}% "
-              f"实际{abs(actual):5.1f}%  {'✅' if hit else '❌'}", flush=True)
+        print(f"  {ticker:5} {ev['period']:9} LLM {stance:10} 规则 {rs:10} "
+              f"隐含{implied:5.1f}% 实际{abs(actual):5.1f}%  "
+              f"LLM{'✅' if hit else '❌'} 规则{'✅' if rule_hit else '❌'}", flush=True)
     return rows
+
+
+def rule_stance(snap) -> str:
+    """Rule-only baseline: median realised/implied ratio, nothing else.
+
+    The LLM has to beat THIS, not just a coin flip — otherwise the persona is
+    an expensive way to compute a ratio.
+    """
+    v = snap.vol_stats
+    r, n = v.get("rv_iv_ratio_med"), v.get("vol_n") or 0
+    if not r or n < 4:
+        return "neutral"
+    if r < 0.9:
+        return "short_vol"
+    if r > 1.1:
+        return "long_vol"
+    return "neutral"
 
 
 def cmd_vol(args, client, llm) -> int:
@@ -233,7 +256,12 @@ def cmd_vol(args, client, llm) -> int:
     print(f"  表态 {len(acted)}/{len(rows)} 次(其余 neutral)")
     print(f"  立场命中率        {acc:.0f}%")
     print(f"  无脑「{naive_side}」基准  {naive:.0f}%   (实际波动超隐含的比例 {rich_rate:.0f}%)")
-    print(f"  → {'✅ 优于' if acc > naive else '❌ 未优于'}基准 {acc-naive:+.0f}pp")
+    ruled = [r for r in rows if r["rule"] != "neutral"]
+    rn = len(ruled) or 1
+    racc = 100.0 * sum(1 for r in ruled if r["rule_hit"]) / rn
+    print(f"  纯规则基准        {racc:.0f}%   (表态 {len(ruled)}/{len(rows)} 次)")
+    print(f"  → vs 无脑基准 {acc-naive:+.0f}pp   |   vs 纯规则 {acc-racc:+.0f}pp")
+    print(f"  {'✅ LLM 相对规则有增值' if acc > racc else '❌ LLM 未超过纯规则 — persona 不值这个成本'}")
     from collections import Counter
     print(f"  立场分布: {dict(Counter(r['stance'] for r in rows))}")
     if len(acted) < 20:
