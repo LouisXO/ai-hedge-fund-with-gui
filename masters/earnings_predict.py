@@ -67,24 +67,24 @@ def cmd_predict(args, client, llm) -> int:
     return 0
 
 
-def cmd_score(args, client, llm) -> int:
-    """Replay: for each past print, build the schema as it looked the day
-    before, predict, then compare with what actually happened."""
-    events = client.earnings_events(args.ticker, limit=args.limit + args.n)
+def score_one(ticker, args, client, llm) -> list:
+    """Replay one ticker: for each past print, build the schema as it looked
+    the day before, predict, then compare with what actually happened."""
+    events = client.earnings_events(ticker, limit=args.limit + args.n)
     if len(events) < args.n + 3:
-        print(f"{args.ticker}: 历史事件不足({len(events)}),无法回放 {args.n} 次")
-        return 1
+        print(f"  {ticker}: 历史事件不足({len(events)}),跳过")
+        return []
 
-    rows, t0 = [], time.time()
+    rows = []
     for ev in events[:args.n]:
         as_of = (dt.date.fromisoformat(ev["filed"]) - dt.timedelta(days=1)).isoformat()
-        snap = build_earnings_snapshot(args.ticker, as_of, client, limit=args.limit)
+        snap = build_earnings_snapshot(ticker, as_of, client, limit=args.limit)
         if len(snap.events) < 3:
             continue
         try:
             p = ask(llm, snap.render())
         except Exception as exc:
-            print(f"  {ev['period']}: 预测失败 {str(exc)[:80]}")
+            print(f"  {ticker} {ev['period']}: 预测失败 {str(exc)[:80]}", flush=True)
             continue
         actual_d0, actual_d5 = ev.get("move_d0"), ev.get("move_d5")
         pred_dir = p["direction"]
@@ -94,38 +94,63 @@ def cmd_score(args, client, llm) -> int:
         hit_d5 = (actual_d5 is not None and
                   ((pred_dir == "bullish" and actual_d5 > 0) or
                    (pred_dir == "bearish" and actual_d5 < 0)))
-        rows.append(dict(period=ev["period"], filed=ev["filed"], pred=pred_dir,
+        rows.append(dict(ticker=ticker, period=ev["period"], filed=ev["filed"], pred=pred_dir,
                          conf=p["confidence"],
                          pred_d0=p["expected_move_d0_pct"], actual_d0=actual_d0,
                          pred_d5=p["expected_move_d5_pct"], actual_d5=actual_d5,
                          hit_d0=hit_d0, hit_d5=hit_d5,
                          pattern=p.get("key_pattern")))
-        print(f"  {ev['period']:9} 预测 {pred_dir:8} 当日 {p['expected_move_d0_pct']:+5.1f}% "
+        print(f"  {ticker:5} {ev['period']:9} 预测 {pred_dir:8} 当日 {p['expected_move_d0_pct']:+5.1f}% "
               f"实际 {actual_d0:+5.1f}%  {'✅' if hit_d0 else '❌'}   "
               f"+5日 预测 {p['expected_move_d5_pct']:+6.1f}% 实际 {actual_d5:+6.1f}%  "
               f"{'✅' if hit_d5 else '❌'}", flush=True)
 
-    if not rows:
+    return rows
+
+
+def cmd_score(args, client, llm) -> int:
+    tickers = [t.strip().upper() for t in args.ticker.split(",") if t.strip()]
+    all_rows, t0 = [], time.time()
+    for t in tickers:
+        all_rows.extend(score_one(t, args, client, llm))
+
+    if not all_rows:
         print("无有效回放结果")
         return 1
-    directional = [r for r in rows if r["pred"] != "neutral"]
-    n_d = len(directional) or 1
-    acc0 = 100.0 * sum(1 for r in directional if r["hit_d0"]) / n_d
-    acc5 = 100.0 * sum(1 for r in directional if r["hit_d5"]) / n_d
-    print(f"\n=== 回放评分 ({len(rows)} 次, {time.time()-t0:.0f}s) ===")
-    print(f"  给出方向判断 {len(directional)}/{len(rows)} 次(其余中性)")
-    print(f"  当日方向命中率  {acc0:.0f}%   (随机基准 50%)")
-    print(f"  +5日方向命中率  {acc5:.0f}%")
-    print("  ⚠️  样本极小,命中率仅供参考,不足以证明有效性" if len(directional) < 10 else "")
+
+    def summarize(rows):
+        directional = [r for r in rows if r["pred"] != "neutral"]
+        n = len(directional)
+        if not n:
+            return None
+        return dict(n_total=len(rows), n_dir=n,
+                    acc_d0=round(100.0 * sum(1 for r in directional if r["hit_d0"]) / n, 1),
+                    acc_d5=round(100.0 * sum(1 for r in directional if r["hit_d5"]) / n, 1))
+
+    print(f"\n=== 大样本回放评分 ({len(all_rows)} 次, {time.time()-t0:.0f}s) ===")
+    print(f"{'标的':<7}{'样本':>5}{'方向判断':>9}{'当日命中':>9}{'+5日命中':>10}")
+    for t in tickers:
+        sub = [r for r in all_rows if r["ticker"] == t]
+        st = summarize(sub)
+        if st:
+            print(f"{t:<7}{st['n_total']:>5}{st['n_dir']:>9}{st['acc_d0']:>8.0f}%{st['acc_d5']:>9.0f}%")
+        elif sub:
+            print(f"{t:<7}{len(sub):>5}{0:>9}{'-':>9}{'-':>10}  (全部中性)")
+
+    tot = summarize(all_rows)
+    print("-" * 42)
+    print(f"{'合计':<7}{tot['n_total']:>5}{tot['n_dir']:>9}{tot['acc_d0']:>8.0f}%{tot['acc_d5']:>9.0f}%")
+    print(f"\n随机基准 50%。给出方向判断 {tot['n_dir']}/{tot['n_total']} 次,其余中性。")
+    if tot["n_dir"] < 20:
+        print("⚠️  方向样本 <20,命中率仍属噪声,不足以判定有效性。")
 
     out_dir = os.path.join(ROOT, "site-data", "earnings")
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, f"score_{args.ticker}.json")
+    path = os.path.join(out_dir, "score_batch.json")
     with open(path, "w") as f:
-        json.dump({"ticker": args.ticker, "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
-                   "n": len(rows), "directional": len(directional),
-                   "acc_d0_pct": round(acc0, 1), "acc_d5_pct": round(acc5, 1),
-                   "rows": rows}, f, ensure_ascii=False, indent=1)
+        json.dump({"generated_at": dt.datetime.now().isoformat(timespec="seconds"),
+                   "tickers": tickers, "summary": tot, "rows": all_rows},
+                  f, ensure_ascii=False, indent=1)
     print(f"\n→ {path}")
     return 0
 
@@ -133,7 +158,7 @@ def cmd_score(args, client, llm) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["predict", "score"])
-    ap.add_argument("--ticker", default="RKLB")
+    ap.add_argument("--ticker", default="RKLB", help="单票或逗号分隔多票")
     ap.add_argument("--as-of", default=None)
     ap.add_argument("--limit", type=int, default=10, help="schema 里保留的历史事件数")
     ap.add_argument("--n", type=int, default=6, help="回放次数")
