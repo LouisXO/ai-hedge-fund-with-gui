@@ -26,7 +26,8 @@ PERSONA_CN = {"buffett": "Buffett", "munger": "Munger", "graham": "Graham",
 CSS = """
 :root{--bg:#0f1115;--card:#171a21;--line:#262b36;--tx:#e6e8ec;--dim:#9aa3b2;
 --bull:#3fb950;--bear:#f85149;--neut:#8b949e;--acc:#58a6ff}
-*{box-sizing:border-box}
+*{box-sizing:border-box;min-width:0}
+html,body{overflow-x:hidden;max-width:100%}
 body{margin:0;background:var(--bg);color:var(--tx);
 font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif}
 .wrap{max-width:900px;margin:0 auto;padding:32px 20px 80px}
@@ -73,12 +74,20 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 color:var(--dim)}
 .arch a:hover{color:var(--tx);border-color:var(--acc);text-decoration:none}
 .empty{color:var(--dim);font-size:14px}
-details.orig{margin-top:8px}
-details.orig summary{cursor:pointer;font-size:11px;color:#6e7681;list-style:none;
-display:inline-block;border:1px solid var(--line);border-radius:4px;padding:2px 8px}
-details.orig summary::-webkit-details-marker{display:none}
-details.orig summary:hover{color:var(--tx);border-color:var(--acc)}
-.rz.en{margin-top:8px;color:#7d8590;font-size:12.5px;font-style:italic}
+@media(max-width:560px){
+ .wrap{padding:20px 12px 60px;max-width:100%}
+ h1{font-size:19px}
+ .sub{font-size:12px}
+ .row{flex-wrap:wrap;gap:6px 10px;padding:12px 13px}
+ .tk{min-width:0;flex:1 1 auto;font-size:15px}
+ .val{min-width:0;flex:0 0 auto;font-size:15px}
+ .bar{order:5;flex:1 0 100%;min-width:0;margin:2px 0}
+ .votes{order:6;min-width:0;flex:1 1 auto;text-align:left;font-size:11px}
+ .tag{order:7;flex:0 0 auto;font-size:10px}
+ .detail{padding:4px 13px 12px}
+ .rz{font-size:13.5px}
+ .oph{flex-wrap:wrap}
+}
 """
 
 JS = """
@@ -173,32 +182,43 @@ def render(date: str, masters: dict | None, anomalies: list, dates: list[str]) -
 
 
 def main() -> int:
-    date = sys.argv[1] if len(sys.argv) > 1 else dt.date.today().isoformat()
+    """Build a page for every date that has master data, plus index.html.
 
-    def latest(pattern: str, d: str):
-        path = pattern.format(d=d)
-        if os.path.exists(path):
-            return json.load(open(path)), d
-        cands = sorted(glob.glob(pattern.format(d="*")))
-        if not cands:
-            return None, d
-        return json.load(open(cands[-1])), os.path.basename(cands[-1])[:10]
+    Archive links must resolve — generating only today's page left every
+    historical link 404ing.
+    """
+    want = sys.argv[1] if len(sys.argv) > 1 else dt.date.today().isoformat()
 
-    masters, mdate = latest(os.path.join(MASTERS, "{d}.json"), date)
-    radar, _ = latest(os.path.join(RADAR, "{d}.json"), date)
-    anomalies = (radar or {}).get("anomalies", [])
-    use = mdate if masters else date
-
-    dates = sorted((os.path.basename(f)[:10] for f in glob.glob(os.path.join(MASTERS, "*.json"))),
-                   reverse=True)
-    page = render(use, masters, anomalies, dates)
+    files = sorted(glob.glob(os.path.join(MASTERS, "*.json")), reverse=True)
+    if not files:
+        print("no master data — nothing to build")
+        return 1
+    dates = [os.path.basename(f)[:10] for f in files]
 
     os.makedirs(OUT, exist_ok=True)
-    for name in ("index.html", f"{use}.html"):
-        with open(os.path.join(OUT, name), "w") as f:
-            f.write(page)
-    n = len(masters["tickers"]) if masters else 0
-    print(f"built {OUT}/index.html  (date={use}, {n} tickers, {len(anomalies)} anomalies)")
+    newest = dates[0]
+    latest_date = want if want in dates else newest
+
+    built = 0
+    for f, d in zip(files, dates):
+        masters = json.load(open(f))
+        radar_path = os.path.join(RADAR, f"{d}.json")
+        anomalies = []
+        if os.path.exists(radar_path):
+            try:
+                anomalies = json.load(open(radar_path)).get("anomalies", [])
+            except (ValueError, OSError):
+                anomalies = []
+        page = render(d, masters, anomalies, dates)
+        with open(os.path.join(OUT, f"{d}.html"), "w") as fh:
+            fh.write(page)
+        if d == latest_date:
+            with open(os.path.join(OUT, "index.html"), "w") as fh:
+                fh.write(page)
+        built += 1
+
+    n = len(json.load(open(files[0]))["tickers"])
+    print(f"built {built} page(s) in {OUT}  (index -> {latest_date}, {n} tickers)")
     return 0
 
 
