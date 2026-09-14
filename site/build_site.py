@@ -74,6 +74,15 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 color:var(--dim)}
 .arch a:hover{color:var(--tx);border-color:var(--acc);text-decoration:none}
 .empty{color:var(--dim);font-size:14px}
+.hist{padding:10px 0 4px;border-bottom:1px solid #1e222a;margin-bottom:4px}
+.hl{font-size:11px;color:var(--dim);margin-bottom:2px}
+svg.spark{width:100%;height:56px;display:block}
+svg.spark .zero{stroke:#30363d;stroke-dasharray:3 3;stroke-width:1}
+.chart{margin-top:2px}
+.axl{display:flex;justify-content:space-between;font-size:11px;color:#6e7681;
+margin-top:2px;font-variant-numeric:tabular-nums}
+.axl .bull{color:var(--bull)}.axl .bear{color:var(--bear)}.axl .neut{color:var(--neut)}
+.empty2{display:none}
 @media(max-width:560px){
  .wrap{padding:20px 12px 60px;max-width:100%}
  h1{font-size:19px}
@@ -96,6 +105,57 @@ document.querySelectorAll('.row').forEach(r=>r.addEventListener('click',
 """
 
 
+def history_series() -> dict:
+    """{ticker: [(date, consensus, disagreement)]} across every archived day."""
+    series: dict[str, list] = {}
+    for f in sorted(glob.glob(os.path.join(MASTERS, "*.json"))):
+        d = os.path.basename(f)[:10]
+        try:
+            data = json.load(open(f))
+        except (ValueError, OSError):
+            continue
+        for t in data.get("tickers", []):
+            if t.get("consensus") is None:
+                continue
+            series.setdefault(t["ticker"], []).append(
+                (d, t["consensus"], t.get("disagreement") or 0.0))
+    return series
+
+
+def spark(points: list, w: int = 300, h: int = 56) -> str:
+    """Consensus-over-time line. The SVG stretches to the container width, so
+    all text lives in HTML around it — text inside a non-uniformly scaled
+    viewBox gets distorted."""
+    if len(points) < 2:
+        return ""
+    pad = 4
+    inner_w, inner_h = w - pad * 2, h - pad * 2
+    n = len(points)
+
+    def xy(i, v):
+        x = pad + (inner_w * i / (n - 1))
+        y = pad + inner_h * (1 - (max(-1.0, min(1.0, v)) + 1) / 2)
+        return x, y
+
+    coords = [xy(i, v) for i, (_, v, _) in enumerate(points)]
+    path = " ".join(f"{'M' if i == 0 else 'L'}{x:.1f},{y:.1f}"
+                    for i, (x, y) in enumerate(coords))
+    zero_y = pad + inner_h / 2
+    last_v = points[-1][1]
+    dots = "".join(
+        f"<circle cx='{x:.1f}' cy='{y:.1f}' r='3' fill='var(--{cls(points[i][1])})'"
+        f" vector-effect='non-scaling-stroke'/>"
+        for i, (x, y) in enumerate(coords))
+    svg = (f"<svg class='spark' viewBox='0 0 {w} {h}' preserveAspectRatio='none'>"
+           f"<line x1='{pad}' y1='{zero_y}' x2='{pad + inner_w}' y2='{zero_y}' class='zero'/>"
+           f"<path d='{path}' fill='none' stroke='var(--{cls(last_v)})' stroke-width='2'"
+           f" stroke-linejoin='round' vector-effect='non-scaling-stroke'/>{dots}</svg>")
+    return (f"<div class='chart'>{svg}"
+            f"<div class='axl'><span>{points[0][0][5:]}</span>"
+            f"<span class='{cls(last_v)}'>最新 {last_v:+.2f}</span>"
+            f"<span>{points[-1][0][5:]}</span></div></div>")
+
+
 def e(x) -> str:
     return html.escape(str(x)) if x is not None else ""
 
@@ -114,7 +174,8 @@ def bar(v: float) -> str:
     return f'<div class="bar"><u></u><i class="{cls(v)}-bg" style="{style}"></i></div>'
 
 
-def render(date: str, masters: dict | None, anomalies: list, dates: list[str]) -> str:
+def render(date: str, masters: dict | None, anomalies: list,
+           dates: list[str], series: dict) -> str:
     p = [f"<!DOCTYPE html><html lang='zh'><head><meta charset='utf-8'>",
          "<meta name='viewport' content='width=device-width,initial-scale=1'>",
          "<meta name='robots' content='noindex'>",
@@ -141,6 +202,10 @@ def render(date: str, masters: dict | None, anomalies: list, dates: list[str]) -
             p.append(f"<span class='votes'>{t['bulls']}多 {t['bears']}空</span>")
             p.append(f"<span class='tag'>分歧 {t['disagreement']:.2f}</span>")
             p.append("</div><div class='detail'>")
+            hist = series.get(t["ticker"], [])
+            if len(hist) >= 2:
+                p.append(f"<div class='hist'><div class='hl'>共识走势 "
+                         f"({len(hist)} 日)</div>{spark(hist)}</div>")
             for s in sorted(votes, key=lambda x: -x["value"]):
                 cn, en = s.get("reasoning_cn"), s.get("reasoning") or ""
                 body = f"<div class='rz'>{e(cn or en)}</div>"
@@ -195,6 +260,7 @@ def main() -> int:
         return 1
     dates = [os.path.basename(f)[:10] for f in files]
 
+    series = history_series()
     os.makedirs(OUT, exist_ok=True)
     newest = dates[0]
     latest_date = want if want in dates else newest
@@ -209,7 +275,7 @@ def main() -> int:
                 anomalies = json.load(open(radar_path)).get("anomalies", [])
             except (ValueError, OSError):
                 anomalies = []
-        page = render(d, masters, anomalies, dates)
+        page = render(d, masters, anomalies, dates, series)
         with open(os.path.join(OUT, f"{d}.html"), "w") as fh:
             fh.write(page)
         if d == latest_date:
