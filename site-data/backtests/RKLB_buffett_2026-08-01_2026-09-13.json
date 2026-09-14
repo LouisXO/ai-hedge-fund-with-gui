@@ -1,0 +1,695 @@
+{
+ "fund": "moomoo-backtest",
+ "start": "2026-08-07",
+ "end": "2026-09-11",
+ "rebalance": "weekly",
+ "benchmark": "SPY",
+ "universe": [
+  "RKLB"
+ ],
+ "capital": 100000.0,
+ "dates": [
+  "2026-08-07",
+  "2026-08-14",
+  "2026-08-21",
+  "2026-08-28",
+  "2026-09-04",
+  "2026-09-11"
+ ],
+ "nav": [
+  100000.0,
+  100776.58,
+  103180.42000000001,
+  106084.32,
+  106137.75000000003,
+  106677.47000000003
+ ],
+ "benchmark_nav": [
+  100000.0,
+  100398.31363318936,
+  99024.90753433516,
+  99494.34860202261,
+  99602.97959289243,
+  98839.9762046401
+ ],
+ "metrics": {
+  "total_return_pct": 0.066775,
+  "annualized_return_pct": 0.963174,
+  "sharpe_ratio": 6.4752,
+  "max_drawdown_pct": 0.0,
+  "benchmark_return_pct": -0.0116,
+  "excess_return_pct": 0.078375,
+  "n_cycles": 6,
+  "n_orders": 6
+ },
+ "records": [
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-08-07",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "buffett",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 82.83
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "buffett",
+       "ticker": "RKLB",
+       "date": "2026-08-07",
+       "value": -0.78,
+       "reasoning": "Rocket Lab is a fine piece of engineering and a lousy piece of arithmetic — nine straight periods of losses, average ROE of negative 31 percent, and free cash flow that has never once been positive. I'll grant that the trend is the right direction: gross margin has climbed from 27 to 38 percent, revenue is growing 60 percent, debt-to-equity has fallen from 2.10 to 0.25, and the current ratio of 4.47 means nobody is going broke soon — but that book value per share compounding from 0.64 to 3.78 came mostly from selling stock, not from earning money, and that's the shareholders' pocket paying for it. The trouble is the price: $49.6 billion for a company with no earnings, no P/E to speak of, and still burning cash at the operating line is paying today for perfection a decade out. I don't know how to value a business by its enthusiasm, and I'd rather own a boring toll bridge that earns than a beautiful rocket that doesn't — so this one goes in the too-hard pile at a price I'd call a certainty of loss dressed up as possibility.",
+       "components": {},
+       "metadata": {
+        "signal": "bearish",
+        "confidence": 78.0,
+        "model": "opus",
+        "prompt_key": "d57e646dcba292c60a5e3b02",
+        "snapshot_hash": "e55f1c434a661a241ff06259",
+        "cached": true,
+        "abstained": false
+       }
+      }
+     ],
+     "convictions": {
+      "RKLB": -0.78
+     },
+     "weights": {
+      "RKLB": -1.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": -1.0
+   },
+   "clamps": [
+    {
+     "limit": "max_position_pct",
+     "ticker": "RKLB",
+     "before": -1.0,
+     "after": -0.25
+    }
+   ],
+   "final_weights": {
+    "RKLB": -0.25
+   },
+   "equity_before": 100000.0,
+   "cash_before": 100000.0,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 301,
+     "price": 82.83
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 301,
+     "price": 82.83
+    }
+   ],
+   "positions": {
+    "RKLB": -301
+   },
+   "cash": 124931.83,
+   "nav": 100000.0
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-08-14",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "buffett",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 80.25
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "buffett",
+       "ticker": "RKLB",
+       "date": "2026-08-14",
+       "value": -0.82,
+       "reasoning": "I don't know how to value a rocket company that has never earned a dime, and the numbers tell me why: return on equity has been negative in every period shown, net margins average minus thirty-five percent, and free cash flow per share is red from top to bottom. The book value growth isn't management compounding earnings — with losses this steady, that equity came from selling stock, which is also how the debt-to-equity fell from 2.10 to 0.20; shareholders paid for that tidy balance sheet. I'll grant the business is improving — gross margin up from 27 to 36 percent, revenue growing better than 60 percent, losses narrowing — but a 48 billion dollar price tag on a company with no E in the P/E is a price that requires everything to go right for a decade. I'd rather own a boring business earning real money than pay that toll booth in advance.",
+       "components": {},
+       "metadata": {
+        "signal": "bearish",
+        "confidence": 82.0,
+        "model": "opus",
+        "prompt_key": "4d50bf37dfffafeebe17f388",
+        "snapshot_hash": "ab0e095a22dac20f2b4c1125",
+        "cached": true,
+        "abstained": false
+       }
+      }
+     ],
+     "convictions": {
+      "RKLB": -0.82
+     },
+     "weights": {
+      "RKLB": -1.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": -1.0
+   },
+   "clamps": [
+    {
+     "limit": "max_position_pct",
+     "ticker": "RKLB",
+     "before": -1.0,
+     "after": -0.25
+    }
+   ],
+   "final_weights": {
+    "RKLB": -0.25
+   },
+   "equity_before": 100776.58,
+   "cash_before": 124931.83,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 12,
+     "price": 80.25
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 12,
+     "price": 80.25
+    }
+   ],
+   "positions": {
+    "RKLB": -313
+   },
+   "cash": 125894.83,
+   "nav": 100776.58
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-08-21",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "buffett",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 72.57
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "buffett",
+       "ticker": "RKLB",
+       "date": "2026-08-21",
+       "value": -0.76,
+       "reasoning": "I've never launched a rocket and I can't tell you what this business earns ten years out — the returns on equity have been negative in every period shown, free cash flow per share has never once been positive, and the book value growth comes from selling stock to the public rather than from retained earnings, which is the difference between compounding and financing. Credit where it's due: gross margins have climbed from 27% to 36%, revenue is growing better than 60%, debt to equity fell from 2.10 to 0.20, and a 5.5x current ratio means nobody's calling the loan tomorrow — this is a better balance sheet than it was two years ago. But the market is asking $43.4 billion for a company with no earnings to divide into it, roughly fifteen times a book value that owners keep having to top up; that's a price that requires everything to go right and leaves nothing for the buyer if it doesn't. I'd rather watch this one from the porch until it shows me a decade of cash it didn't have to raise.",
+       "components": {},
+       "metadata": {
+        "signal": "bearish",
+        "confidence": 76.0,
+        "model": "opus",
+        "prompt_key": "d77030dfc2793a58edade0f7",
+        "snapshot_hash": "e80fce4285a1a0d49f24a6b5",
+        "cached": true,
+        "abstained": false
+       }
+      }
+     ],
+     "convictions": {
+      "RKLB": -0.76
+     },
+     "weights": {
+      "RKLB": -1.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": -1.0
+   },
+   "clamps": [
+    {
+     "limit": "max_position_pct",
+     "ticker": "RKLB",
+     "before": -1.0,
+     "after": -0.25
+    }
+   ],
+   "final_weights": {
+    "RKLB": -0.25
+   },
+   "equity_before": 103180.42000000001,
+   "cash_before": 125894.83,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 42,
+     "price": 72.57
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 42,
+     "price": 72.57
+    }
+   ],
+   "positions": {
+    "RKLB": -355
+   },
+   "cash": 128942.77,
+   "nav": 103180.42000000001
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-08-28",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "buffett",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 64.39
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "buffett",
+       "ticker": "RKLB",
+       "date": "2026-08-28",
+       "value": -0.78,
+       "reasoning": "Rockets are outside my circle, but the arithmetic isn't: this business has lost money in every period shown, returns on equity run between -8% and -45%, and free cash flow per share has never once been positive. The book value per share climbing from $0.64 to $5.84 and debt-to-equity falling from 2.10 to 0.20 is not the compounding I admire — that's equity sold to investors, not earnings retained from customers, and the shareholders paid for the privilege. Credit where due: gross margin has widened from 27% to 36% and revenue is growing better than 60%, so someone may well build a fine enterprise here. But $38.5 billion is being paid today for a company with no earnings to divide into it, and that price demands perfection over the next decade; I'd rather own a business already proving it can earn its keep.",
+       "components": {},
+       "metadata": {
+        "signal": "bearish",
+        "confidence": 78.0,
+        "model": "opus",
+        "prompt_key": "1739d59a590dc18453572a34",
+        "snapshot_hash": "7a96e5aa1c20166918434443",
+        "cached": true,
+        "abstained": false
+       }
+      }
+     ],
+     "convictions": {
+      "RKLB": -0.78
+     },
+     "weights": {
+      "RKLB": -1.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": -1.0
+   },
+   "clamps": [
+    {
+     "limit": "max_position_pct",
+     "ticker": "RKLB",
+     "before": -1.0,
+     "after": -0.25
+    }
+   ],
+   "final_weights": {
+    "RKLB": -0.25
+   },
+   "equity_before": 106084.32,
+   "cash_before": 128942.77,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 56,
+     "price": 64.39
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 56,
+     "price": 64.39
+    }
+   ],
+   "positions": {
+    "RKLB": -411
+   },
+   "cash": 132548.61000000002,
+   "nav": 106084.32
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-09-04",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "buffett",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 64.26
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "buffett",
+       "ticker": "RKLB",
+       "date": "2026-09-04",
+       "value": -0.78,
+       "reasoning": "Rockets are outside my circle, but the arithmetic isn't: this business has lost money in every period shown, returns on equity run between -8% and -45%, and free cash flow per share has never once been positive. The book value per share climbing from $0.64 to $5.84 and debt-to-equity falling from 2.10 to 0.20 is not the compounding I admire — that's equity sold to investors, not earnings retained from customers, and the shareholders paid for the privilege. Credit where due: gross margin has widened from 27% to 36% and revenue is growing better than 60%, so someone may well build a fine enterprise here. But $38.5 billion is being paid today for a company with no earnings to divide into it, and that price demands perfection over the next decade; I'd rather own a business already proving it can earn its keep.",
+       "components": {},
+       "metadata": {
+        "signal": "bearish",
+        "confidence": 78.0,
+        "model": "opus",
+        "prompt_key": "1739d59a590dc18453572a34",
+        "snapshot_hash": "49e560f044b827dd9213f20b",
+        "cached": true,
+        "abstained": false
+       }
+      }
+     ],
+     "convictions": {
+      "RKLB": -0.78
+     },
+     "weights": {
+      "RKLB": -1.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": -1.0
+   },
+   "clamps": [
+    {
+     "limit": "max_position_pct",
+     "ticker": "RKLB",
+     "before": -1.0,
+     "after": -0.25
+    }
+   ],
+   "final_weights": {
+    "RKLB": -0.25
+   },
+   "equity_before": 106137.75000000001,
+   "cash_before": 132548.61000000002,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 1,
+     "price": 64.26
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 1,
+     "price": 64.26
+    }
+   ],
+   "positions": {
+    "RKLB": -412
+   },
+   "cash": 132612.87000000002,
+   "nav": 106137.75000000003
+  },
+  {
+   "fund": "moomoo-backtest",
+   "as_of": "2026-09-11",
+   "spec": {
+    "name": "moomoo-backtest",
+    "strategies": [
+     {
+      "name": "desk",
+      "display_name": null,
+      "weight": 1.0,
+      "models": [
+       {
+        "name": "buffett",
+        "weight": 1.0,
+        "params": {}
+       }
+      ],
+      "blend": {
+       "method": "conviction_weighted",
+       "gross_target": 1.0,
+       "market_neutral": false
+      }
+     }
+    ],
+    "risk": {
+     "max_position_pct": 0.25,
+     "max_gross_exposure": 1.0
+    },
+    "capital": 100000.0,
+    "rebalance": "weekly",
+    "benchmark": "SPY"
+   },
+   "universe": [
+    "RKLB"
+   ],
+   "marks": {
+    "RKLB": 62.95
+   },
+   "skipped": [],
+   "strategies": [
+    {
+     "name": "desk",
+     "slice": 1.0,
+     "signals": [
+      {
+       "model_name": "buffett",
+       "ticker": "RKLB",
+       "date": "2026-09-11",
+       "value": -0.78,
+       "reasoning": "Rockets are outside my circle — I can't tell you what a launch business earns ten years out, and the numbers don't help me: every one of these ten periods shows red ink, with returns on equity averaging -29% and free cash flow per share negative in all of them. The improving gross margin, 62% revenue growth and the drop in debt-to-equity from 2.10 to 0.20 are genuine progress, but that deleveraging and the jump in book value from $0.64 to $5.84 a share look like they came out of shareholders' pockets through stock issuance rather than out of retained earnings — that's not the kind of compounding I pay for. Meanwhile the market is asking $37.7 billion for a business with no P/E because there are no E, which means the price already assumes management executes flawlessly for a decade. I'd rather sit this one out than pay a certainty price for an uncertain business.",
+       "components": {},
+       "metadata": {
+        "signal": "bearish",
+        "confidence": 78.0,
+        "model": "opus",
+        "prompt_key": "4f8d5d57553ec4720585fea3",
+        "snapshot_hash": "4baf064d8e99aa408f45c835",
+        "cached": true,
+        "abstained": false
+       }
+      }
+     ],
+     "convictions": {
+      "RKLB": -0.78
+     },
+     "weights": {
+      "RKLB": -1.0
+     }
+    }
+   ],
+   "target_weights": {
+    "RKLB": -1.0
+   },
+   "clamps": [
+    {
+     "limit": "max_position_pct",
+     "ticker": "RKLB",
+     "before": -1.0,
+     "after": -0.25
+    }
+   ],
+   "final_weights": {
+    "RKLB": -0.25
+   },
+   "equity_before": 106677.47000000003,
+   "cash_before": 132612.87000000002,
+   "orders": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 11,
+     "price": 62.95
+    }
+   ],
+   "fills": [
+    {
+     "ticker": "RKLB",
+     "side": "sell",
+     "quantity": 11,
+     "price": 62.95
+    }
+   ],
+   "positions": {
+    "RKLB": -423
+   },
+   "cash": 133305.32000000004,
+   "nav": 106677.47000000003
+  }
+ ]
+}
