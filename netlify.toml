@@ -1,5 +1,8 @@
 # 公开层:纯静态,内容由本机每日生成并提交,Netlify 直接发布,无需构建。
 [build]
+  # base 显式设为仓库根:UI 里残留着 v1 的 "app/frontend",
+  # 该目录在 v2-rebuild 上不存在,会让构建在读配置阶段就失败。
+  base = "/"
   publish = "site/public"
   command = "echo 'prebuilt static site — nothing to build'"
 
