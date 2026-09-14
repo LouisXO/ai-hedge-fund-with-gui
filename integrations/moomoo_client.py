@@ -78,13 +78,17 @@ class _RateLimiter:
 
 
 # headroom under the documented ceilings
-_LIMITS = {"financials": _RateLimiter(12), "balance": _RateLimiter(12),
-           "pricemove": _RateLimiter(12),
+# Measured 2026-09-14, not documented by moomoo: each financials endpoint has
+# its OWN 30-calls-per-30s budget (proved by exhausting price_history, then
+# finding price_move still answered 10/10). The 30 calls can be spent as fast
+# as the network allows — 30 landed in 4.7s — so the limiter only needs to
+# stop the 31st, not pace the first 30. Set to 28 for headroom.
+_LIMITS = {"financials": _RateLimiter(28), "balance": _RateLimiter(28),
+           "pricemove": _RateLimiter(28), "filings": _RateLimiter(28),
+           "ratios": _RateLimiter(28), "cashflow": _RateLimiter(28),
            "calendar": _RateLimiter(10),
-           "filings": _RateLimiter(12),
-           "ratios": _RateLimiter(12), "cashflow": _RateLimiter(12),
-           "snapshot": _RateLimiter(30),
-           "kline": _RateLimiter(24), "news": _RateLimiter(8)}
+           "snapshot": _RateLimiter(50), "kline": _RateLimiter(24),
+           "news": _RateLimiter(8)}
 
 
 _RATE_MSG = "频率太高"  # OpenD's rate-limit rejection (server-side, cross-process)
