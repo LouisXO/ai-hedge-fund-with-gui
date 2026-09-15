@@ -284,8 +284,20 @@ class MoomooDataClient:
             if not day0:
                 continue
 
+            # Session alignment. An after-close report is not in the d0 close —
+            # the tape reacts on d1 — so the pre-news reference price is d0's
+            # CLOSE. A pre-market report IS in the d0 close, so its reference is
+            # the prior close. Measuring both from the prior close (as most
+            # sources do) understates after-close reactions ~3.5x: measured on
+            # this dataset, |d0| 2.45% vs the |d1| 8.69% that actually happened.
+            after = str(meta.get("window") or "").upper().startswith("AFTER")
+            base = (day0.get("close_price") if after
+                    else day0.get("last_close_price"))
+            shift = 1 if after else 0
+
             def chg(off):
-                r, base = by_off.get(off), day0.get("last_close_price")
+                """off = trading days since the news, session-aligned."""
+                r = by_off.get(off + shift)
                 if not r or not base:
                     return None
                 return (r.get("close_price") / base - 1) * 100
@@ -304,6 +316,7 @@ class MoomooDataClient:
                 "period_end": (income.get(pt) or {}).get("date_time_str"),
                 "filed": filed,
                 "window": meta.get("window"),
+                "aligned": "d0=close_after" if str(meta.get("window") or "").upper().startswith("AFTER") else "d0=prior_close",
                 # Pre-event option state, known BEFORE the print.
                 # NOTE: the calendar's iv_rank / iv_percentile / option_volume
                 # are the ticker's *current* values — identical across every
@@ -321,8 +334,11 @@ class MoomooDataClient:
                                           _num(cal.get("eps_predict"))),
                 "rev_surprise": _surprise(_num(cal.get("revenue_actual")),
                                           _num(cal.get("revenue_predict"))),
+                # d4 is the longest window available for BOTH sessions: an
+                # after-close report needs off=+5 to reach d4, and moomoo only
+                # supplies -5..+5. d5 therefore exists for pre-market only.
                 "move_d0": chg(0), "move_d1": chg(1),
-                "move_d3": chg(3), "move_d5": chg(5),
+                "move_d3": chg(3), "move_d4": chg(4), "move_d5": chg(5),
                 "iv_crush": meta.get("iv_crush"),
             })
             if len(events) >= limit:

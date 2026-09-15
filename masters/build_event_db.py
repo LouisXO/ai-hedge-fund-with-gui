@@ -41,7 +41,7 @@ DDL = [
     """CREATE TABLE IF NOT EXISTS earnings_events (
         ticker VARCHAR, period VARCHAR, filing_date DATE, filing_window VARCHAR,
         iv_pre DOUBLE, hv_pre DOUBLE, iv_crush DOUBLE,
-        move_d0 DOUBLE, move_d1 DOUBLE, move_d3 DOUBLE, move_d5 DOUBLE,
+        move_d0 DOUBLE, move_d1 DOUBLE, move_d3 DOUBLE, move_d4 DOUBLE, move_d5 DOUBLE,
         eps_actual DOUBLE, eps_est DOUBLE, eps_surprise VARCHAR,
         rev_actual DOUBLE, rev_est DOUBLE, rev_surprise VARCHAR,
         PRIMARY KEY (ticker, period))""",
@@ -126,13 +126,14 @@ def cmd_events(args, con) -> int:
                 continue
             rows = [(bare, e.get("period"), e.get("filed"), str(e.get("window") or ""),
                      e.get("iv_pre"), e.get("hv_pre"), e.get("iv_crush"),
-                     e.get("move_d0"), e.get("move_d1"), e.get("move_d3"), e.get("move_d5"),
+                     e.get("move_d0"), e.get("move_d1"), e.get("move_d3"),
+                     e.get("move_d4"), e.get("move_d5"),
                      e.get("eps_actual"), e.get("eps_est"), e.get("eps_surprise"),
                      e.get("rev_actual"), e.get("rev_est"), e.get("rev_surprise"))
                     for e in evs if e.get("period") and e.get("filed")]
             if rows:
                 con.executemany(
-                    "INSERT OR REPLACE INTO earnings_events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT OR REPLACE INTO earnings_events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     rows)
             con.execute("INSERT OR REPLACE INTO fetch_log VALUES (?,?,?,now())",
                         [ticker, len(rows), "ok"])
@@ -157,9 +158,9 @@ def cmd_stats(args, con) -> int:
         return 0
     q = """
     WITH ev AS (
-      SELECT *, iv_pre/100*sqrt(5.0/252)*100 AS implied5, abs(move_d5) AS realised5
+      SELECT *, iv_pre/100*sqrt(4.0/252)*100 AS implied5, abs(move_d4) AS realised5
       FROM earnings_events
-      WHERE iv_pre IS NOT NULL AND move_d5 IS NOT NULL AND iv_pre BETWEEN 5 AND 300
+      WHERE iv_pre IS NOT NULL AND move_d4 IS NOT NULL AND iv_pre BETWEEN 5 AND 300
     )
     SELECT count(*) n,
            round(avg(implied5),2) imp_avg, round(median(implied5),2) imp_med,
@@ -167,7 +168,7 @@ def cmd_stats(args, con) -> int:
            round(100.0*sum(CASE WHEN realised5 > implied5 THEN 1 ELSE 0 END)/count(*),1) rich_pct
     FROM ev"""
     n, ia, im, aa, am, rich = con.execute(q).fetchone()
-    print(f"隐含 vs 实际(5日,剔除 IV 异常值,n={n}):")
+    print(f"隐含 vs 实际(财报后4日,已做时段对齐,剔除 IV 异常值,n={n}):")
     print(f"  隐含 均值 {ia}%  中位数 {im}%")
     print(f"  实际 均值 {aa}%  中位数 {am}%")
     print(f"  实际超过隐含的比例 {rich}%   →  {'买方' if rich>50 else '卖方'}占优")
