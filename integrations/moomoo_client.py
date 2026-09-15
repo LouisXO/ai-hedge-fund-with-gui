@@ -471,12 +471,13 @@ class MoomooDataClient:
                 earnings_per_share=(ni / shares) if (ni is not None and shares) else None,
                 free_cash_flow_per_share=(_f(cf, 8072) / shares) if (_f(cf, 8072) is not None and shares) else None,
                 market_cap=_mcap(i, as_of_price, shares, s),
-                price_to_earnings_ratio=(_num(s.get("pe_ttm_ratio")) or _num(s.get("pe_ratio")))
+                price_to_earnings_ratio=_bucket(
+                    _num(s.get("pe_ttm_ratio")) or _num(s.get("pe_ratio")))
                     if (i == 0 and as_of_price is None) else None,
-                price_to_book_ratio=_num(s.get("pb_ratio"))
+                price_to_book_ratio=_bucket(_num(s.get("pb_ratio")))
                     if (i == 0 and as_of_price is None) else None,
-                price_to_sales_ratio=((_mcap(i, as_of_price, shares, s) or 0) / (rev * 4)
-                                      if (i == 0 and rev and _mcap(i, as_of_price, shares, s)) else None),
+                price_to_sales_ratio=_bucket((_mcap(i, as_of_price, shares, s) or 0) / (rev * 4))
+                                      if (i == 0 and rev and _mcap(i, as_of_price, shares, s)) else None,
             ))
         return out
 
@@ -599,14 +600,46 @@ def _minus_days(date_str: str, n: int) -> str:
     return (dt.date.fromisoformat(date_str) - dt.timedelta(days=n)).isoformat()
 
 
+_MCAP_BUCKET = 1.05  # ~5% wide: 2% buckets still flipped on a 0.8% drift
+
+
+def _bucket(v, width: float = 1.02):
+    """Round any positive-or-negative magnitude onto a log grid of `width`.
+
+    Same rationale as market cap: P/E and P/B move with price every day and
+    would keep invalidating the prompt cache on their own.
+    """
+    if v is None or v == 0:
+        return v
+    import math
+    sign = -1 if v < 0 else 1
+    a = abs(v)
+    return sign * round(width ** round(math.log(a) / math.log(width)), 4)
+
+
+def _bucket_mcap(v):
+    """Round market cap onto a ~2% log grid.
+
+    Market cap is the ONLY field that moves day to day — every other column in
+    the fundamentals snapshot changes quarterly. Left raw, a 0.8% price drift
+    changes the prompt hash and re-bills all 48 persona calls for a number that
+    cannot change any of their verdicts. Bucketing makes the cache hit on quiet
+    days while still re-running when the stock actually moves across a bucket.
+    """
+    if not v or v <= 0:
+        return v
+    import math
+    return round(_MCAP_BUCKET ** round(math.log(v) / math.log(_MCAP_BUCKET)))
+
+
 def _mcap(i: int, as_of_price, shares, snap: dict):
     """Market cap for the newest row only: as-of price x shares when
     backtesting, the live snapshot when running today."""
     if i != 0:
         return None
     if as_of_price and shares:
-        return as_of_price * shares
-    return _num(snap.get("total_market_val"))
+        return _bucket_mcap(as_of_price * shares)
+    return _bucket_mcap(_num(snap.get("total_market_val")))
 
 
 def _num(v):
