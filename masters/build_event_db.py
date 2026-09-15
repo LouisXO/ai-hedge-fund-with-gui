@@ -90,7 +90,17 @@ def cmd_universe(args, con) -> int:
 
 
 def cmd_events(args, con) -> int:
-    done = {r[0] for r in con.execute("SELECT ticker FROM fetch_log WHERE status='ok'").fetchall()}
+    # Incremental refresh: skipping every ticker already in fetch_log would make
+    # a weekly run a no-op — those tickers keep reporting. A ticker is re-fetched
+    # when its newest stored event is older than --stale-days (a new print has
+    # almost certainly landed since), and always on a full rebuild.
+    done = {r[0] for r in con.execute("""
+        SELECT f.ticker FROM fetch_log f
+        LEFT JOIN (SELECT ticker, max(filing_date) mx FROM earnings_events GROUP BY 1) e
+               ON e.ticker = replace(f.ticker, 'US.', '')
+        WHERE f.status = 'ok'
+          AND (? = 0 OR e.mx IS NULL OR e.mx > current_date - INTERVAL (?) DAY)
+    """, [args.stale_days, args.stale_days]).fetchall()}
     todo = [r[0] for r in con.execute(
         "SELECT ticker FROM universe ORDER BY market_cap DESC").fetchall() if r[0] not in done]
     if args.limit:
@@ -185,6 +195,8 @@ def main() -> int:
     ap.add_argument("--min-opt-vol", type=float, default=1000)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--per-ticker", type=int, default=12)
+    ap.add_argument("--stale-days", type=int, default=80,
+                    help="最新事件早于 N 天的票视为过期,重新抓取(0=不重抓)")
     ap.add_argument("--fast", action="store_true", help="跳过 EPS 意外(只取波动/价格反应),快一个数量级")
     args = ap.parse_args()
     con = connect()
