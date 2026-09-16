@@ -1,0 +1,1506 @@
+{
+ "created": "2026-09-15T23:16:23",
+ "items": [
+  {
+   "symbol": "CRH",
+   "filing_date": "2025-05-05",
+   "window": "AFTER_MARKET",
+   "iv_pre": 33.221,
+   "implied5": 4.185452585946512,
+   "realised": 0.4885496183244076,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "BKR",
+   "filing_date": "2024-10-22",
+   "window": "AFTER_MARKET",
+   "iv_pre": 33.064,
+   "implied5": 4.165672445192364,
+   "realised": 3.085047248764905,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "WMB",
+   "filing_date": "2024-11-06",
+   "window": "AFTER_MARKET",
+   "iv_pre": 27.235,
+   "implied5": 3.4312874741354347,
+   "realised": 0.4879812024161101,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "WM",
+   "filing_date": "2024-10-28",
+   "window": "AFTER_MARKET",
+   "iv_pre": 28.851,
+   "implied5": 3.6348843369297383,
+   "realised": 2.871410736365365,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "CSX",
+   "filing_date": "2024-10-16",
+   "window": "AFTER_MARKET",
+   "iv_pre": 31.772,
+   "implied5": 4.002895745483056,
+   "realised": 5.300253734788319,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "NSC",
+   "filing_date": "2025-10-23",
+   "window": "AFTER_MARKET",
+   "iv_pre": 20.535,
+   "implied5": 2.5871668177481606,
+   "realised": 0.7786350983723489,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "MPLX",
+   "filing_date": "2025-05-06",
+   "window": "PRE_MARKET",
+   "iv_pre": 29.178,
+   "implied5": 3.6760824644877443,
+   "realised": 1.4027968757116205,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "MA",
+   "filing_date": "2025-01-30",
+   "window": "PRE_MARKET",
+   "iv_pre": 22.345,
+   "implied5": 2.8152053831303943,
+   "realised": 3.186953352822841,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "MTCH",
+   "filing_date": "2025-05-08",
+   "window": "PRE_MARKET",
+   "iv_pre": 31.039,
+   "implied5": 3.910546425911135,
+   "realised": 3.1928900600323273,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "HRL",
+   "filing_date": "2025-08-28",
+   "window": "PRE_MARKET",
+   "iv_pre": 27.699,
+   "implied5": 3.4897459792941956,
+   "realised": 13.025499654640281,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "KHC",
+   "filing_date": "2025-07-30",
+   "window": "PRE_MARKET",
+   "iv_pre": 39.053,
+   "implied5": 4.920215521476451,
+   "realised": 5.322128852253039,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "HRL",
+   "filing_date": "2025-05-29",
+   "window": "PRE_MARKET",
+   "iv_pre": 39.623,
+   "implied5": 4.992028771348203,
+   "realised": 2.1970705720071093,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "MDT",
+   "filing_date": "2026-02-17",
+   "window": "PRE_MARKET",
+   "iv_pre": 32.592,
+   "implied5": 4.106206034772245,
+   "realised": 0.8845110064597317,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "FIS",
+   "filing_date": "2024-08-06",
+   "window": "PRE_MARKET",
+   "iv_pre": 39.867,
+   "implied5": 5.022769881819621,
+   "realised": 4.574175823225413,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "KVUE",
+   "filing_date": "2026-08-06",
+   "window": "PRE_MARKET",
+   "iv_pre": 28.086,
+   "implied5": 3.5385033963123855,
+   "realised": 2.432330815328465,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "ADP",
+   "filing_date": "2025-04-30",
+   "window": "PRE_MARKET",
+   "iv_pre": 30.015,
+   "implied5": 3.781534552457319,
+   "realised": 2.556040166475415,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "CTSH",
+   "filing_date": "2024-07-31",
+   "window": "AFTER_MARKET",
+   "iv_pre": 35.407,
+   "implied5": 4.460862698612569,
+   "realised": 3.316596194362431,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "HUM",
+   "filing_date": "2024-01-25",
+   "window": "PRE_MARKET",
+   "iv_pre": 33.261,
+   "implied5": 4.190492112253303,
+   "realised": 6.048707753500738,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "TRGP",
+   "filing_date": "2024-05-02",
+   "window": "PRE_MARKET",
+   "iv_pre": 28.061,
+   "implied5": 3.5353536923706423,
+   "realised": 0.03558402277386019,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "CLX",
+   "filing_date": "2025-07-31",
+   "window": "AFTER_MARKET",
+   "iv_pre": 33.188,
+   "implied5": 4.181294976743412,
+   "realised": 0.4141446316457742,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "GILD",
+   "filing_date": "2024-04-25",
+   "window": "AFTER_MARKET",
+   "iv_pre": 26.877,
+   "implied5": 3.3861837136896673,
+   "realised": 0.0931809360649849,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "DUK",
+   "filing_date": "2024-08-06",
+   "window": "PRE_MARKET",
+   "iv_pre": 29.214,
+   "implied5": 3.680618038163855,
+   "realised": 2.125934600527768,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "EOG",
+   "filing_date": "2026-05-06",
+   "window": "AFTER_MARKET",
+   "iv_pre": 34.65,
+   "implied5": 4.365489663256574,
+   "realised": 0.17818694762681275,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "KHC",
+   "filing_date": "2024-10-30",
+   "window": "PRE_MARKET",
+   "iv_pre": 27.689,
+   "implied5": 3.4884860977174985,
+   "realised": 3.706896553004879,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "CAT",
+   "filing_date": "2025-10-29",
+   "window": "PRE_MARKET",
+   "iv_pre": 39.073,
+   "implied5": 4.922735284629846,
+   "realised": 4.406353080195746,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "UNM",
+   "filing_date": "2026-04-28",
+   "window": "AFTER_MARKET",
+   "iv_pre": 34.924,
+   "implied5": 4.400010418458084,
+   "realised": 3.867900283095671,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "MET",
+   "filing_date": "2026-08-05",
+   "window": "AFTER_MARKET",
+   "iv_pre": 29.147,
+   "implied5": 3.6721768315999825,
+   "realised": 0.41554124246829804,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "NUE",
+   "filing_date": "2024-04-22",
+   "window": "AFTER_MARKET",
+   "iv_pre": 32.836,
+   "implied5": 4.136947145243662,
+   "realised": 8.552940562641709,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "LNG",
+   "filing_date": "2024-08-08",
+   "window": "PRE_MARKET",
+   "iv_pre": 29.73,
+   "implied5": 3.7456279275214426,
+   "realised": 3.8868010071492654,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "WELL",
+   "filing_date": "2025-04-28",
+   "window": "AFTER_MARKET",
+   "iv_pre": 32.233,
+   "implied5": 4.060976286168807,
+   "realised": 1.2613217044902925,
+   "bucket": "5-40",
+   "status": "pending"
+  },
+  {
+   "symbol": "CDNS",
+   "filing_date": "2025-10-27",
+   "window": "AFTER_MARKET",
+   "iv_pre": 45.293,
+   "implied5": 5.706381625335643,
+   "realised": 4.550369948776312,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "OLED",
+   "filing_date": "2026-02-19",
+   "window": "AFTER_MARKET",
+   "iv_pre": 56.022,
+   "implied5": 7.058108568974309,
+   "realised": 8.589480874288357,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "IONS",
+   "filing_date": "2025-10-29",
+   "window": "PRE_MARKET",
+   "iv_pre": 52.656,
+   "implied5": 6.634032430257958,
+   "realised": 0.9378822889764771,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "GXO",
+   "filing_date": "2025-11-04",
+   "window": "AFTER_MARKET",
+   "iv_pre": 48.553,
+   "implied5": 6.1171030193390035,
+   "realised": 5.418096442116671,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "WDAY",
+   "filing_date": "2025-05-22",
+   "window": "AFTER_MARKET",
+   "iv_pre": 47.389,
+   "implied5": 5.970452803811424,
+   "realised": 8.953578123277095,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "NMRK",
+   "filing_date": "2025-04-30",
+   "window": "PRE_MARKET",
+   "iv_pre": 50.662,
+   "implied5": 6.38281204386449,
+   "realised": 0.18083182163340927,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "IEP",
+   "filing_date": "2025-08-04",
+   "window": "PRE_MARKET",
+   "iv_pre": 51.962,
+   "implied5": 6.546596648835157,
+   "realised": 3.229398657678706,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "NTAP",
+   "filing_date": "2024-11-21",
+   "window": "AFTER_MARKET",
+   "iv_pre": 46.017,
+   "implied5": 5.7975970514885375,
+   "realised": 3.1891379859036673,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "AMAT",
+   "filing_date": "2025-11-13",
+   "window": "AFTER_MARKET",
+   "iv_pre": 51.909,
+   "implied5": 6.539919276478659,
+   "realised": 1.1505197738719386,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "KEYS",
+   "filing_date": "2026-02-23",
+   "window": "AFTER_MARKET",
+   "iv_pre": 47.338,
+   "implied5": 5.964027407770267,
+   "realised": 27.865306122448974,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "SWKS",
+   "filing_date": "2025-02-05",
+   "window": "AFTER_MARKET",
+   "iv_pre": 46.579,
+   "implied5": 5.868402396098932,
+   "realised": 23.989435002854222,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "TME",
+   "filing_date": "2025-11-12",
+   "window": "PRE_MARKET",
+   "iv_pre": 54.339,
+   "implied5": 6.846070499616134,
+   "realised": 9.879518073398108,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "BIDU",
+   "filing_date": "2025-02-18",
+   "window": "PRE_MARKET",
+   "iv_pre": 57.563,
+   "implied5": 7.252256319943383,
+   "realised": 9.858432498974146,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "ASO",
+   "filing_date": "2026-06-09",
+   "window": "PRE_MARKET",
+   "iv_pre": 45.219,
+   "implied5": 5.697058501668083,
+   "realised": 4.683568801110338,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "CAT",
+   "filing_date": "2026-08-04",
+   "window": "PRE_MARKET",
+   "iv_pre": 52.034,
+   "implied5": 6.555667796187378,
+   "realised": 0.9096056769032579,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "BOX",
+   "filing_date": "2026-08-25",
+   "window": "AFTER_MARKET",
+   "iv_pre": 52.493,
+   "implied5": 6.6134963605577894,
+   "realised": 6.545454545454543,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "TER",
+   "filing_date": "2024-10-23",
+   "window": "AFTER_MARKET",
+   "iv_pre": 58.892,
+   "implied5": 7.419694581486471,
+   "realised": 12.014787430742246,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "BOX",
+   "filing_date": "2025-08-26",
+   "window": "AFTER_MARKET",
+   "iv_pre": 45.235,
+   "implied5": 5.699074312190798,
+   "realised": 3.8510911424903593,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "BNTX",
+   "filing_date": "2025-05-05",
+   "window": "PRE_MARKET",
+   "iv_pre": 58.09,
+   "implied5": 7.318652079035338,
+   "realised": 11.597103106537066,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "MAT",
+   "filing_date": "2025-05-05",
+   "window": "AFTER_MARKET",
+   "iv_pre": 51.587,
+   "implied5": 6.499351089709003,
+   "realised": 17.28395061728396,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "ZS",
+   "filing_date": "2024-12-02",
+   "window": "AFTER_MARKET",
+   "iv_pre": 51.441,
+   "implied5": 6.48095681868922,
+   "realised": 1.141432065608361,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "CDNS",
+   "filing_date": "2024-04-22",
+   "window": "AFTER_MARKET",
+   "iv_pre": 40.191,
+   "implied5": 5.063590044904618,
+   "realised": 0.8876570065258438,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "XP",
+   "filing_date": "2024-11-19",
+   "window": "AFTER_MARKET",
+   "iv_pre": 55.05,
+   "implied5": 6.9356480797193205,
+   "realised": 3.8968824890891596,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "KKR",
+   "filing_date": "2025-11-07",
+   "window": "PRE_MARKET",
+   "iv_pre": 45.2,
+   "implied5": 5.694664726672357,
+   "realised": 1.2069399045265827,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "ACT",
+   "filing_date": "2025-07-30",
+   "window": "AFTER_MARKET",
+   "iv_pre": 48.964,
+   "implied5": 6.168884152141268,
+   "realised": 5.1714119692510385,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "KLAC",
+   "filing_date": "2024-07-24",
+   "window": "AFTER_MARKET",
+   "iv_pre": 43.119,
+   "implied5": 5.432483370561624,
+   "realised": 8.90482554264147,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "UPS",
+   "filing_date": "2026-07-28",
+   "window": "PRE_MARKET",
+   "iv_pre": 41.501,
+   "implied5": 5.228634531451981,
+   "realised": 5.382912793631145,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "FLR",
+   "filing_date": "2024-05-03",
+   "window": "PRE_MARKET",
+   "iv_pre": 47.461,
+   "implied5": 5.979523951163645,
+   "realised": 5.35887487875849,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "PRMB",
+   "filing_date": "2025-05-08",
+   "window": "PRE_MARKET",
+   "iv_pre": 45.867,
+   "implied5": 5.778698827838076,
+   "realised": 2.982349362148129,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "SNOW",
+   "filing_date": "2025-08-27",
+   "window": "AFTER_MARKET",
+   "iv_pre": 59.889,
+   "implied5": 7.5453047746832045,
+   "realised": 10.73406856629573,
+   "bucket": "40-60",
+   "status": "pending"
+  },
+  {
+   "symbol": "TCOM",
+   "filing_date": "2025-02-24",
+   "window": "AFTER_MARKET",
+   "iv_pre": 60.001,
+   "implied5": 7.5594154483422145,
+   "realised": 10.59387565663894,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "GFS",
+   "filing_date": "2026-02-11",
+   "window": "PRE_MARKET",
+   "iv_pre": 78.513,
+   "implied5": 9.891708223124489,
+   "realised": 11.097852027019606,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "ANF",
+   "filing_date": "2026-03-04",
+   "window": "PRE_MARKET",
+   "iv_pre": 77.297,
+   "implied5": 9.738506623398079,
+   "realised": 12.487401733521464,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "DDOG",
+   "filing_date": "2026-08-06",
+   "window": "PRE_MARKET",
+   "iv_pre": 83.645,
+   "implied5": 10.538279448285603,
+   "realised": 14.923897305505529,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "AMBA",
+   "filing_date": "2024-11-26",
+   "window": "AFTER_MARKET",
+   "iv_pre": 66.472,
+   "implied5": 8.374684816623118,
+   "realised": 3.9029381669346552,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "CDE",
+   "filing_date": "2024-11-06",
+   "window": "AFTER_MARKET",
+   "iv_pre": 61.449,
+   "implied5": 7.741846300648002,
+   "realised": 2.876480539133497,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "VRT",
+   "filing_date": "2026-04-22",
+   "window": "PRE_MARKET",
+   "iv_pre": 72.81,
+   "implied5": 9.173197759933945,
+   "realised": 2.3716553578463695,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "LION",
+   "filing_date": "2026-02-05",
+   "window": "AFTER_MARKET",
+   "iv_pre": 74.642,
+   "implied5": 9.404008064784914,
+   "realised": 9.637188208616788,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "FN",
+   "filing_date": "2025-05-05",
+   "window": "AFTER_MARKET",
+   "iv_pre": 71.883,
+   "implied5": 9.056406737774095,
+   "realised": 2.494341330918981,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "FIGS",
+   "filing_date": "2026-05-07",
+   "window": "AFTER_MARKET",
+   "iv_pre": 89.376,
+   "implied5": 11.260317579890899,
+   "realised": 22.121014964216002,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "AS",
+   "filing_date": "2024-08-20",
+   "window": "PRE_MARKET",
+   "iv_pre": 61.131,
+   "implied5": 7.701782066509025,
+   "realised": 14.73684210526316,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "EPAM",
+   "filing_date": "2026-05-07",
+   "window": "PRE_MARKET",
+   "iv_pre": 75.58,
+   "implied5": 9.522184956679133,
+   "realised": 15.499672805459475,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "PINS",
+   "filing_date": "2025-02-06",
+   "window": "AFTER_MARKET",
+   "iv_pre": 64.804,
+   "implied5": 8.16453656962999,
+   "realised": 16.373920809764808,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "DOCU",
+   "filing_date": "2026-09-03",
+   "window": "AFTER_MARKET",
+   "iv_pre": 68.733,
+   "implied5": 8.659544041114406,
+   "realised": 0.48506897074426236,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "HUBS",
+   "filing_date": "2026-05-07",
+   "window": "AFTER_MARKET",
+   "iv_pre": 88.395,
+   "implied5": 11.136723197216881,
+   "realised": 24.725094370589197,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "SOFI",
+   "filing_date": "2026-07-29",
+   "window": "PRE_MARKET",
+   "iv_pre": 68.886,
+   "implied5": 8.678820229237875,
+   "realised": 11.70848267622462,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "OKTA",
+   "filing_date": "2025-03-03",
+   "window": "AFTER_MARKET",
+   "iv_pre": 65.756,
+   "implied5": 8.284477295731584,
+   "realised": 20.686094538779255,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "RUM",
+   "filing_date": "2024-05-14",
+   "window": "AFTER_MARKET",
+   "iv_pre": 74.177,
+   "implied5": 9.345423571468483,
+   "realised": 2.2377622377622197,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "TEAM",
+   "filing_date": "2026-02-05",
+   "window": "AFTER_MARKET",
+   "iv_pre": 84.286,
+   "implied5": 10.61903785735191,
+   "realised": 12.12275175287063,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "OSCR",
+   "filing_date": "2026-08-06",
+   "window": "PRE_MARKET",
+   "iv_pre": 87.643,
+   "implied5": 11.041980102649235,
+   "realised": 1.6605778811026206,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "VG",
+   "filing_date": "2026-08-11",
+   "window": "PRE_MARKET",
+   "iv_pre": 77.426,
+   "implied5": 9.754759095737478,
+   "realised": 3.5764375819629324,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "NXT",
+   "filing_date": "2024-08-01",
+   "window": "AFTER_MARKET",
+   "iv_pre": 72.303,
+   "implied5": 9.109321763995386,
+   "realised": 14.178945120649155,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "AVAV",
+   "filing_date": "2025-03-04",
+   "window": "AFTER_MARKET",
+   "iv_pre": 71.095,
+   "implied5": 8.957128069530338,
+   "realised": 12.614517265680059,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "NBIS",
+   "filing_date": "2025-08-07",
+   "window": "PRE_MARKET",
+   "iv_pre": 83.125,
+   "implied5": 10.47276560629734,
+   "realised": 28.208386277001264,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "MDB",
+   "filing_date": "2024-12-09",
+   "window": "AFTER_MARKET",
+   "iv_pre": 74.325,
+   "implied5": 9.364069818803607,
+   "realised": 24.133893125410566,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "AMBA",
+   "filing_date": "2024-08-27",
+   "window": "AFTER_MARKET",
+   "iv_pre": 79.954,
+   "implied5": 10.073257158326586,
+   "realised": 4.300056828944876,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "HBM",
+   "filing_date": "2025-05-12",
+   "window": "PRE_MARKET",
+   "iv_pre": 60.998,
+   "implied5": 7.685025641538948,
+   "realised": 5.317769136608952,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "ENPH",
+   "filing_date": "2024-02-06",
+   "window": "AFTER_MARKET",
+   "iv_pre": 84.408,
+   "implied5": 10.63440841258762,
+   "realised": 22.93304148840911,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "PBF",
+   "filing_date": "2026-07-30",
+   "window": "PRE_MARKET",
+   "iv_pre": 83.068,
+   "implied5": 10.465584281310162,
+   "realised": 3.4411996850994386,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "CZR",
+   "filing_date": "2025-10-28",
+   "window": "AFTER_MARKET",
+   "iv_pre": 64.061,
+   "implied5": 8.070927368481371,
+   "realised": 9.370755998189228,
+   "bucket": "60-90",
+   "status": "pending"
+  },
+  {
+   "symbol": "U",
+   "filing_date": "2026-05-07",
+   "window": "PRE_MARKET",
+   "iv_pre": 98.144,
+   "implied5": 12.364981746339202,
+   "realised": 1.4296187683284445,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "ASTS",
+   "filing_date": "2025-11-10",
+   "window": "AFTER_MARKET",
+   "iv_pre": 115.275,
+   "implied5": 14.52328487537956,
+   "realised": 17.612809315866084,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "LEU",
+   "filing_date": "2026-05-05",
+   "window": "AFTER_MARKET",
+   "iv_pre": 97.167,
+   "implied5": 12.241891316295863,
+   "realised": 1.7957678120753218,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "VSAT",
+   "filing_date": "2024-08-07",
+   "window": "AFTER_MARKET",
+   "iv_pre": 117.593,
+   "implied5": 14.815325424858022,
+   "realised": 5.627462014631401,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "CRWV",
+   "filing_date": "2026-05-07",
+   "window": "AFTER_MARKET",
+   "iv_pre": 102.641,
+   "implied5": 12.931550491380033,
+   "realised": 11.35128841974542,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "LMND",
+   "filing_date": "2025-02-25",
+   "window": "AFTER_MARKET",
+   "iv_pre": 114.259,
+   "implied5": 14.3952809071871,
+   "realised": 16.630196936542685,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "NN",
+   "filing_date": "2026-03-17",
+   "window": "AFTER_MARKET",
+   "iv_pre": 114.433,
+   "implied5": 14.417202846621636,
+   "realised": 9.780675755779477,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "AVAV",
+   "filing_date": "2026-03-10",
+   "window": "AFTER_MARKET",
+   "iv_pre": 92.681,
+   "implied5": 11.676708440989398,
+   "realised": 0.42424515954326836,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "RKLB",
+   "filing_date": "2026-05-07",
+   "window": "AFTER_MARKET",
+   "iv_pre": 90.402,
+   "implied5": 11.389581429660055,
+   "realised": 68.6815983710868,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "ALAB",
+   "filing_date": "2025-11-04",
+   "window": "AFTER_MARKET",
+   "iv_pre": 98.781,
+   "implied5": 12.445236202774828,
+   "realised": 6.558474150911819,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "ACMR",
+   "filing_date": "2026-05-07",
+   "window": "PRE_MARKET",
+   "iv_pre": 90.162,
+   "implied5": 11.359344271819317,
+   "realised": 16.9194655110148,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "VFC",
+   "filing_date": "2025-07-30",
+   "window": "PRE_MARKET",
+   "iv_pre": 93.578,
+   "implied5": 11.789719818419158,
+   "realised": 2.8225806451612767,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "LEU",
+   "filing_date": "2026-08-05",
+   "window": "AFTER_MARKET",
+   "iv_pre": 97.524,
+   "implied5": 12.28686908858396,
+   "realised": 1.3697169962159528,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "IONQ",
+   "filing_date": "2025-05-07",
+   "window": "AFTER_MARKET",
+   "iv_pre": 105.433,
+   "implied5": 13.283309427593952,
+   "realised": 14.653397391901146,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "U",
+   "filing_date": "2026-02-11",
+   "window": "PRE_MARKET",
+   "iv_pre": 103.202,
+   "implied5": 13.002229847832757,
+   "realised": 36.16655196145905,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "CRDO",
+   "filing_date": "2024-05-29",
+   "window": "AFTER_MARKET",
+   "iv_pre": 97.576,
+   "implied5": 12.293420472782786,
+   "realised": 31.05835806132542,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "BLSH",
+   "filing_date": "2025-09-17",
+   "window": "AFTER_MARKET",
+   "iv_pre": 96.952,
+   "implied5": 12.214803862396867,
+   "realised": 24.360625574977,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "CHYM",
+   "filing_date": "2026-02-25",
+   "window": "AFTER_MARKET",
+   "iv_pre": 99.733,
+   "implied5": 12.565176928876422,
+   "realised": 6.679298910468967,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "SMCI",
+   "filing_date": "2024-04-30",
+   "window": "AFTER_MARKET",
+   "iv_pre": 100.847,
+   "implied5": 12.705527736520514,
+   "realised": 4.600605496040977,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "KVYO",
+   "filing_date": "2026-05-05",
+   "window": "AFTER_MARKET",
+   "iv_pre": 96.645,
+   "implied5": 12.176125497992256,
+   "realised": 38.06258036862409,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "GRAL",
+   "filing_date": "2025-11-12",
+   "window": "AFTER_MARKET",
+   "iv_pre": 107.123,
+   "implied5": 13.496229414055819,
+   "realised": 3.7749203727733827,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "IREN",
+   "filing_date": "2026-05-07",
+   "window": "AFTER_MARKET",
+   "iv_pre": 116.106,
+   "implied5": 14.627981034403113,
+   "realised": 2.726473175021993,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "TGTX",
+   "filing_date": "2024-05-01",
+   "window": "PRE_MARKET",
+   "iv_pre": 101.49,
+   "implied5": 12.786538121902158,
+   "realised": 25.76866764275256,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "ELF",
+   "filing_date": "2025-02-06",
+   "window": "AFTER_MARKET",
+   "iv_pre": 91.146,
+   "implied5": 11.483316618966343,
+   "realised": 15.301163973330311,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "LYFT",
+   "filing_date": "2024-02-13",
+   "window": "AFTER_MARKET",
+   "iv_pre": 98.726,
+   "implied5": 12.438306854102992,
+   "realised": 32.97609233305852,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "VSH",
+   "filing_date": "2026-08-05",
+   "window": "PRE_MARKET",
+   "iv_pre": 117.966,
+   "implied5": 14.862319007668834,
+   "realised": 14.311454312155526,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "GRAB",
+   "filing_date": "2025-02-19",
+   "window": "AFTER_MARKET",
+   "iv_pre": 103.609,
+   "implied5": 13.053507028004342,
+   "realised": 8.801498127340823,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "UPST",
+   "filing_date": "2025-02-11",
+   "window": "AFTER_MARKET",
+   "iv_pre": 111.328,
+   "implied5": 14.026009617057085,
+   "realised": 23.418473418473408,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "IOT",
+   "filing_date": "2026-06-04",
+   "window": "AFTER_MARKET",
+   "iv_pre": 92.622,
+   "implied5": 11.669275139686883,
+   "realised": 8.378301618858286,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "PGEN",
+   "filing_date": "2026-05-13",
+   "window": "AFTER_MARKET",
+   "iv_pre": 109.965,
+   "implied5": 13.854287758153227,
+   "realised": 2.891566265060219,
+   "bucket": "90-120",
+   "status": "pending"
+  },
+  {
+   "symbol": "PLUG",
+   "filing_date": "2024-05-09",
+   "window": "PRE_MARKET",
+   "iv_pre": 133.697,
+   "implied5": 16.844238715971553,
+   "realised": 35.31746031746032,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "HSAI",
+   "filing_date": "2025-05-27",
+   "window": "AFTER_MARKET",
+   "iv_pre": 141.055,
+   "implied5": 17.771259580105518,
+   "realised": 7.290686735653818,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "LQDA",
+   "filing_date": "2026-03-05",
+   "window": "PRE_MARKET",
+   "iv_pre": 144.7,
+   "implied5": 18.230486414811725,
+   "realised": 12.158231529959274,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "RGTI",
+   "filing_date": "2025-11-10",
+   "window": "AFTER_MARKET",
+   "iv_pre": 121.732,
+   "implied5": 15.336790409453084,
+   "realised": 25.362756952841593,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "LFST",
+   "filing_date": "2025-08-07",
+   "window": "PRE_MARKET",
+   "iv_pre": 144.685,
+   "implied5": 18.22859659244668,
+   "realised": 32.56410256410256,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "CMPS",
+   "filing_date": "2025-11-04",
+   "window": "PRE_MARKET",
+   "iv_pre": 123.789,
+   "implied5": 15.595948049779745,
+   "realised": 3.529411764705881,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "AAOI",
+   "filing_date": "2025-02-26",
+   "window": "AFTER_MARKET",
+   "iv_pre": 181.312,
+   "implied5": 22.84316484341634,
+   "realised": 28.225486304088932,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "AAOI",
+   "filing_date": "2025-05-08",
+   "window": "AFTER_MARKET",
+   "iv_pre": 138.384,
+   "implied5": 17.434745210969634,
+   "realised": 27.845528455284562,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "ALAB",
+   "filing_date": "2026-08-04",
+   "window": "AFTER_MARKET",
+   "iv_pre": 126.018,
+   "implied5": 15.876775653225602,
+   "realised": 13.736278928304813,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "INFQ",
+   "filing_date": "2026-04-08",
+   "window": "AFTER_MARKET",
+   "iv_pre": 152.433,
+   "implied5": 19.204752838071848,
+   "realised": 32.50883392226147,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "HUT",
+   "filing_date": "2026-08-04",
+   "window": "PRE_MARKET",
+   "iv_pre": 123.183,
+   "implied5": 15.51959922623188,
+   "realised": 23.572448251249114,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "AXTI",
+   "filing_date": "2026-04-30",
+   "window": "AFTER_MARKET",
+   "iv_pre": 165.114,
+   "implied5": 20.802408665481853,
+   "realised": 36.85937894471094,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "LUNR",
+   "filing_date": "2026-03-19",
+   "window": "PRE_MARKET",
+   "iv_pre": 122.801,
+   "implied5": 15.47147175000204,
+   "realised": 13.473219215902832,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "KEEL",
+   "filing_date": "2026-08-10",
+   "window": "PRE_MARKET",
+   "iv_pre": 121.535,
+   "implied5": 15.311970742392145,
+   "realised": 9.536082474226804,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "CLSK",
+   "filing_date": "2024-12-02",
+   "window": "AFTER_MARKET",
+   "iv_pre": 145.778,
+   "implied5": 18.36630164877971,
+   "realised": 6.611570247933873,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "IONQ",
+   "filing_date": "2025-02-26",
+   "window": "AFTER_MARKET",
+   "iv_pre": 126.323,
+   "implied5": 15.91520204131487,
+   "realised": 24.390243902439025,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "OUST",
+   "filing_date": "2026-08-06",
+   "window": "AFTER_MARKET",
+   "iv_pre": 134.687,
+   "implied5": 16.968966992064598,
+   "realised": 0.9872751206669528,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "LUMN",
+   "filing_date": "2024-08-06",
+   "window": "AFTER_MARKET",
+   "iv_pre": 228.385,
+   "implied5": 28.77380538940412,
+   "realised": 0.20000000000000018,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "SIMO",
+   "filing_date": "2026-07-29",
+   "window": "AFTER_MARKET",
+   "iv_pre": 132.145,
+   "implied5": 16.648705095268113,
+   "realised": 17.631629149258377,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "ASTS",
+   "filing_date": "2024-08-14",
+   "window": "AFTER_MARKET",
+   "iv_pre": 142.024,
+   "implied5": 17.8933421048875,
+   "realised": 75.1081210956271,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "AAOI",
+   "filing_date": "2024-08-06",
+   "window": "AFTER_MARKET",
+   "iv_pre": 134.704,
+   "implied5": 16.971108790744985,
+   "realised": 10.013717421124824,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "CLSK",
+   "filing_date": "2024-05-09",
+   "window": "PRE_MARKET",
+   "iv_pre": 122.213,
+   "implied5": 15.39739071329223,
+   "realised": 4.581551618814905,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "CAR",
+   "filing_date": "2026-04-29",
+   "window": "PRE_MARKET",
+   "iv_pre": 122.279,
+   "implied5": 15.405705931698435,
+   "realised": 12.035383643306508,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "PLUG",
+   "filing_date": "2025-11-10",
+   "window": "AFTER_MARKET",
+   "iv_pre": 135.041,
+   "implied5": 17.013566799879687,
+   "realised": 18.5546875,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "AAOI",
+   "filing_date": "2024-05-09",
+   "window": "AFTER_MARKET",
+   "iv_pre": 126.917,
+   "implied5": 15.990039006970697,
+   "realised": 6.546489563567381,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "DFTX",
+   "filing_date": "2026-08-06",
+   "window": "AFTER_MARKET",
+   "iv_pre": 125.205,
+   "implied5": 15.774347281040098,
+   "realised": 4.854789770264412,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "ALAB",
+   "filing_date": "2024-08-06",
+   "window": "AFTER_MARKET",
+   "iv_pre": 131.446,
+   "implied5": 16.56063937305696,
+   "realised": 4.896421845574384,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "HSAI",
+   "filing_date": "2024-08-19",
+   "window": "AFTER_MARKET",
+   "iv_pre": 132.779,
+   "implied5": 16.728581587230728,
+   "realised": 7.395143487858713,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "TALO",
+   "filing_date": "2025-11-05",
+   "window": "AFTER_MARKET",
+   "iv_pre": 133.705,
+   "implied5": 16.845246621232913,
+   "realised": 8.682008368200833,
+   "bucket": "120-300",
+   "status": "pending"
+  },
+  {
+   "symbol": "BE",
+   "filing_date": "2025-10-28",
+   "window": "AFTER_MARKET",
+   "iv_pre": 136.476,
+   "implied5": 17.19435980613577,
+   "realised": 13.921257062146907,
+   "bucket": "120-300",
+   "status": "pending"
+  }
+ ],
+ "blocked": "2026-09-15: HISTORICAL_OPTIONS is a premium Alpha Vantage endpoint; free key cannot run this. Script is ready; needs a premium key in ~/optradar/.env."
+}
