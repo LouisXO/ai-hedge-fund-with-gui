@@ -7,7 +7,11 @@
 Usage:
   python masters/run_masters.py [--date YYYY-MM-DD] [--tickers AAPL,MSFT]
                                [--workers 4] [--personas buffett,munger]
-Output: site-data/masters/<date>.json
+                               [--samples 3] [--out PATH]
+Output: site-data/masters/<date>.json (or --out)
+
+LLM personas go through MastersLLM: sealed `claude -p`, typed direction +
+0-4 strength rubric, majority of --samples answers (integrations/masters_contract.py).
 """
 from __future__ import annotations
 
@@ -23,7 +27,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
+from integrations import masters_contract
 from integrations.claude_code_llm import ClaudeCodeLLM
+from integrations.masters_llm import MastersLLM
 from integrations.moomoo_client import MoomooDataClient, prefetch
 
 from hedge_fund.signals.buffett import BuffettAgent
@@ -68,16 +74,18 @@ def _bare(code: str) -> str:
     return code.split(".")[-1].upper()
 
 
-def run_one(persona: str, ticker: str, date: str, model: str) -> dict:
+def run_one(persona: str, ticker: str, date: str, model: str, samples: int) -> dict:
     """One (persona, ticker) prediction. Own client per thread — moomoo ctx is not
     thread-safe, and each Claude Code call is its own process anyway."""
     t0 = time.time()
     data = MoomooDataClient()
     try:
         cls_ = PERSONAS[persona]
-        agent = cls_() if persona == "pead" else cls_(llm=ClaudeCodeLLM(model=model))
+        agent = (cls_() if persona == "pead" else
+                 cls_(llm=MastersLLM(ClaudeCodeLLM(model=model), samples=samples)))
         sig = agent.predict(ticker, date, data)
         meta = sig.metadata or {}
+        mc = (meta.get("provider_metadata") or {}).get("masters_contract") or {}
         return {
             "persona": persona, "ticker": ticker,
             "value": float(sig.value),
@@ -86,6 +94,10 @@ def run_one(persona: str, ticker: str, date: str, model: str) -> dict:
             "abstained": bool(meta.get("abstained")),
             "reasoning": sig.reasoning,
             "cached": bool(meta.get("cached")),
+            "agreement": mc.get("agreement"),
+            "votes": mc.get("votes"),
+            "abstain_reason": meta.get("abstain_reason"),
+            "prompt_key": meta.get("prompt_key"),
             "secs": round(time.time() - t0, 1),
         }
     except Exception as exc:  # one failure must not sink the batch
@@ -135,6 +147,9 @@ def main() -> int:
     ap.add_argument("--personas", default=",".join(PERSONAS))
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--model", default="opus")
+    ap.add_argument("--samples", type=int, default=3,
+                    help="answers per (persona, ticker); majority direction wins")
+    ap.add_argument("--out", default=None, help="output path (default site-data/masters/<date>.json)")
     args = ap.parse_args()
 
     if args.tickers:
@@ -148,8 +163,13 @@ def main() -> int:
         return 1
 
     jobs = [(p, t) for t in tickers for p in personas]
-    print(f"{len(personas)} personas x {len(tickers)} tickers = {len(jobs)} calls "
-          f"(workers={args.workers}, model={args.model})", flush=True)
+    # Resolve the alias once up front: fails fast if the CLI is broken, and the
+    # concrete id goes into the cache keys and the output.
+    resolved = ClaudeCodeLLM(model=args.model).resolved_model() if any(
+        p != "pead" for p in personas) else None
+    print(f"{len(personas)} personas x {len(tickers)} tickers = {len(jobs)} jobs "
+          f"(workers={args.workers}, model={args.model}→{resolved}, "
+          f"samples={args.samples})", flush=True)
 
     # Warm the shared data cache serially first: personas analysing the same
     # ticker need identical fundamentals, and OpenD rate-limits per 30s window.
@@ -165,7 +185,7 @@ def main() -> int:
 
     rows = []
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
-        futs = {ex.submit(run_one, p, t, args.date, args.model): (p, t) for p, t in jobs}
+        futs = {ex.submit(run_one, p, t, args.date, args.model, args.samples): (p, t) for p, t in jobs}
         for i, fut in enumerate(as_completed(futs), 1):
             r = fut.result()
             rows.append(r)
@@ -178,12 +198,15 @@ def main() -> int:
         "date": args.date,
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "model": args.model,
+        "resolved_model": resolved,
+        "contract_version": masters_contract.CONTRACT_VERSION,
+        "samples": args.samples,
         "personas": personas,
         "elapsed_secs": round(time.time() - t0, 1),
         "tickers": summary,
     }
-    os.makedirs(os.path.join(ROOT, "site-data/masters"), exist_ok=True)
-    path = os.path.join(ROOT, "site-data/masters", f"{args.date}.json")
+    path = args.out or os.path.join(ROOT, "site-data/masters", f"{args.date}.json")
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "w") as f:
         json.dump(payload, f, ensure_ascii=False, indent=1)
 

@@ -21,6 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from integrations.claude_code_llm import ClaudeCodeLLM
+from integrations.masters_llm import MastersLLM
 from integrations.moomoo_client import MoomooDataClient
 
 from hedge_fund.backtesting.fund import backtest_fund
@@ -39,6 +40,8 @@ def main() -> int:
     ap.add_argument("--capital", type=float, default=100_000.0)
     ap.add_argument("--benchmark", default="SPY")
     ap.add_argument("--model", default="opus")
+    ap.add_argument("--samples", type=int, default=3)
+    ap.add_argument("--tag", default=None, help="suffix for the output file name")
     args = ap.parse_args()
 
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
@@ -57,7 +60,7 @@ def main() -> int:
         rebalance=args.cadence,
         benchmark=args.benchmark,
     )
-    llm = ClaudeCodeLLM(model=args.model)
+    llm = MastersLLM(ClaudeCodeLLM(model=args.model), samples=args.samples)
     def build(n):
         cls_ = PERSONAS[n]
         return cls_() if n == "pead" else cls_(llm=llm)
@@ -94,6 +97,8 @@ def main() -> int:
     out_dir = os.path.join(ROOT, "site-data", "backtests")
     os.makedirs(out_dir, exist_ok=True)
     tag = f"{'-'.join(tickers)}_{'-'.join(names)}_{args.start}_{args.end}"
+    if args.tag:
+        tag += f"_{args.tag}"
     path = os.path.join(out_dir, f"{tag}.json")
     with open(path, "w") as f:
         json.dump(json.loads(result.model_dump_json()), f, ensure_ascii=False, indent=1)

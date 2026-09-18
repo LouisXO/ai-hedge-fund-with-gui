@@ -11,12 +11,14 @@ import datetime as dt
 import json
 import os
 import re
-import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+from integrations.claude_code_llm import ClaudeCodeLLM
+
 MASTERS = os.path.join(ROOT, "site-data", "masters")
-CLAUDE = os.path.expanduser("~/.claude/local/claude")
 
 SYSTEM = """你是金融翻译。把投资大师的英文分析逐条翻成中文。
 
@@ -65,13 +67,7 @@ def parse_marked(text: str) -> dict[str, str]:
 def translate_batch(items: list[tuple[str, str]], timeout: int = 900) -> dict[str, str]:
     """items: [(key, english)] -> {key: chinese}"""
     numbered = "\n\n".join(f"[{k}]\n{txt}" for k, txt in items)
-    proc = subprocess.run(
-        [CLAUDE, "-p", numbered, "--append-system-prompt", SYSTEM,
-         "--model", "opus", "--output-format", "json"],
-        capture_output=True, text=True, timeout=timeout)
-    if proc.returncode != 0:
-        raise RuntimeError(f"claude -p failed: {proc.stderr[:300]}")
-    result = json.loads(proc.stdout)["result"]
+    result = ClaudeCodeLLM(model="opus", timeout=timeout, retries=2).complete(SYSTEM, numbered)
     out = parse_marked(result)
     if not out:
         raise RuntimeError(f"no [n] markers in output: {result[:200]}")
