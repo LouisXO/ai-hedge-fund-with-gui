@@ -1,0 +1,268 @@
+{
+ "date": "2026-09-17",
+ "generated_at": "2026-09-17T08:42:29",
+ "model": "opus",
+ "personas": [
+  "buffett",
+  "munger",
+  "graham",
+  "lynch",
+  "druckenmiller",
+  "pead"
+ ],
+ "elapsed_secs": 72.3,
+ "tickers": [
+  {
+   "ticker": "RKLB",
+   "role": "position",
+   "consensus": -0.278,
+   "disagreement": 0.5,
+   "bulls": 1,
+   "bears": 3,
+   "neutrals": 2,
+   "voted": 6,
+   "abstained": 0,
+   "signals": [
+    {
+     "persona": "graham",
+     "ticker": "RKLB",
+     "value": -0.85,
+     "stance": "bearish",
+     "confidence": 85.0,
+     "abstained": false,
+     "reasoning": "There is no earning power to pay for. The company lost money in all ten periods on record, with average net margin of -35%, average ROE of -29%, and negative free cash flow every time. The negative P/E of -246 means a 39.3B market cap rests on hope, not results. The balance sheet is sound: the current ratio is 5.48 and debt-to-equity is 0.20. But book value per share rose from 0.64 to 5.84 while the company kept losing money, which means the gain came from new capital rather than retained earnings. Strong liquidity does not create a margin of safety where no earnings exist, so the defensive investor must stay away.",
+     "cached": false,
+     "secs": 10.2,
+     "reasoning_cn": "这里根本没有值得花钱去买的盈利能力。该公司在有记录的全部十个期间内均告亏损，平均净利率为 -35%，平均净资产收益率为 -29%，且每一期自由现金流均为负。-246 的负市盈率意味着 39.3B 的市值建立在希望之上，而非业绩之上。资产负债表是稳健的：流动比率为 5.48，负债权益比为 0.20。然而，在公司持续亏损的同时，每股账面价值却从 0.64 升至 5.84，这说明其增长来自新注入的资本，而非留存收益。在不存在盈利的地方，充裕的流动性并不能创造安全边际，因此防御型投资者必须敬而远之。"
+    },
+    {
+     "persona": "munger",
+     "ticker": "RKLB",
+     "value": -0.72,
+     "stance": "bearish",
+     "confidence": 72.0,
+     "abstained": false,
+     "reasoning": "Flip it around and ask how you lose money here. You pay $39.3B for a business that has lost money in every period shown: ROE averages -29%, net margin averages -35%, and free cash flow per share is negative every quarter, getting worse from -0.04 to -0.18 over the past two years. The 156% annual growth in book value per share and the drop in debt/equity from 2.10 to 0.20 did not come from earnings, because EPS never once turned positive; shareholders put that capital in, and a company that keeps asking for money is not compounding it. Revenue growth of 62% and gross margin rising from 27% to 36% are real progress, but a P/E of -246 means you are paying up today for profits nobody has seen, and that is not a bet I will make.",
+     "cached": false,
+     "secs": 15.2,
+     "reasoning_cn": "反过来想，问问自己在这儿会怎么亏钱。你花 $39.3B 买下一家在所列每个期间都亏钱的企业：净资产收益率平均 -29%，净利率平均 -35%，每股自由现金流每个季度都是负的，而且过去两年从 -0.04 一路恶化到 -0.18。每股账面价值每年 156% 的增长，以及负债权益比从 2.10 降到 0.20，都不是靠盈利挣来的，因为每股收益一次都没转正过。那些资本是股东掏钱塞进去的，而一家不停伸手要钱的公司，根本谈不上复利增值。62% 的营收增长、毛利率从 27% 升到 36%，确实是实打实的进步。但 -246 的市盈率意味着你今天就在为谁都没见过的利润付高价，这种赌注我不会下。"
+    },
+    {
+     "persona": "buffett",
+     "ticker": "RKLB",
+     "value": -0.65,
+     "stance": "bearish",
+     "confidence": 65.0,
+     "abstained": false,
+     "reasoning": "The trends are going the right way: gross margin rose from 27% to 36%, operating losses fell from -50% to -25% of sales, revenue is growing about 60%, and debt/equity dropped from 2.10 to 0.20. But this business has never shown me a profit or positive free cash flow. Return on equity is negative in every period, and since the company is losing money, the tenfold rise in book value per share must have come from outside capital (new stock or conversions), not from earnings it kept. A moat shows up as steady high returns, and I can't see one here. Paying $39.3 billion for a company with a negative P/E means betting on a future that has to go perfectly, and I don't do that.",
+     "cached": false,
+     "secs": 14.9,
+     "reasoning_cn": "趋势是朝着对的方向走的：毛利率从 27% 升到 36%，营业亏损占销售额的比例从 -50% 收窄到 -25%，营收增长约 60%，负债权益比从 2.10 降到 0.20。可这家企业从来没让我见过一分利润，也没见过正的自由现金流。净资产收益率每一期都是负的。既然公司在亏钱，每股账面价值涨了十倍，那一定是靠外部资本(增发新股或转股)撑起来的，而不是靠自己攒下的盈利。护城河会体现为稳定的高回报，而我在这里看不到。为一家市盈率为负的公司掏 $39.3 billion，等于押注一个必须样样顺利的未来，这种事我不干。"
+    },
+    {
+     "persona": "druckenmiller",
+     "ticker": "RKLB",
+     "value": 0.55,
+     "stance": "bullish",
+     "confidence": 55.0,
+     "abstained": false,
+     "reasoning": "The second derivative is what caught my eye: revenue growth fell to the mid-30s through most of 2025, then jumped back to 63% and 62% in the last two periods. Operating margin also improved steadily, from -50% to -25%. Debt/equity dropped from 2.10 to 0.20 and the current ratio is 5.48, so this isn't the mix of worsening numbers and leverage that blows up accounts. But the per-share numbers keep this from being a big bet. Quarterly EPS has been stuck between -$0.08 and -$0.11 for two years because the share count kept growing (book value per share rose ninefold). Free cash burn per share is also deeper, -$0.18 now versus -$0.09 a year ago. With a $39.3B market cap and no earnings behind it, the market is already paying for much of this acceleration. I'd take a small long on the inflection, not a full-size position, and add only if the margin gains start showing up in per-share cash flow.",
+     "cached": false,
+     "secs": 23.9,
+     "reasoning_cn": "吸引我的是二阶导数：营收增速在 2025 年大部分时间里回落到 30% 中段，随后在最近两期又跳回 63% 和 62%。营业利润率也在稳步改善，从 -50% 升至 -25%。负债权益比从 2.10 降到 0.20，流动比率 5.48，所以这不是那种数据恶化再叠加杠杆、能把账户炸掉的组合。但每股数据让这笔交易没法下重注。由于股本不断扩张(每股账面价值涨了九倍)，季度每股收益两年来一直卡在 -$0.08 到 -$0.11 之间。每股自由现金消耗也更深了，现在是 -$0.18，一年前是 -$0.09。市值 $39.3B，背后却没有盈利支撑，市场已经为这轮加速提前付了不少钱。我会在拐点上建一个小额多头，不上满仓。只有当利润率的改善开始体现在每股现金流上，我才加仓。"
+    },
+    {
+     "persona": "lynch",
+     "ticker": "RKLB",
+     "value": 0.0,
+     "stance": "neutral",
+     "confidence": 35.0,
+     "abstained": false,
+     "reasoning": "I can't put this in any of my boxes yet, because there are no earnings to grow. EPS is still negative (-$0.08 in each of the last two quarters), so the P/E of -246 is meaningless and the PEG test can't be run. The business is heading the right way: revenue growth sped up to 62%, gross margin rose from 27% to 36%, operating margin went from -50% to -25%, and debt-to-equity fell from 2.10 to 0.20 with a current ratio of 5.48. But book value per share jumped from $0.64 to $5.84, which looks like the balance sheet was fixed with new stock rather than profits, and cash flow is still negative. A $39.3B price for a company that loses money means you're paying for a story, so I'd wait for real earnings before buying, though the improving numbers keep me from calling it bearish.",
+     "cached": false,
+     "secs": 12.9,
+     "reasoning_cn": "这只股票我暂时没法归进我的任何一类，因为根本没有盈利可供增长。每股收益仍是负的(最近两个季度都是 -$0.08)，所以 -246 的市盈率毫无意义，PEG 检验也做不了。生意本身在往好的方向走：营收增速加快到 62%，毛利率从 27% 升到 36%，营业利润率从 -50% 升到 -25%，负债权益比从 2.10 降到 0.20，流动比率 5.48。可每股账面价值从 $0.64 跳到 $5.84，看起来资产负债表是靠发新股修好的，不是靠利润，而且现金流还是负的。为一家亏钱的公司付 $39.3B，等于是在为一个故事买单。所以我会等真正的盈利出来再买，不过数据在变好，我也不至于看空它。"
+    },
+    {
+     "persona": "pead",
+     "ticker": "RKLB",
+     "value": 0.0,
+     "stance": "neutral",
+     "confidence": null,
+     "abstained": false,
+     "reasoning": null,
+     "cached": false,
+     "secs": 16.5
+    }
+   ]
+  },
+  {
+   "ticker": "TSM",
+   "role": "position",
+   "consensus": 0.143,
+   "disagreement": 0.476,
+   "bulls": 2,
+   "bears": 1,
+   "neutrals": 3,
+   "voted": 6,
+   "abstained": 0,
+   "signals": [
+    {
+     "persona": "druckenmiller",
+     "ticker": "TSM",
+     "value": 0.76,
+     "stance": "bullish",
+     "confidence": 76.0,
+     "abstained": false,
+     "reasoning": "This is a second leg up, not a peak. Revenue growth dipped to 20% in 2025/Q4, then picked back up to 35% and 36%. Gross margin went 59% → 62% → 66% → 68% and operating margin 51% → 60% in three quarters. Year-over-year EPS growth went 39% → 35% → 59% → 78%, with the latest quarter at 136.27 against 76.64 a year ago. A 32x P/E looks rich next to a record 40% ROE, but if you annualize the latest quarter the real multiple is much lower. The market is pricing a great company, not one whose earnings momentum is still building. The balance sheet can take a hit: debt/equity has fallen from 0.56 to 0.45 and the current ratio is about 2.5. What keeps me from betting the ranch: at a $2.26T market cap and record margins, much of the good news may already be in the price. Free cash flow per share fell to 53 from 67 the quarter before and trails earnings badly. So I'd build the position and watch whether cash flow catches up with reported profits.",
+     "cached": false,
+     "secs": 20.8,
+     "reasoning_cn": "这是第二波上涨，不是见顶。营收增速在 2025/Q4 回落到 20%,随后重新加速到 35% 和 36%。三个季度里，毛利率一路从 59% → 62% → 66% → 68%,营业利润率从 51% → 60%。每股收益同比增速依次为 39% → 35% → 59% → 78%,最新一季为 136.27,一年前是 76.64。对照创纪录的 40% 净资产收益率,32x 的市盈率看着不便宜，但把最新一季年化，实际倍数要低得多。市场是把它当成一家伟大的公司来定价，却没算进它的盈利动能还在继续积聚。资产负债表扛得住冲击：负债权益比已从 0.56 降到 0.45,流动比率约 2.5。让我没有押上全部身家的原因是：市值 $2.26T、利润率又创纪录，好消息很可能大多已经反映在股价里了。每股自由现金流从上一季的 67 降到 53,远远落后于盈利。所以我会建仓，同时盯紧现金流能不能追上报表利润。"
+    },
+    {
+     "persona": "lynch",
+     "ticker": "TSM",
+     "value": 0.72,
+     "stance": "bullish",
+     "confidence": 72.0,
+     "abstained": false,
+     "reasoning": "This is a fast grower, and it's hard to believe at $2.26 trillion: quarterly EPS went from 76.64 to 136.27 year over year, up 78%, and trailing-twelve-month earnings are up about 54%, on revenue growth of 35-36%. At a P/E of 32 against 45-75% earnings growth, the PEG comes out around 0.5-0.7, so I'm not paying for a story. The story checks out: gross margin went from 58% to 68% and operating margin from 47% to 60%, on a balance sheet with 0.45 debt-to-equity and a 2.46 current ratio. What keeps this out of the classic-setup range is that this is chipmaking, a cyclical business, and margins are at a peak that can't keep expanding. Free cash flow (53 a share last quarter against 136 of EPS) trails earnings badly because of heavy spending on plants, and a company this big has to keep beating giant numbers.",
+     "cached": false,
+     "secs": 17.3,
+     "reasoning_cn": "这是一只快速增长股，放在 $2.26 trillion 的体量上简直让人难以置信。季度每股收益同比从 76.64 涨到 136.27,增长 78%;过去十二个月的盈利增长约 54%,营收增速是 35-36%。市盈率 32,对应 45-75% 的盈利增速,PEG 大约在 0.5-0.7,所以我不是在为一个故事买单。这个故事也经得起核对：毛利率从 58% 升到 68%,营业利润率从 47% 升到 60%,资产负债表上负债权益比 0.45,流动比率 2.46。让它够不上经典买点的原因是：这是造芯片的，属于周期性行业，而利润率已经处在高峰，不可能一直扩张下去。由于在工厂上砸了大笔钱，自由现金流(上季度每股 53,每股收益则是 136)远远落后于盈利。况且这么大的公司，得不停地超越自己那些庞大的数字才行。"
+    },
+    {
+     "persona": "graham",
+     "ticker": "TSM",
+     "value": -0.62,
+     "stance": "bearish",
+     "confidence": 62.0,
+     "abstained": false,
+     "reasoning": "The business itself passes my tests: the current ratio is 2.46, debt-to-equity is a modest 0.45, and every period shown is profitable, with margins and book value per share rising steadily. The price is another matter. Trailing earnings (the last four quarters, 136.27 + 110.44 + 93.54 + 87.10 = 427.35) against book value per share of 1,248.33 put the stock at about 32 times earnings and roughly 11 times book. That product is about 350, against my ceiling of 22.5. Free cash flow of about 217 per share over the same four quarters is only half of reported earnings, so the buyer pays some 63 times the cash the business actually produces. The defensive investor gets no margin of safety here, only payment in advance for growth that has not yet been earned, and I call that overvaluation a bearish fact however excellent the enterprise.",
+     "cached": false,
+     "secs": 17.5,
+     "reasoning_cn": "企业本身通过了我的检验：流动比率为 2.46,负债权益比为适度的 0.45,所列每个期间均实现盈利，利润率与每股账面价值稳步上升。价格则是另一回事。以过去的盈利(最近四个季度,136.27 + 110.44 + 93.54 + 87.10 = 427.35)和 1,248.33 的每股账面价值计算，该股股价约为盈利的 32 倍、账面价值的 11 倍左右。二者乘积约为 350,而我设定的上限是 22.5。同样四个季度的每股自由现金流约为 217,仅为报告盈利的一半，因此买方所付价格约为企业实际产生现金的 63 倍。防御型投资者在此得不到任何安全边际，只是在为尚未挣到的增长预先付款。无论该企业多么出色，我都将这种高估视为一项看空的事实。"
+    },
+    {
+     "persona": "buffett",
+     "ticker": "TSM",
+     "value": 0.0,
+     "stance": "neutral",
+     "confidence": 60.0,
+     "abstained": false,
+     "reasoning": "This is a wonderful business on the numbers: return on equity has climbed from 29% to 40%, gross margin from 58% to 68%, and book value per share has compounded about 24% a year. It has done that while cutting debt/equity from 0.56 to 0.45 and keeping a current ratio near 2.5, which looks like real pricing power and disciplined management. What gives me pause is that this is a capital-hungry business. Over the last four quarters only about half of reported earnings turned into free cash flow, so the stock's 32x P/E works out to more than 60x free cash flow. That price assumes 30%-plus growth keeps going in an industry that has always been cyclical. I'd gladly own this business for ten years, but at this price I'd rather wait for a better pitch than swing now.",
+     "cached": false,
+     "secs": 18.0,
+     "reasoning_cn": "单看数字，这是一门了不起的生意：净资产收益率从 29% 爬到 40%,毛利率从 58% 升到 68%,每股账面价值每年复利增长约 24%。做到这些的同时，负债权益比还从 0.56 降到了 0.45,流动比率保持在 2.5 附近，看起来是真正的定价权加上有纪律的管理层。让我犹豫的是，这是一门很吃资本的生意。过去四个季度，报告盈利里只有大约一半变成了自由现金流，所以这只股票 32x 的市盈率折算下来，是自由现金流的 60x 以上。这个价格假定在一个向来有周期的行业里,30% 以上的增长能一直持续下去。我很乐意持有这门生意十年，但在这个价位上，我宁愿等一个更好的球，也不现在挥棒。"
+    },
+    {
+     "persona": "pead",
+     "ticker": "TSM",
+     "value": 0.0,
+     "stance": "neutral",
+     "confidence": null,
+     "abstained": false,
+     "reasoning": null,
+     "cached": false,
+     "secs": 1.2
+    },
+    {
+     "persona": "munger",
+     "ticker": "TSM",
+     "value": 0.0,
+     "stance": "neutral",
+     "confidence": 55.0,
+     "abstained": false,
+     "reasoning": "This is a superb business by every measure shown. ROE rose from 29% to 40%, operating margin from 47% to 60%, book value per share compounded at 24% a year, and debt/equity fell from 0.56 to 0.45, so inverting it turns up no rot in the numbers. The problem is that I only have ten quarters, all from an upcycle, and the business eats capital: trailing free cash flow is about 217 per share against about 427 of EPS, and conversion slipped to 39% in the latest quarter. At 32 times record-margin earnings, the free-cash-flow yield is only about 1.6%, which only works if a cyclical chip foundry holds 60% operating margins while capex keeps swallowing half its profits. That's a great business at a price I won't pay without seeing a downturn in the record, so it stays on the watch list rather than in the portfolio.",
+     "cached": false,
+     "secs": 19.1,
+     "reasoning_cn": "按所列的每一项指标衡量，这都是一门顶尖的生意。净资产收益率从 29% 升到 40%,营业利润率从 47% 升到 60%,每股账面价值每年复利增长 24%,负债权益比从 0.56 降到 0.45。所以反过来查一遍，数字里也翻不出什么烂账。问题在于我手上只有十个季度的数据，全都来自上行周期，而且这门生意吞资本。过去十二个月每股自由现金流约 217,每股收益约 427,最新一季的转化率更是滑到了 39%。按创纪录利润率下盈利的 32 倍来买，自由现金流收益率只有约 1.6%。要让这笔账算得通，一家周期性的芯片代工厂就得守住 60% 的营业利润率，而资本开支还要继续吞掉一半利润。这是一门好生意，但在记录里看到它熬过一次下行周期之前，这个价我不会付。所以它留在观察名单上，进不了投资组合。"
+    }
+   ]
+  },
+  {
+   "ticker": "RGTI",
+   "role": "position",
+   "consensus": -0.525,
+   "disagreement": 0.382,
+   "bulls": 0,
+   "bears": 4,
+   "neutrals": 2,
+   "voted": 6,
+   "abstained": 0,
+   "signals": [
+    {
+     "persona": "graham",
+     "ticker": "RGTI",
+     "value": -0.88,
+     "stance": "bearish",
+     "confidence": 88.0,
+     "abstained": false,
+     "reasoning": "There are no demonstrated earnings here to value. Operating losses ran between 5 and 15 times revenue in every period shown, and free cash flow was negative throughout. The few quarters with positive net income (net margin +7.52 in 2026/Q1, +28.95 in 2025/Q1) came while operating margins stayed deeply negative, so they reflect non-operating items rather than earning power. The P/E of -19.12 and ROE of -0.44 put the $5.3B market cap at roughly 8.4 times book value, which is a price paid entirely for hope. The balance sheet is adequate, with a current ratio of 3.94 and debt/equity of 0.21. But the current ratio has fallen from about 37-41, and the rise in book value per share from 0.37 to 1.61 did not come from retained earnings, since the company lost money over the record. That leaves no margin of safety for a defensive investor.",
+     "cached": false,
+     "secs": 13.4,
+     "reasoning_cn": "这里没有经过验证的盈利可以拿来估值。在所列的每一个期间，营业亏损都是营收的5到15倍，自由现金流始终为负。少数几个净利润为正的季度(2026/Q1净利率+7.52，2025/Q1为+28.95)出现时，营业利润率依然深度为负。因此这些利润反映的是非经营性项目，而不是盈利能力。市盈率-19.12，净资产收益率-0.44，$5.3B的市值约为账面价值的8.4倍，这个价格完全是在为希望买单。资产负债表尚属充足，流动比率3.94，负债权益比0.21。但流动比率是从约37-41降下来的。每股账面价值从0.37升至1.61，也并非来自留存收益，因为在整个记录期内公司一直在亏钱。对防御型投资者而言，这里没有任何安全边际。"
+    },
+    {
+     "persona": "munger",
+     "ticker": "RGTI",
+     "value": -0.85,
+     "stance": "bearish",
+     "confidence": 85.0,
+     "abstained": false,
+     "reasoning": "Flip it around and failure is already here: operating losses have run at 5 to 15 times revenue in every period shown, ROE has been negative every single period, free cash flow per share has never been positive, and gross margin has slipped from 0.51 to 0.43. Book value per share went from 0.37 to 1.61 while the company lost money the whole time, so that growth didn't come from earnings; it has to have come from selling new shares or some other outside capital. That isn't compounding. The quarters with a positive net margin (Q1 2025 at 28.95, Q1 2026 at 7.52) came while operating margins sat at -14.70 and -5.90, so the profit came from something outside the business, and I don't count it as earnings. Paying a $5.3B market cap for a business that loses several dollars for every dollar of sales and has shown one good revenue-growth figure after years of shrinking means believing something stupid, so I pass.",
+     "cached": false,
+     "secs": 11.3,
+     "reasoning_cn": "反过来想，失败已经摆在眼前了。在所列的每一个期间，营业亏损都是营收的5到15倍。净资产收益率没有一期是正的，每股自由现金流从来没有转正过，毛利率也从0.51滑到了0.43。公司从头到尾都在亏钱，每股账面价值却从0.37涨到1.61，所以这份增长不是赚来的，只能来自增发新股或别的外部资本。这不叫复利。净利率为正的那几个季度(2025年Q1为28.95，2026年Q1为7.52)，营业利润率分别是-14.70和-5.90。可见利润来自生意之外的东西，我不把它算作盈利。有家企业每卖一块钱的东西就要亏好几块钱，多年萎缩之后只拿得出一个像样的营收增长数字。为它付$5.3B的市值，就得相信一件蠢事，所以我不碰。"
+    },
+    {
+     "persona": "buffett",
+     "ticker": "RGTI",
+     "value": -0.82,
+     "stance": "bearish",
+     "confidence": 82.0,
+     "abstained": false,
+     "reasoning": "I can't tell you what this business will earn in ten years, and the numbers can't either. Operating losses have run between 5 and 15 times revenue in every period shown, return on equity has been negative throughout, and free cash flow per share has been negative every period. The only positive earnings came from swings below the operating line, not from the business itself. Book value per share did rise from $0.37 to $1.61, and the strong current ratio and low debt look comfortable, but with steady losses and cash burn that growth looks to have come from selling new shares rather than from retained profits, so it isn't compounding. There's no moat, pricing power or earnings power in these figures, and a $5.3 billion market cap for a company that has never made money on its operations is a price that demands perfection, so I'll pass.",
+     "cached": false,
+     "secs": 11.0,
+     "reasoning_cn": "我没法告诉你这门生意十年后能赚多少钱，这些数字也告诉不了你。在所列的每一个期间，营业亏损都在营收的5到15倍之间，净资产收益率一直是负的，每股自由现金流每一期都是负数。仅有的那点正盈利来自营业线以下的波动，不是生意本身赚的。每股账面价值确实从$0.37涨到了$1.61，流动比率强、负债低，看着也挺让人放心。但公司一直在亏钱、一直在烧钱，这份增长看起来是靠卖新股得来的，不是靠留存利润攒下的，所以算不上复利。这些数字里看不到护城河，看不到定价权，也看不到盈利能力。一家经营上从来没赚过钱的公司，市值却有$5.3 billion，这个价格要求样样都完美，所以我就不掺和了。"
+    },
+    {
+     "persona": "lynch",
+     "ticker": "RGTI",
+     "value": -0.6,
+     "stance": "bearish",
+     "confidence": 60.0,
+     "abstained": false,
+     "reasoning": "I can't put this in any of my categories. It's not a fast grower, stalwart or turnaround, because there are no earnings to grow: trailing EPS is -$0.16 and operating losses run about 5.5 times revenue. The two quarters with positive EPS (Q1 2025 and Q1 2026) came with operating margins of -14.7x and -5.9x revenue, so that profit came from outside the business. There's no PEG to figure with a P/E of -19. Sales are up 185% and the operating loss is shrinking against revenue, but that's off a base that shrank in 2024 and 2025. The balance sheet has cushion, yet the current ratio has fallen from about 37 to 3.9 and debt/equity doubled to 0.21 in a quarter. That leaves $5.3 billion paid for a story with no earnings under it. That's the whisper stock I've always told people to pass on, however good the story sounds.",
+     "cached": false,
+     "secs": 15.3,
+     "reasoning_cn": "这只股票我没法归进我的任何一类。它不是快速增长型，不是稳定增长型，也不是困境反转型，因为根本没有盈利可以增长:过去十二个月的EPS是-$0.16，营业亏损大约是营收的5.5倍。EPS为正的那两个季度(2025年Q1和2026年Q1)，营业利润率分别是营收的-14.7x和-5.9x，所以那点利润是从生意之外来的。市盈率是-19，PEG根本没法算。销售额涨了185%，营业亏损相对营收也在收窄，可那是从2024年和2025年缩水过的基数上涨起来的。资产负债表有缓冲，但流动比率已经从37左右掉到3.9，负债权益比一个季度就翻了一倍到0.21。说到底，就是花$5.3 billion买一个底下没有盈利撑着的故事。这正是我一直劝大家别碰的\"耳语股\"，不管故事听起来多动人。"
+    },
+    {
+     "persona": "pead",
+     "ticker": "RGTI",
+     "value": 0.0,
+     "stance": "neutral",
+     "confidence": null,
+     "abstained": false,
+     "reasoning": null,
+     "cached": false,
+     "secs": 9.7
+    },
+    {
+     "persona": "druckenmiller",
+     "ticker": "RGTI",
+     "value": 0.0,
+     "stance": "neutral",
+     "confidence": 45.0,
+     "abstained": false,
+     "reasoning": "The top line has clearly turned: TTM revenue growth went from shrinking 18-52% through 2025 to +199% and +185% in the last two quarters. Gross margin rose to 43% and operating margin improved from -12.1x to -5.5x revenue. But the move is already slowing a little, and it comes off a tiny base. The company still loses about 5.5 times its revenue at the operating level, cash burn per share grew from -0.06 to -0.08, book value per share fell from 1.75 to 1.61, and the current ratio dropped from 37 to under 4 in two quarters. At a 5.3B market cap the market is already paying for the turnaround and much more, so this isn't an asymmetric bet I'd make. Leverage is still modest at 0.21 debt/equity, so it's not a short either; I'll pass and wait for the operating losses to start closing on their own rather than just shrinking against a bigger revenue number.",
+     "cached": false,
+     "secs": 16.8,
+     "reasoning_cn": "营收显然已经拐头了。TTM营收增速从2025年全年萎缩18-52%，变成最近两个季度的+199%和+185%。毛利率升到43%，营业利润率从营收的-12.1x改善到-5.5x。但这波势头已经开始略微放缓，而且是从一个极小的基数上起来的。公司在营业层面仍然亏掉约5.5倍的营收，每股现金消耗从-0.06扩大到-0.08，每股账面价值从1.75降到1.61，流动比率两个季度内就从37跌到4以下。按5.3B的市值，市场已经在为这次反转买单，而且付得远不止于此，所以这不是我会下的非对称赌注。杠杆仍然不高，负债权益比0.21，所以也不做空。我放弃，等营业亏损本身开始收窄，而不只是在更大的营收数字面前显得变小。"
+    }
+   ]
+  }
+ ]
+}
