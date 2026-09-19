@@ -1,0 +1,211 @@
+# 多信号验证型交易 Agent — 详细计划 v2
+
+- v1:2026-09-18(调研开源框架 + 仓库探索 + 实现设计),原文见 `docs/AGENT_PLAN_v1.md`
+- v2:2026-09-19(第二轮对比:独立 agent 按 Qlib/因子评测惯例、多重检验文献、期权收益文献逐条挑错,关键说法已实测核实)
+- 仓库:`~/hedge-fund`(v2-rebuild)+ `~/optradar`(main)
+
+---
+
+## 0. Context
+
+- **现状**:optradar 每天 08:41 出买方期权雷达。方向靠 SMA20 + 5 日动量门,合约结构靠 Black-Scholes 持有期定价。5 位 LLM 大师周一/周四打分。纸面账本记 budget/atm 两种合约,7/14 天结算。
+- **已被证伪**(PLAN.md §7–§9):
+  - LLM 方向预测:+5 日命中 55%,"永远猜多数方向"是 70%。
+  - 5 人委员会 = 单人:误差完全相关。
+  - 财报卖方"边际":是 30 日 IV 代理口径的产物。
+  - §9 的结论:"没有记分牌,加任何东西之前先闭环"。
+- **9/18 已完成**:LLM 调用密封、类型化合约、缓存键带真实模型 ID。
+- **目标**:把各类信号整合成一个 agent。每个信号先过统一检验,每天的建议进纸面账本闭环。
+
+### 已拍板的决定
+| 项 | 决定 |
+|---|---|
+| LLM 角色 | 不出方向信号;只做早报叙述,以及(后置、可选)文本→结构化字段 |
+| 数据源 | 主用 moomoo;验证/回填用 yfinance 免费日线;AV 留免费档;内部人用 SEC EDGAR;有必要再付费 |
+| 大师 | 退役,不进决策路径;周一/四继续生成只供公开站 |
+| 纸面账本 | 新 `source='agent'` 期权仓 + 股票级信号表 |
+| 铁律 | 只读、永不下单;仓位不上公开站;LLM 调用全部密封 |
+
+---
+
+## 1. v1 → v2 改了什么(第二轮对比的结论)
+
+| # | v1 的做法 | 问题(证据) | v2 的做法 |
+|---|---|---|---|
+| 1 | 用**股票收益截面 IC** 决定信号能不能用,然后去**买期权** | IC 衡量的是相对(去均值后)收益,而买 call 赚的是绝对收益,大盘一跌全亏。平值期权买方平均亏钱(Coval & Shumway:零 beta 平值跨式每周约 −3%)。粗算:37 天平值期权权利金约为现价的 3.4%;持有 7 天,VRP 损耗约 0.10%,往返价差 0.1–0.17%;按 delta 0.5 折算,股票要多涨约 0.5% 才回本。IC 0.02 在 top-5 上只能带来约 0.12%。 | **两道门**:① 方向分,检验"极端 5 名的原始 7/14 日收益"和"对照期权回本点的命中率";② **期权便宜门**,预测持有期 RV ≥ IV × k,且预期波动 ≥ 回本 + 价差。晋升标准改成**期权账本自身的期望收益**(预先定样本量),股票 IC 只作为前置筛选。`iv_rv`/`iv_rank` 从"方向信号"改为"选合约的门"。 |
+| 2 | 阈值:rank-IC ≥ 0.02、日频 ICIR ≥ 0.30、NW t ≥ 2.5;安慰剂 `shifted(60)`/`date_shuffled` 必须约 0 | Qlib 的 LightGBM 在 158 个特征、CSI300 上 ICIR 也才 0.37,线性模型 0.30。单因子在美股大盘不可能达到,等于注定"没有信号通过"。慢信号(动量、价值、内部人)滞后 60 天后排名几乎不变,安慰剂会误杀好信号。按日打乱 ticker 的置换会破坏 IC 的自相关,p 值偏小。 | rank-IC ≥ 0.01(h = 实际持有期);ICIR 改用不重叠的周频 IC,门槛约 0.1;NW t:已发表因子复现 ≥ 2,新假设 / LLM 提出的 ≥ 3(Harvey–Liu–Zhu);置换改为**整个面板统一打乱 ticker**;bootstrap 改为 Politis–White 自动块长的平稳 bootstrap;`lookahead`/`planted` 只做工具自检;安慰剂改用"整面板置换零分布"。 |
+| 3 | universe = 今天市值 ≥ $5B + 期权活跃,冻结后回填到 2014 | 这不只是幸存者偏差,还是**用今天的结果选样本**:留下的都是后来涨大、变热门的票,会系统性抬高动量 IC、压低反转和价值。 | 用**时点正确的 S&P 500 成分**(免费,github.com/fja05680/sp500),只保留"当日是成分股"的 (ticker, 日期);2019 年后再叠加当日的 ADV 过滤;报告同时给"当日成分"和"2026 冻结名单"两种 IC,差值就是偏差估计;yfinance 拿不到的退市股计数记录。 |
+| 4 | 权重 = ICIR 加权,用同一段数据回放来"验证" | 同一数据拟合又打分,是循环论证;重叠标签没有 purge/embargo;每天只买 5 只,广度极小(IR ≈ 0.02 × √260 ≈ 0.3,还没扣期权成本);没有持仓黏性,会频繁换票;实盘单笔期权收益的标准差约为权利金的 50–80%,要验证 +3% 的边际需要约 1,600 笔独立交易,"3 个月 IC < 0 就退役"会被噪声触发。 | 默认**等权 z 分合成**;只有 purged walk-forward(扩展窗口、5 日 embargo)样本外胜过等权才改 ICIR 加权;对 `family_log` 里所有试过的变体报告 **deflated Sharpe / PBO**;加**持仓黏性**(排名掉出前 15 才换);**预先写死评估点**(N 笔已结算或某个日期),日常只显示滚动 CI,不看每天的命中率;退役窗口相应拉长。 |
+| 5 | 阶段顺序:动量 → … → 期权信号最后(等 12 个月数据) | 12-1 动量是月频慢因子,和 7–14 天的期权持有期不匹配;原始 5 日反转在大盘股很弱,扣掉行业/市场后的残差反转利润约翻倍且在大盘股仍存在(Blitz et al.);PEAD 在大盘股 2006 年后基本为 0(Martineau 2022);≥$5B 名单里内部人集中买入很少;期权隐含类信号恰好在周频、期权流动好的名单上有文献支持(Cremers–Weinbaum:call 相对贵的票比 put 相对贵的每周多约 50bp,但样本期内在衰减;Xing–Zhang–Zhao:skew 最陡的年化跑输 10.9%)。 | **期权信号提前**:先探 DoltHub 免费期权库(`post-no-preference/options`,2019→),不行就考虑付费 EOD IV 历史;新主信号 `iv_spread`(同行权价 call−put IV),`skew_25d` 为次;`reversal_5` 换成**残差反转**;`mom_12_1` 只做对照/慢倾斜;PEAD、价值/质量降为"预期 FAIL、便宜的一次性检查";moomoo 夜间期权链归档第一天就开始攒实盘数据。 |
+
+其他修正(每条一行):
+- **AV 新闻多票查询是"同时提到所有票"**。实测:9/2 单查 AAPL 23 条、单查 RKLB 3 条,查 `RKLB,AAPL` 0 条。改成不带 ticker(或按 topic)、`limit=1000`、本地按 `ticker_sentiment` 过滤。
+- **AV 新闻回填不是时点正确的**(历史文章的摘要和情绪是重新生成的),一律视为不可检验,只用实盘爬取的数据验证。
+- **标签对齐执行时点**:信号来自前一日收盘,次日开盘附近成交,标签改为从实际入场时点起算;加 h = 10(约 14 自然日),主期限 = 实际持有期。
+- **Regime 门**:VIX 高本身就意味着期权贵,已被 #1 的便宜门覆盖;VIX ≥ 30 只保留为熔断开关。
+- **`min_conviction`**:按 |composite| 取 top-K 时它不起作用,改成"预期波动 / 回本点"的下限。
+- **多重检验**:`family_log` 里每个 (信号, 变体, 期限) 都算一次尝试;P6 若让 LLM 提因子,加 AlphaAgent 式原创性(AST 相似度)惩罚。
+- **yfinance 在 2025–26 常被限流封禁**:历史只抓一次存下来,之后只对账近期窗口,不做每周全量重抓;钉版本号,显式 `auto_adjust=False`。
+- **moomoo 盘后期权链**:bid/ask 是陈旧的,改在收盘前 15:45 ET 快照,或保存 moomoo 自带的 IV 字段和时间戳;OI 每晚才公布一次,滞后 1 日使用。
+- **价值/质量用当前股数**是 look-ahead:改用 SEC XBRL companyfacts 的 `shares_outstanding`(免费、按申报日期时点正确),或直接跳过 P5。
+- **SEC insider 季度数据集**确认可用:注意 4/A 修订和重复持有人行,过滤 `TRANS_CODE='P'` 且 `TRANS_PRICEPERSHARE>0`。
+- **工作量**:v1 在拿到任何收益证据前要 15–17 个 session,正好重复 §9 的教训;v2 先做 6–7 个 session 的最小闭环。
+
+v1 里**保持不变**的部分:决策路径不放 LLM;预注册阈值带版本号、`family_log`、candidate → validated → retired 生命周期(只调整数字);信号全 universe 计算、`predict()` 查表;面板层保证时点正确;弃权 ≠ 中性;检验工具自检(planted 通过 / 噪声失败 / lookahead 被标出);影子模式是一等公民;固定 7/14 天结算;`optradar_rule` 和"永远猜多数"作为基准;从 agent 框架里只保留决策日志、逐笔归因、持久化回本点,不要多空辩论和 LLM 反思。
+
+---
+
+## 2. 开源框架对比(v1 调研,保留)
+
+| 框架 | LLM 的位置 | 信号→仓位 | 风控 | 验证 | 独立评测结论 |
+|---|---|---|---|---|---|
+| TradingAgents(107k★) | 全部:提取+辩论+决定 | 文字辩论→买/卖/持,无仓位 | 口头"风险辩论" | 3 个月、3 只票、无成本、在训练窗内 | 77 篇审计最低可复现级;look-ahead 修复到 2026 才做 |
+| FinMem / FinAgent | 决策者,带分层记忆 | 单股买/卖/持 | 无 | 6 个月、5 只票 | FINSABER 20 年×100+ 票重跑:Sharpe −0.23 / 0.24 vs 买入持有 0.70 |
+| Trading-R1 | 4B 微调决策者 | 5 档标签 | 无 | 2024 年内测试 | 作者自认多头偏置;无代码 |
+| FinRL-DeepSeek | 新闻打分×RL 动作 | RL 策略 | CVaR、turbulence 熔断 | NDX 2019–23 | 信息比率≈0;LLM 注入越多越差 |
+| ai-hedge-fund v2(上游,63k★) | persona → [−1,1] | 加权均值→去均值→归一→硬 clamp | 每票/总敞口上限,审计事件 | 单一代码路径、PIT 快照 | 无公开业绩;我们 §7 证伪了 persona |
+| Qlib + RD-Agent(Q) | 研究员:提假设、写因子代码 | Qlib ML + TopK-dropout | Qlib 回测约束 | CSI300 2017–20 | 唯一有正面机制证据的 LLM 用法;LLM 在实盘环路外 |
+| FinRobot | 叙述者 | 不交易 | — | — | "数字代码算,文字 LLM 写,输出有来源" |
+| nof1 Alpha Arena(真钱) | 唯一交易员 | 直接下单 | 杠杆上限 | 2 周真钱 | 中位模型亏损;手续费吃掉收益;可迁移:写计划并每次喂回 |
+| Lean / freqtrade / Jesse | 无 | 显式规则/模型 | 显式 | walk-forward、look-ahead 检测、蒙特卡洛 | 行业骨架 |
+
+反复出现的失败模式:① 模型知识窗内回测全污染,遮蔽 ticker/日期无效;② 玩具窗口和 universe;③ 无成本、无退市、无执行语义;④ 牛市胆小、熊市鲁莽;⑤ 推理能力 ≠ 交易能力;⑥ 相同输入不同交易;⑦ 口头风控不是风控;⑧ 星数与证据无关。
+
+新闻情绪→次日收益(Lopez-Lira & Tang,JFE 2026):效应真实,但集中在小盘、负面新闻、隔夜;Sharpe 从 6.5(2021Q4)衰减到 1.2(2024);20bp 往返成本下归零;部分样本内效应是模型记忆。
+
+**我们与所有 LLM-agent 框架的根本区别**:决策路径上没有 LLM。v2 进一步:**决策的最终裁判是期权账本的期望收益,不是股票 IC**。
+
+---
+
+## 3. 目标架构(v2)
+
+```
+数据层   moomoo(实盘行情/期权链/持仓) · yfinance(历史日线,一次抓取) · 时点 S&P 500 成分 · DoltHub 期权/IV 历史(待探) · AV 免费档(不带 ticker 的新闻 + 国会) · SEC EDGAR(insider、XBRL 股数) · optradar chain_raw
+   │
+面板层   ~/.hedge-fund/agent/panel.db:bars、index_daily(SPY/^VIX)、membership(PIT)、iv_daily、chain_daily、news_sentiment、insider_tx、earnings_events、signal_cache
+   │
+信号库   CrossSectionalModel(QuantModel):全 universe 按日计算 → Signal(value ∈ [−1,1], components)
+   │
+检验层   Alphalens 式 tearsheet(IC 分期限、五分位原始/超额收益、首尾 5 名原始收益、换手)
+   │      + 整面板置换零分布 + 平稳 bootstrap + purged walk-forward;后期再加 FWER / deflated Sharpe
+   │
+决策层   门 ①:方向 = 等权 z 合成(持仓黏性:掉出前 15 才换)
+   │      门 ②:期权便宜 = 预测 RV(持有期)≥ IV·k 且 预期波动 ≥ 回本 + 价差
+   │      beta 处理:多头 call 配空头端 put,或 SPY 对冲腿;VIX ≥ 30 熔断
+   │
+输出层   agent_signals / agent_picks → horizon.pick 选合约(或借方价差)→ paper_ledger source='agent' → 7/14 天结算
+   │      评估:预先写死 N 笔 / 日期,滚动 CI
+   │
+叙述层   (后置)密封 LLM 只复述数字
+```
+
+---
+
+## 4. 最小闭环:6–7 个 session 拿到第一份真证据
+
+| 步骤 | 内容 | 产出 / 停走标准 | 工作量 |
+|---|---|---|---|
+| **S1 面板 + PIT universe** | 装 `duckdb==1.5.5`、`yfinance`(钉版本)到 `~/.hedgefund-venv`,记在 `requirements-agent.txt`;`PanelStore` + DDL;时点 S&P 500 成分 ∩ 期权流动性;yfinance 日线一次抓取 2014→ + SPY/^VIX;最小 tearsheet(IC h = 1/5/10、五分位原始和超额收益、首尾 5 名原始收益、换手)+ 平稳 bootstrap + 整面板置换零分布;planted/noise 自检 | 回填缺失 < 2%;planted 通过、noise 失败;报告"当日成分 vs 冻结名单"的动量 IC 差 | 1 |
+| **S2 期权边际测量(先于任何新信号)** | 用 optradar 纸面账本已有记录 + 探 DoltHub IV 历史:对每个历史 radar pick,算回本点 vs 实际波动、持有期 IV vs 实际 RV | 直接回答"任何方向分能否越过回本点",并**把需要的 IC 换算成期权口径**,作为 S3 的门槛;若 DoltHub 不可用,记录并决定是否付费 | 1 |
+| **S3 三个信号** | 残差反转(对行业/市场回归后的 5 日残差)、`iv_spread` / `skew_25d`(DoltHub 历史)、`mom_12_1`(只做对照);等权 z 合成;purged walk-forward | 合成在样本外的首尾 5 名原始收益是否越过 S2 的门槛;不过 → 影子模式上线,照样记账 | 1 |
+| **S4–S5 账本接线** | `agent_signals` / `agent_picks` 表;`source='agent'`;期权便宜门;beta 处理(配对 put 或 SPY 腿);持仓黏性;预先写死评估 N;optradar 3 处小改;早报 ⑨ 节(纯数字,无 LLM) | selftest 隔离跑绿;实盘第一周每天有 `agent_signals`,agent 行被 mark;以影子或实盘模式上线 | 1–2 |
+| **S6 开始攒时点数据** | moomoo 夜间 / 15:45 ET 期权链归档;AV 不带 ticker 的新闻爬取(本地过滤) | 只攒数据,不参与决策;2 周后归档缺日率 < 5% | 1 |
+| **之后(仅当 S3–S4 显示出东西)** | EDGAR insider 轨道;ICIR 加权(须胜过等权);regime 细化;叙述者;FWER / deflated Sharpe 全套;P6 LLM 研究员(带原创性惩罚);PEAD、价值/质量作为预期 FAIL 的一次性检查,不过就删 | — | 按需 |
+
+### 生产部署前提
+本机 optradar 是干净 clone,没有 db/out/.env/plist。S4–S5 的 launchd 接线要等迁移第 6–7 步完成(旧机器数据、plist)后在生产机做。
+
+---
+
+## 5. 关键实现约定(从 v1 保留并按 v2 修正)
+
+### 5.1 包布局
+```
+hedge-fund/
+  requirements-agent.txt             duckdb==1.5.5, yfinance==<钉死>
+  hedge_fund/features/panel.py       PanelStore + PanelDataClient
+  hedge_fund/features/rv.py          yang_zhang(), close_to_close(), har_forecast()
+  hedge_fund/signals/xs.py           CrossSectionalModel(QuantModel)
+  hedge_fund/signals/{reversal,momentum,vol_surface}.py
+  hedge_fund/validation/{tearsheet,stats,placebo,walkforward,registry}.py
+  agent/{universe,backfill,daily,ledger,brief}.py
+  agent/sources/{sp500_membership,dolthub_iv,moomoo_chain,av_news}.py
+  agent/tests/
+optradar/(3 处小改)
+  radar/ledger.py   SOURCES = ("budget","atm","agent")
+  radar/report.py   标签表加 "agent"
+  bin/run_and_notify.sh   agent 块在 run_daily 之后、masters 之前
+```
+- 两个 venv 都有 moomoo-api + PyYAML,agent 在 3.13 venv 里用 `sys.path` 直接 import optradar 的 `sources/moomoo_src.py`、`radar/horizon.py`、`radar/ideas.py`、`radar/ledger.py`。
+- DuckDB:钉 1.5.5 与 optradar 同版本;agent 只在最后一步短暂开读写(≤ 2 秒),带重试;面板库是独立文件。
+
+### 5.2 信号 API
+- `raw(as_of, tickers)` → `compute(as_of)`:1/99% winsor → 稳健 z = (x − median)/(1.4826·MAD) → value = clip(z/3, −1, 1),缓存到 `signal_cache`。
+- `compute()` 永远跑全 universe(当日成分),`predict()` 只查表。
+- `components` 恒含 `raw, z, pct_rank, n_names`(全部数值);数据不足时 `abstained=True`。
+
+### 5.3 S3 信号公式
+| 信号 | raw | 符号 | 说明 |
+|---|---|---|---|
+| `resid_reversal_5` | −(过去 5 日收益对 SPY 和行业 ETF 回归后的残差累计) | + | 回归窗 60 日;Blitz et al. |
+| `iv_spread` | 同一行权价 call IV − put IV,取 ATM 附近成交活跃档的 OI 加权均值 | + | Cremers–Weinbaum;call 相对贵 → 看涨 |
+| `skew_25d` | (iv@δ≈−0.25 put − iv@δ≈+0.25 call)/iv_atm | − | Xing–Zhang–Zhao |
+| `mom_12_1`(对照) | A[−21]/A[−252] − 1 | + | 只做对照和慢倾斜 |
+| `optradar_rule`(基准) | `radar/ideas.py:44-51` 原样 | — | 预期失败,量化"方向已证伪" |
+
+### 5.4 期权便宜门(门 ②)
+- 预测持有期 RV:HAR(日、周、月 YZ RV)或 YZ20;对比所选合约 IV。
+- 入场条件:`RV_forecast ≥ IV × k`(k 预注册,初值 0.9)且 `|预期波动| ≥ be7 + spread`(`radar/horizon.py` 已算 `flat7/be7`)。
+- 不满足时:改用借方价差,或当天跳过这只票(记录原因)。
+
+### 5.5 预注册阈值(v2,`thresholds_version: 2`)
+1. h = 实际持有期(5 / 10 个交易日),标签从实际入场时点起算。
+2. rank-IC ≥ 0.01,符号与预注册一致。
+3. 不重叠周频 IC 的 ICIR ≥ 0.1。
+4. NW t:已发表因子复现 ≥ 2,新假设 ≥ 3。
+5. 整面板置换零分布下显著(p < 0.05);平稳 bootstrap 95% CI 不含 0。
+6. 2015 年后子样本符号一致。
+7. 对 `mom_12_1` 的 partial IC ≥ 0.005。
+8. **期权口径**:首尾 5 名原始收益 > S2 换算出的回本门槛(扣价差)。
+9. `family_log` 每个 (信号, 变体, 期限) 计一次尝试;合成报告 deflated Sharpe。
+
+### 5.6 账本
+- `agent_runs`、`agent_signals`(含 `__composite__` 行)、`agent_returns`(1/5/10/20 日、从入场时点起算)、`agent_picks`(含"便宜门"是否通过和原因)写进 optradar.db,DDL 由 `agent/ledger.py` 自带(仿 `bin/congress.py`)。
+- `open_agent_positions`:top-K = 5 按 composite,持仓黏性(前 15 内不换),过期权便宜门,市场 live 才开;`direction` 用 `'看涨'/'看跌'`(`dir_hit7` 比较的就是这两个字符串);`id = f"{snap_date}|{code}|agent"`;`mark()` 不分 source,自动结算;`scoreboard()` 改循环 `SOURCES`。
+- **评估点预注册**:在 `agent/config.yaml` 写 `evaluate_at: {n_closed: 200, or_date: 2027-06-30}`;早报只显示滚动均值与 CI、距评估点还差多少,不做中途判决。
+
+### 5.7 叙述者(后置)
+只收数字 JSON;输出 `{headline, commentary, caveat}`;输出中每个数字必须出现在输入里,否则回落模板句;采样 1 次;缓存键用 `ClaudeCodeLLM.cache_key`。
+
+---
+
+## 6. 测试
+- 合成面板:标准化、弃权、子集不变性、时点(改 as_of 之后的 bar 输出不变)。
+- tearsheet:planted(IC 0.05)在 300 日×150 票上通过;纯噪声在 20 个种子里 ≥ 95% 失败;整面板置换在零假设下 p 近似均匀;平稳 bootstrap CI 覆盖真值;NW t 与手算 AR(1) 一致。
+- 残差反转:植入行业因子后,原始反转与残差反转的 IC 差符合预期;`iv_spread`/`skew` 用 3 档期权链 fixture。
+- 期权便宜门:给定 IV、RV、be7、spread 的边界用例。
+- 账本:临时 DuckDB,DDL 幂等、`source='agent'` 插入、id 唯一、方向字符串、持仓黏性、`scoreboard` 出 agent 行。
+- `agent/tests/selftest_agent.sh`:仿 `bin/selftest.sh`,`OPTRADAR_CONFIG` 隔离,真实 `optradar.db`/`out/` 不被触碰。
+
+## 7. 风险
+- 诚实结果可能是"没有东西越过期权回本点"。那也是有价值的结论:说明买方期权的方向策略在这个 universe 上不成立,应转向价差或卖方结构研究。
+- DoltHub 数据质量和时效未验证;不可用时 S3 的期权信号要么付费、要么等 moomoo 归档攒数据。
+- 时点成分只覆盖 S&P 500;退市股 yfinance 拿不到,计数记录。
+- yfinance 限流;AV 配额与 `bin/congress.py` 共享;SEC 需要 `SEC_USER_AGENT`。
+- 期权账本把方向、vol、theta 混在一起;股票级收益表作为辅助诊断。
+
+## 8. 端到端验证
+1. `~/.hedgefund-venv/bin/python -m pytest -q hedge_fund integrations agent`(上游自带的 5 个 Jev 显示名失败不算)。
+2. tearsheet 自检:planted 通过、noise 失败。
+3. S2 报告:历史 radar picks 的回本点 vs 实际波动分布,换算出的 IC 门槛。
+4. S3 walk-forward 报告存 `site-data/validation/`,逐条核对 5.5 的阈值。
+5. `selftest_agent.sh` 隔离全链路跑绿(需 OpenD 登录)。
+6. 生产机接入后第一周:每天有 `out/agent/<date>.json`、`agent_signals` 行数 = 当日 universe、第 8 天起 agent 行有 `ret7_*`。
+
+## 参考
+- 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
+- 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
+- 因子评测:Qlib 基准 https://github.com/microsoft/qlib/blob/main/examples/benchmarks/README.md · Harvey, Liu & Zhu https://people.duke.edu/~charvey/Research/Published_Papers/P118_and_the_cross.PDF · McLean & Pontiff https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2156623 · Bailey & López de Prado(PBO)https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2326253 ·(Deflated Sharpe)https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551
+- 信号:Blitz et al.(残差反转)https://papers.ssrn.com/sol3/papers.cfm?abstract_id=1911449 · Martineau(PEAD 消失)https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3111607 · Lopez-Lira & Tang https://arxiv.org/abs/2304.07619
+- 数据:时点 S&P 500 成分 https://github.com/fja05680/sp500 · SEC insider 数据集 https://www.sec.gov/data-research/sec-markets-data/insider-transactions-data-sets · DoltHub options https://www.dolthub.com/repositories/post-no-preference/options · yfinance 限流 https://github.com/ranaroussi/yfinance/issues/2422
+- Agent 框架与评测:TradingAgents https://github.com/TauricResearch/TradingAgents · FINSABER https://arxiv.org/abs/2505.07078 · RD-Agent(Q) https://arxiv.org/abs/2505.15155 · AlphaAgent https://arxiv.org/abs/2502.16789 · Alpha Arena https://nof1.ai/ · Agentic Trading 审计 https://arxiv.org/abs/2605.19337 · Memorization Problem https://arxiv.org/abs/2504.14765
