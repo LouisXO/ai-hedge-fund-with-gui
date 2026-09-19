@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.louis.agent.chain</string>
+  <key>ProgramArguments</key><array>
+    <string>/Users/louis/.hedgefund-venv/bin/python</string><string>-W</string><string>ignore</string>
+    <string>-m</string><string>agent.sources.moomoo_chain</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PYTHONPATH</key><string>/Users/louis/hedge-fund</string>
+  </dict>
+  <key>WorkingDirectory</key><string>/Users/louis/hedge-fund</string>
+  <key>StandardOutPath</key><string>/Users/louis/optradar/out/agent/collect.log</string>
+  <key>StandardErrorPath</key><string>/Users/louis/optradar/out/agent/collect.log</string>
+  <key>StartCalendarInterval</key><array>
+    <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>45</integer><key>Weekday</key><integer>1</integer></dict>
+    <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>45</integer><key>Weekday</key><integer>2</integer></dict>
+    <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>45</integer><key>Weekday</key><integer>3</integer></dict>
+    <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>45</integer><key>Weekday</key><integer>4</integer></dict>
+    <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>45</integer><key>Weekday</key><integer>5</integer></dict>
+  </array>
+</dict></plist>

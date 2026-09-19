@@ -33,6 +33,19 @@ DDL = [
     """CREATE TABLE IF NOT EXISTS membership (
         index_name VARCHAR, eff_date DATE, ticker VARCHAR,
         PRIMARY KEY (index_name, eff_date, ticker))""",
+    """CREATE TABLE IF NOT EXISTS chain_daily (
+        snap_date DATE, ticker VARCHAR, expiry DATE, strike DOUBLE, "right" VARCHAR,
+        bid DOUBLE, ask DOUBLE, last DOUBLE, volume DOUBLE, oi DOUBLE, iv DOUBLE,
+        delta DOUBLE, gamma DOUBLE, theta DOUBLE, vega DOUBLE, spot DOUBLE, dte INT,
+        snap_ts TIMESTAMP, source VARCHAR,
+        PRIMARY KEY (snap_date, ticker, expiry, strike, "right"))""",
+    """CREATE TABLE IF NOT EXISTS news_sentiment (
+        article_id VARCHAR, time_published TIMESTAMP, ticker VARCHAR, relevance DOUBLE,
+        sentiment DOUBLE, overall_sentiment DOUBLE, source_domain VARCHAR, fetched_at TIMESTAMP,
+        PRIMARY KEY (article_id, ticker))""",
+    """CREATE TABLE IF NOT EXISTS news_fetch_log (
+        window_from TIMESTAMP, window_to TIMESTAMP, n_articles INT, n_rows INT, truncated BOOLEAN,
+        fetched_at TIMESTAMP, PRIMARY KEY (window_from, window_to))""",
     """CREATE TABLE IF NOT EXISTS fetch_log (
         ticker VARCHAR, data_ticker VARCHAR, source VARCHAR, status VARCHAR,
         n_rows INT, first_date DATE, last_date DATE, note VARCHAR,
@@ -92,6 +105,19 @@ class PanelStore:
         self.con.execute("INSERT INTO membership SELECT * FROM _mem_in")
         self.con.unregister("_mem_in")
         return len(flat)
+
+    def insert(self, table: str, df: pd.DataFrame) -> int:
+        """Generic INSERT OR REPLACE, aligning by column name."""
+        if df.empty:
+            return 0
+        cols = [r[0] for r in self.con.execute(f"DESCRIBE {table}").fetchall()]
+        for c in cols:
+            if c not in df.columns:
+                df[c] = None
+        self.con.register("_gen_in", df[cols])
+        self.con.execute(f'INSERT OR REPLACE INTO {table} SELECT * FROM _gen_in')
+        self.con.unregister("_gen_in")
+        return len(df)
 
     def log_fetch(self, rows: list[dict]) -> None:
         if not rows:

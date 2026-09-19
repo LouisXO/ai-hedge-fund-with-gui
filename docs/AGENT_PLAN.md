@@ -245,6 +245,18 @@ optradar/(3 处小改)
 - **登记为候选假设(不启用)**:14 天持有、对 12-1 动量最弱的票买 put、限定低 IV 一半 → +7.7%,t 2.53,75% 的年份为正,前后半段都为正。方向上属于"动量在空头侧延续",有文献基础,但本次是在 48 个组合里挑出来的,必须用新数据独立验证,写入 `family_log`。
 - **结论**:按预注册阈值,**没有信号可以晋升**。agent 以影子模式上线:每天照常计算并记录所有候选信号和"若启用会选哪几只",但不开纸面仓,直到某个信号在新数据上独立通过。这正是计划里预设的合法结果。
 
+### S4–S6(2026-09-19)— 影子模式上线,时点数据开始积累
+- **S4–S5 接线完成**(`agent/ledger.py`、`agent/daily.py`、`agent/brief.py`;optradar 分支 `agent-wiring` 已并入 main):
+  - optradar.db 新增 `agent_runs / agent_signals / agent_picks / agent_returns`(自带 DDL,仿 `bin/congress.py`;按列名而非字典顺序插入;写锁只占数秒并带重试)。
+  - `agent/daily.py`:增量更新面板 → 按当日成分股算全部候选信号 → 过便宜门 → VIX ≥ 30 熔断 → 写库 + `out/agent/<date>.json`。**影子模式:不开任何纸面仓**,`MODE` 改成 `live` 才会开。
+  - 早报新增 ⑨ 节(纯数字,无 LLM),推送文案加一行;重复插入幂等。
+  - 实测:503 只成分股,便宜门通过 236 只,30 个候选选择。
+  - optradar 顺手修了限频静默跳过:拿不到到期日/期权链现在会记进 `rejected` 并写明原因(9/19 真实踩到过,重跑就恢复)。
+- **S6 采集已上线**(两个新 launchd 任务,plist 存 `agent/launchd/`):
+  - `com.louis.agent.chain` 工作日 12:45 PT(15:45 ET,收盘前,避免盘后陈旧报价)→ `agent/sources/moomoo_chain.py` 归档 ATM±8 档期权到 `panel.chain_daily`。这是 S2 缺的真实 IV 记录,攒够 12 个月才能验证真正的"期权便宜"信号。
+  - `com.louis.agent.news` 工作日 13:15 PT → `agent/sources/av_news.py`。实测一次调用覆盖约 25 小时、1000 篇文章、1100 条 S&P 成分股记录(347 只票);配额账本与 `bin/congress.py` 共享,周六自动让出 22 次。
+- **下一次决策点**:积累 3 个月实盘记录后,用 `agent_picks × agent_returns` 做一次实盘 IC 复核;期权链攒够 12 个月后重跑 S2/S3,用真实 IV 替换模型 IV。在此之前不加新信号(§9 的教训)。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
