@@ -1,0 +1,98 @@
+"""Section ⑨ of the morning brief — the agent's shadow record, numbers only.
+
+No LLM here: the narrator is deferred until something is validated
+(docs/AGENT_PLAN.md §9). Prints a one-line summary for the push text, or
+splices an HTML block into the day's report with --append-html.
+
+Usage:
+  python -m agent.brief <date>                     # one-line summary
+  python -m agent.brief <date> --append-html FILE
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+
+from agent import ledger
+
+AGENT_OUT = "/Users/louis/optradar/out/agent"
+
+
+def load(date: str) -> dict | None:
+    path = os.path.join(AGENT_OUT, f"{date}.json")
+    if not os.path.exists(path):
+        cands = sorted(f for f in os.listdir(AGENT_OUT) if f.endswith(".json")) if os.path.isdir(AGENT_OUT) else []
+        if not cands:
+            return None
+        path = os.path.join(AGENT_OUT, cands[-1])
+    return json.load(open(path))
+
+
+def one_line(d: dict, live: dict) -> str:
+    sides = {r["side"]: r for r in live.get("by_side", [])}
+    hit = ""
+    for side in ("C", "P"):
+        r = sides.get(side)
+        if r and r["n"]:
+            hit += f" {side}{r['n']}:{(r['dir_hit'] or 0):.0%}"
+    return (f"Agent[{d['mode']}] 便宜门 {d['gate']['passed']}/{d['gate']['of']} · "
+            f"候选 {len(d['picks'])} · 已验证 {len(d['validated_signals'])}" + (f" · 10日方向命中{hit}" if hit else ""))
+
+
+def html(d: dict, live: dict) -> str:
+    rows = []
+    for p in d["picks"][:10]:
+        be = f"{p['breakeven_pct']:.2f}%" if p.get("breakeven_pct") is not None else "—"
+        rows.append(f"<tr><td>{p['ticker']}</td><td>{p['signal_name']}</td><td>{'看涨' if p['side']=='C' else '看跌'}</td>"
+                    f"<td>{p['rank']}</td><td>{p['value']:+.2f}</td><td>{p['iv']:.1f}%</td><td>{be}</td></tr>")
+    score = ""
+    for r in live.get("by_side", []):
+        score += (f"<li>{'看涨' if r['side']=='C' else '看跌'}候选 {int(r['n'])} 个:"
+                  f"{live['horizon']} 平均 {r['avg_ret']:+.2f}%,方向命中 {(r['dir_hit'] or 0):.0%}</li>")
+    return f"""<h2>⑨ Agent(影子模式)</h2>
+<p class="muted">{d['as_of']} · universe {d['universe_n']} · VIX {d['vix']:.1f}({d['regime']}) ·
+便宜门通过 {d['gate']['passed']}/{d['gate']['of']} · 已验证信号 {len(d['validated_signals'])} 个 ·
+<b>不开仓</b>,只记录(S3:无信号通过阈值)</p>
+<table><tr><th>标的</th><th>信号</th><th>方向</th><th>排名</th><th>分数</th><th>IV</th><th>回本门槛(14天)</th></tr>
+{''.join(rows) or '<tr><td colspan="7">今日无候选</td></tr>'}</table>
+<ul class="muted">{score or '<li>还没有满 10 天的记录</li>'}
+<li>累计 {live.get('n_days', 0)} 天 / {live.get('n_signal_rows', 0)} 条信号记录</li></ul>"""
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("date", nargs="?", default=dt.date.today().isoformat())
+    ap.add_argument("--append-html", default=None)
+    ap.add_argument("--optradar-db", default=ledger.OPTRADAR_DB)
+    args = ap.parse_args()
+
+    d = load(args.date)
+    if not d:
+        return 1
+    try:
+        con = ledger.connect(args.optradar_db, read_only=True)
+        try:
+            live = ledger.live_summary(con)
+        finally:
+            con.close()
+    except Exception:
+        live = {}
+
+    if args.append_html:
+        if not os.path.exists(args.append_html):
+            return 1
+        page = open(args.append_html).read()
+        if "⑨ Agent" in page:
+            return 0
+        block = html(d, live)
+        open(args.append_html, "w").write(page.replace("<footer>", block + "<footer>", 1)
+                                          if "<footer>" in page else page + block)
+        return 0
+    print(one_line(d, live))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
