@@ -18,6 +18,8 @@ USER_DIR = Path.home() / ".hedge-fund"
 MANDATES_DIR = USER_DIR / "mandates"
 CACHE_DIR = USER_DIR / "cache"
 ENV_PATH = USER_DIR / ".env"
+AGENT_DIR = USER_DIR / "agent"
+PANEL_DB = AGENT_DIR / "panel.db"
 
 # The example mandate ships inside the package; it is copied out (never read
 # in place) so users edit their copy, not the install.

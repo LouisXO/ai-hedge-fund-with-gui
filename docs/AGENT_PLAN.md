@@ -1,6 +1,7 @@
 # 多信号验证型交易 Agent — 详细计划 v2
 
 - v1:2026-09-18(调研开源框架 + 仓库探索 + 实现设计),原文见 `docs/AGENT_PLAN_v1.md`
+- v2.1:2026-09-19 S1 完成后修正显著性检验,见 §9
 - v2:2026-09-19(第二轮对比:独立 agent 按 Qlib/因子评测惯例、多重检验文献、期权收益文献逐条挑错,关键说法已实测核实)
 - 仓库:`~/hedge-fund`(v2-rebuild)+ `~/optradar`(main)
 
@@ -87,7 +88,7 @@ v1 里**保持不变**的部分:决策路径不放 LLM;预注册阈值带版本�
 信号库   CrossSectionalModel(QuantModel):全 universe 按日计算 → Signal(value ∈ [−1,1], components)
    │
 检验层   Alphalens 式 tearsheet(IC 分期限、五分位原始/超额收益、首尾 5 名原始收益、换手)
-   │      + 整面板置换零分布 + 平稳 bootstrap + purged walk-forward;后期再加 FWER / deflated Sharpe
+   │      + NW t + 平稳 bootstrap + purged walk-forward;后期再加 FWER / deflated Sharpe(置换仅作诊断,见 §9)
    │
 决策层   门 ①:方向 = 等权 z 合成(持仓黏性:掉出前 15 才换)
    │      门 ②:期权便宜 = 预测 RV(持有期)≥ IV·k 且 预期波动 ≥ 回本 + 价差
@@ -163,7 +164,7 @@ optradar/(3 处小改)
 2. rank-IC ≥ 0.01,符号与预注册一致。
 3. 不重叠周频 IC 的 ICIR ≥ 0.1。
 4. NW t:已发表因子复现 ≥ 2,新假设 ≥ 3。
-5. 整面板置换零分布下显著(p < 0.05);平稳 bootstrap 95% CI 不含 0。
+5. 平稳 bootstrap 95% CI 不含 0(v2.1:整面板置换不再作为门槛,见 §9)。
 6. 2015 年后子样本符号一致。
 7. 对 `mom_12_1` 的 partial IC ≥ 0.005。
 8. **期权口径**:首尾 5 名原始收益 > S2 换算出的回本门槛(扣价差)。
@@ -201,6 +202,20 @@ optradar/(3 处小改)
 4. S3 walk-forward 报告存 `site-data/validation/`,逐条核对 5.5 的阈值。
 5. `selftest_agent.sh` 隔离全链路跑绿(需 OpenD 登录)。
 6. 生产机接入后第一周:每天有 `out/agent/<date>.json`、`agent_signals` 行数 = 当日 universe、第 8 天起 agent 行有 `ret7_*`。
+
+## 9. 执行记录
+
+### S1(2026-09-19,分支 `agent-s1`)— 完成
+报告:`site-data/validation/s1_2026-09-19.md`。
+
+- **面板**:S&P 500 时点成分(1996→2026-08-18,2,720 次变更)+ yfinance 日线 2012-11→2026-09-18,621 只有数据,158 万行。
+- **覆盖率**(当日成分中有数据的比例):2015 年 76% → 2020 年 90% → 2026 年 99%。缺的基本是后来被收购或退市的公司(K、IPG、HES、WBA、JNPR、HOLX 等),Yahoo 删除了它们的全部历史——这是剩余的幸存者偏差。改名用经核实的别名表处理(20 个);合并不做别名。可选补救:Tiingo 免费档(含退市股,需注册)或 Stooq。
+- **冻结名单的偏差**:用 2026 年的成分回测,早年覆盖率只剩 65%,而且**所有票的平均收益被抬高**(5 日 +0.257% vs 当日成分 +0.220%;10 日 +0.550% vs +0.475%;首 5 名 10 日 +1.15% vs +0.93%)。偏差主要体现在收益水平上,IC 反而略低。对期权买方,收益水平恰恰决定能不能越过回本点,所以 S2 必须用当日成分。
+- **信号**(当日成分,入场 = 次日开盘):
+  - `mom_12_1`:h=5 IC +0.008,NW t 0.93,CI 含 0 → 不显著,符合预期(月频因子、周频期限)。
+  - 原始 `reversal_5`:h=5 IC +0.011,NW t 2.00,CI [+0.0001, +0.022],92% 的年份为正;首 5 名 5 日原始收益 +0.41%,全体 +0.22%,即每 5 天约多 0.19%——低于 §1 #1 粗算的约 0.5% 期权回本门槛。S3 的残差反转要看能否明显更强。
+- **工具自检**(真实面板):植入 IC 0.02 → 测得 +0.018,t 20.6;纯噪声 20 个种子误报率 0%。
+- **对 v2 的修正(v2.1)**:第二轮对比建议的"整面板置换零分布"不适合作为均值 IC 的门槛。实测其零分布标准差 0.003,而动量 IC 均值的 NW 标准误差是 0.010,窄 3 倍——打乱标签的同时也去掉了因子收益随时间的波动,所以它检验的是"有没有任何关联",会系统性过度乐观。门槛只用 NW t + 平稳 bootstrap;置换留作可选诊断(`tearsheet(n_perm>0)`)。
 
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
