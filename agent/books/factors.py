@@ -39,9 +39,16 @@ def latest_before(fund: pd.DataFrame, day: pd.Timestamp, max_age_days: int = 200
 
 def factor_scores(market: Market, fund: pd.DataFrame, day: pd.Timestamp, universe: pd.Index) -> pd.DataFrame:
     f = latest_before(fund, day).reindex(universe)
-    px = market.adj.loc[day].reindex(universe)
     raw_px = market.close.loc[day].reindex(universe)
     mcap = raw_px * f["shares"]
+    # Ratios need sane denominators. Negative or near-zero equity turns ROE and B/M into
+    # nonsense (a loss over negative equity is a large positive "ROE" — S16's quality book
+    # was 60-80% such names), and tiny asset bases explode accruals and GP/A.
+    ok_equity = f["equity"] > 0.05 * f["assets"]
+    ok_assets = f["assets"] > 1e7
+    ok_mcap = mcap > 1e8
+    f = f.where(ok_equity & ok_assets & ok_mcap.reindex(f.index).fillna(False))
+    mcap = mcap.where(ok_mcap)
     out = pd.DataFrame(index=universe)
     # value
     out["bm"] = f["equity"] / mcap
@@ -49,7 +56,7 @@ def factor_scores(market: Market, fund: pd.DataFrame, day: pd.Timestamp, univers
     # quality
     gp = f["gp_ttm"].where(f["gp_ttm"].notna(), f["rev_ttm"] - f["cogs_ttm"])
     out["gpa"] = gp / f["assets"]
-    out["roe"] = f["ni_ttm"] / f["equity"].where(f["equity"] > 0)
+    out["roe"] = f["ni_ttm"] / f["equity"]
     out["accruals"] = -(f["ni_ttm"] - f["cfo_ttm"]) / f["assets"]
     out["asset_growth"] = -(f["assets"] / f["assets_1y"] - 1)
     # momentum, low vol

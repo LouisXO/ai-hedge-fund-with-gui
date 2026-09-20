@@ -29,6 +29,8 @@ def main() -> int:
     ap.add_argument("--end", default="2026-08-31")
     ap.add_argument("--exec-frac", type=float, default=0.5, help="fraction of the quoted spread paid per side")
     ap.add_argument("--cash-in-spy", action="store_true", help="idle slots hold SPY instead of cash")
+    ap.add_argument("--top-n", type=int, default=None, help="long-book breadth (default long_term.TOP_N)")
+    ap.add_argument("--only", default=None, help="comma list of long books to run (default all)")
     args = ap.parse_args()
 
     with PanelStore(read_only=True) as store:
@@ -42,17 +44,21 @@ def main() -> int:
     print(f"short-term: {sum(len(v) for v in st.values())} candidate-days", flush=True)
     runs["short_insider_5d"] = simulate(market, st, args.start, args.end, short_term.MAX_POSITIONS,
                                         short_term.HOLD_DAYS, args.exec_frac, cash_in_spy=args.cash_in_spy)
-    for name, tg in long_term.scores(market, flows, fund, args.start, args.end).items():
+    top_n = args.top_n or long_term.TOP_N
+    only = set(args.only.split(",")) if args.only else None
+    for name, tg in long_term.scores(market, flows, fund, args.start, args.end, top_n=top_n).items():
+        if only and name not in only:
+            continue
         print(f"long-term {name}: {len(tg)} rebalances", flush=True)
-        runs[f"long_{name}"] = simulate(market, tg, args.start, args.end, long_term.TOP_N, None, args.exec_frac,
-                                        cash_in_spy=args.cash_in_spy)
+        runs[f"long_{name}_n{top_n}"] = simulate(market, tg, args.start, args.end, top_n, None, args.exec_frac,
+                                                 cash_in_spy=args.cash_in_spy)
 
     stamp = dt.date.today().isoformat()
     os.makedirs(OUT_DIR, exist_ok=True)
     report = {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "start": args.start,
               "end": args.end, "exec_frac": args.exec_frac, "cash_in_spy": args.cash_in_spy,
               "books": {k: v.metrics for k, v in runs.items()}}
-    tag = "_spycash" if args.cash_in_spy else ""
+    tag = ("_spycash" if args.cash_in_spy else "") + (f"_n{top_n}" if args.top_n else "")
     path = os.path.join(OUT_DIR, f"books_{stamp}{tag}.json")
     with open(path, "w") as f:
         json.dump(report, f, indent=1, default=float)

@@ -49,3 +49,22 @@ def test_z_winsorizes_and_needs_breadth():
     z = _z(s)
     assert z.max() < 6                                   # the outlier was clipped
     assert _z(pd.Series([1.0, 2.0, 3.0])).isna().all()   # too few names to standardize
+
+
+def test_factor_scores_reject_negative_equity_and_shells():
+    """A loss over negative equity must not become a high 'ROE' (the S16 quality-book bug)."""
+    from agent.books.factors import factor_scores
+    idx = pd.bdate_range("2025-01-01", periods=300)
+    names = [f"T{i:02d}" for i in range(40)] + ["SHELL"]
+    px = pd.DataFrame(50.0, index=idx, columns=names)
+
+    class M:                                  # the two frames factor_scores reads
+        adj = px
+        close = px
+    fund = pd.DataFrame({"ticker": names, "filed": pd.Timestamp("2025-11-01"),
+                         "ni_ttm": [1e7] * 40 + [-5e7], "rev_ttm": 1e8, "gp_ttm": 4e7, "cogs_ttm": 6e7,
+                         "cfo_ttm": 1e7, "assets": [1e9] * 40 + [2e7], "equity": [4e8] * 40 + [-3e7],
+                         "shares": [1e7] * 40 + [1e9], "assets_1y": 9e8})
+    fs = factor_scores(M, fund, idx[-1], pd.Index(names))
+    assert pd.isna(fs.loc["SHELL", "quality"])          # excluded, not ranked first
+    assert fs.loc["T00", "n_families"] >= 3
