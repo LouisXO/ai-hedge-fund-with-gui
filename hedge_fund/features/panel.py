@@ -39,6 +39,14 @@ DDL = [
         delta DOUBLE, gamma DOUBLE, theta DOUBLE, vega DOUBLE, spot DOUBLE, dte INT,
         snap_ts TIMESTAMP, source VARCHAR,
         PRIMARY KEY (snap_date, ticker, expiry, strike, "right"))""",
+    """CREATE TABLE IF NOT EXISTS insider_tx (
+        accession VARCHAR, ticker VARCHAR, issuer_cik VARCHAR, filing_date DATE, trans_date DATE,
+        owner_name VARCHAR, relationship VARCHAR, officer_title VARCHAR, trans_code VARCHAR,
+        acq_disp VARCHAR, shares DOUBLE, price DOUBLE, value_usd DOUBLE, shares_after DOUBLE,
+        source VARCHAR, fetched_at TIMESTAMP,
+        PRIMARY KEY (accession, ticker, trans_date, trans_code, shares, price))""",
+    """CREATE TABLE IF NOT EXISTS insider_load_log (
+        quarter VARCHAR PRIMARY KEY, n_rows INT, n_tickers INT, loaded_at TIMESTAMP)""",
     """CREATE TABLE IF NOT EXISTS news_sentiment (
         article_id VARCHAR, time_published TIMESTAMP, ticker VARCHAR, relevance DOUBLE,
         sentiment DOUBLE, overall_sentiment DOUBLE, source_domain VARCHAR, fetched_at TIMESTAMP,

@@ -1,0 +1,234 @@
+{
+ "generated_at": "2026-09-20T00:28:22",
+ "start": "2015-01-01",
+ "source": "SEC Form 345 quarterly data sets, open-market buys (code P), by FILING date",
+ "n_event_rows": 8274,
+ "n_tickers": 568,
+ "median_filing_lag_days": null,
+ "horizons": {
+  "5": {
+   "insider_buy": {
+    "label": "any buy",
+    "horizon": 5,
+    "n_events": 5424,
+    "n_dates": 2172,
+    "mean_abn_pct": 0.020735654060695084,
+    "median_abn_pct": -0.005988810459836569,
+    "mean_raw_pct": 0.264029956936282,
+    "t_nw": 0.27275272712537224,
+    "boot_ci95": [
+     -0.17508497684787347,
+     0.2111327030000174
+    ],
+    "hit_rate": 0.4986187845303867,
+    "share_years_positive": 0.5833333333333334,
+    "first_half": 0.09303099106622746,
+    "second_half": -0.05155968294483728
+   },
+   "insider_cluster": {
+    "label": ">=2 buyers",
+    "horizon": 5,
+    "n_events": 577,
+    "n_dates": 490,
+    "mean_abn_pct": 0.20661015875397098,
+    "median_abn_pct": 0.03997959709904353,
+    "mean_raw_pct": 0.4920317447877694,
+    "t_nw": 0.9878441441818094,
+    "boot_ci95": [
+     -0.1864631349652747,
+     0.647173629872852
+    ],
+    "hit_rate": 0.5081632653061224,
+    "share_years_positive": 0.6666666666666666,
+    "first_half": 0.19718672901036383,
+    "second_half": 0.21603358849757834
+   },
+   "insider_big": {
+    "label": ">= $250k",
+    "horizon": 5,
+    "n_events": 2449,
+    "n_dates": 1438,
+    "mean_abn_pct": 0.1693532359796086,
+    "median_abn_pct": 0.07858052022138295,
+    "mean_raw_pct": 0.37478246831495027,
+    "t_nw": 1.7796319475245461,
+    "boot_ci95": [
+     -0.041022521779787366,
+     0.37935704069646875
+    ],
+    "hit_rate": 0.5180806675938804,
+    "share_years_positive": 0.6666666666666666,
+    "first_half": 0.13971562012259897,
+    "second_half": 0.19899085183661827
+   }
+  },
+  "10": {
+   "insider_buy": {
+    "label": "any buy",
+    "horizon": 10,
+    "n_events": 5424,
+    "n_dates": 2172,
+    "mean_abn_pct": -0.07822461407308016,
+    "median_abn_pct": -0.10824747622167274,
+    "mean_raw_pct": 0.43653721198899764,
+    "t_nw": -0.6446002775007702,
+    "boot_ci95": [
+     -0.43479220196810164,
+     0.26702079115669464
+    ],
+    "hit_rate": 0.48250460405156537,
+    "share_years_positive": 0.4166666666666667,
+    "first_half": -0.005765932456144969,
+    "second_half": -0.15068329569001537
+   },
+   "insider_cluster": {
+    "label": ">=2 buyers",
+    "horizon": 10,
+    "n_events": 577,
+    "n_dates": 490,
+    "mean_abn_pct": 0.07962723763207134,
+    "median_abn_pct": -0.13068479285008872,
+    "mean_raw_pct": 0.6140232771078595,
+    "t_nw": 0.3002652594731654,
+    "boot_ci95": [
+     -0.41786736771080907,
+     0.5810407532095383
+    ],
+    "hit_rate": 0.49183673469387756,
+    "share_years_positive": 0.5833333333333334,
+    "first_half": -0.180534104938241,
+    "second_half": 0.3397885802023837
+   },
+   "insider_big": {
+    "label": ">= $250k",
+    "horizon": 10,
+    "n_events": 2449,
+    "n_dates": 1438,
+    "mean_abn_pct": 0.27743827849584185,
+    "median_abn_pct": 0.07075255489918386,
+    "mean_raw_pct": 0.7094110677624694,
+    "t_nw": 1.9508369137569006,
+    "boot_ci95": [
+     -0.057646598482949965,
+     0.5936130375505749
+    ],
+    "hit_rate": 0.5097357440890126,
+    "share_years_positive": 0.5833333333333334,
+    "first_half": 0.19221564170066566,
+    "second_half": 0.36266091529101824
+   }
+  },
+  "21": {
+   "insider_buy": {
+    "label": "any buy",
+    "horizon": 21,
+    "n_events": 5424,
+    "n_dates": 2172,
+    "mean_abn_pct": -0.19645576132859452,
+    "median_abn_pct": -0.19798303138357587,
+    "mean_raw_pct": 0.9655722511257024,
+    "t_nw": -0.8985291804574687,
+    "boot_ci95": [
+     -0.8773637156816262,
+     0.4785005894563745
+    ],
+    "hit_rate": 0.48158379373848986,
+    "share_years_positive": 0.3333333333333333,
+    "first_half": -0.08757891650699715,
+    "second_half": -0.3053326061501918
+   },
+   "insider_cluster": {
+    "label": ">=2 buyers",
+    "horizon": 21,
+    "n_events": 577,
+    "n_dates": 490,
+    "mean_abn_pct": 0.09581697270438509,
+    "median_abn_pct": -0.07183087223838491,
+    "mean_raw_pct": 1.6461529826282775,
+    "t_nw": 0.24631288890436326,
+    "boot_ci95": [
+     -0.6550429273480294,
+     0.8441240188644357
+    ],
+    "hit_rate": 0.49795918367346936,
+    "share_years_positive": 0.5833333333333334,
+    "first_half": -0.055613332695964954,
+    "second_half": 0.24724727810473515
+   },
+   "insider_big": {
+    "label": ">= $250k",
+    "horizon": 21,
+    "n_events": 2449,
+    "n_dates": 1438,
+    "mean_abn_pct": 0.25647865638157674,
+    "median_abn_pct": 0.23507405479931498,
+    "mean_raw_pct": 1.4186763165405165,
+    "t_nw": 1.1643713668210125,
+    "boot_ci95": [
+     -0.2082499699118131,
+     0.724069677382356
+    ],
+    "hit_rate": 0.5229485396383866,
+    "share_years_positive": 0.8333333333333334,
+    "first_half": 0.2388995048021573,
+    "second_half": 0.2740578079609962
+   }
+  },
+  "63": {
+   "insider_buy": {
+    "label": "any buy",
+    "horizon": 63,
+    "n_events": 5371,
+    "n_dates": 2165,
+    "mean_abn_pct": -0.6664541945897953,
+    "median_abn_pct": -0.7778268117719644,
+    "mean_raw_pct": 3.0299789524536416,
+    "t_nw": -1.1858287641749032,
+    "boot_ci95": [
+     -2.2345873733049184,
+     0.7832874078588246
+    ],
+    "hit_rate": 0.4632794457274827,
+    "share_years_positive": 0.3333333333333333,
+    "first_half": -0.3406342701341365,
+    "second_half": -0.9919732696230572
+   },
+   "insider_cluster": {
+    "label": ">=2 buyers",
+    "horizon": 63,
+    "n_events": 568,
+    "n_dates": 485,
+    "mean_abn_pct": -0.7044265409530578,
+    "median_abn_pct": -0.8266500136576038,
+    "mean_raw_pct": 3.8901388413501343,
+    "t_nw": -0.8968013867555183,
+    "boot_ci95": [
+     -2.085926076855614,
+     0.7147002072579679
+    ],
+    "hit_rate": 0.47010309278350515,
+    "share_years_positive": 0.4166666666666667,
+    "first_half": -1.2005499444166785,
+    "second_half": -0.2103447975859949
+   },
+   "insider_big": {
+    "label": ">= $250k",
+    "horizon": 63,
+    "n_events": 2421,
+    "n_dates": 1425,
+    "mean_abn_pct": -0.28629841053393473,
+    "median_abn_pct": -0.40659151702185925,
+    "mean_raw_pct": 3.428779698741791,
+    "t_nw": -0.5655723093582103,
+    "boot_ci95": [
+     -1.4000737931787897,
+     0.7077765382941585
+    ],
+    "hit_rate": 0.48140350877192983,
+    "share_years_positive": 0.4166666666666667,
+    "first_half": -0.4231672956685293,
+    "second_half": -0.14962148737007597
+   }
+  }
+ }
+}
