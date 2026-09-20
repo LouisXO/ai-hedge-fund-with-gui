@@ -87,7 +87,8 @@ def rows_from(cik: int, doc: dict, since: str) -> list[dict]:
     return out
 
 
-def load(store: PanelStore, since: str, limit: int | None = None, retry_failed: bool = False) -> dict:
+def load(store: PanelStore, since: str, limit: int | None = None, retry_failed: bool = False,
+         workers: int = 4) -> dict:
     ua = user_agent()
     for stmt in DDL:
         store.con.execute(stmt)
@@ -101,9 +102,16 @@ def load(store: PanelStore, since: str, limit: int | None = None, retry_failed: 
     todo = [c for c in ciks if c not in done][:limit]
     stats = {"todo": len(todo), "ok": 0, "missing": 0, "rows": 0}
     batch, log = [], []
-    for i, cik in enumerate(todo, 1):
-        doc = fetch(cik, ua)
+    # download-bound (~1.8 s per company single-threaded); a few threads stay well
+    # inside SEC's 10 requests/second while cutting the wall clock by 4x
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _fetch(cik):
         time.sleep(PAUSE)
+        return cik, fetch(cik, ua)
+
+    pool = ThreadPoolExecutor(max_workers=workers)
+    for i, (cik, doc) in enumerate(pool.map(_fetch, todo), 1):
         if doc is None:
             log.append({"cik": cik, "status": "missing", "n_rows": 0, "fetched_at": pd.Timestamp.now()})
             stats["missing"] += 1
@@ -124,6 +132,7 @@ def load(store: PanelStore, since: str, limit: int | None = None, retry_failed: 
             store.insert("xbrl_load_log", pd.DataFrame(log))
             log = []
             print(f"  [{i}/{len(todo)}] ok {stats['ok']} missing {stats['missing']} rows {stats['rows']}", flush=True)
+    pool.shutdown()
     return stats
 
 

@@ -100,7 +100,9 @@ def build(store: PanelStore) -> pd.DataFrame:
                 continue
             qf = qf.sort_values("period_end")
             qf[f"{name}_ttm"] = qf[name].rolling(4).sum()
-            qf["filed_ttm"] = pd.to_datetime(qf["filed"]).rolling(4).max()   # known when the last of the 4 is
+            # a TTM value is known when the last of its four quarters was filed
+            filed = pd.to_datetime(qf["filed"])
+            qf["filed_ttm"] = pd.concat([filed.shift(k) for k in range(4)], axis=1).max(axis=1)
             keep = qf[["cik", "period_end", "filed_ttm", f"{name}_ttm"]].dropna().rename(columns={"filed_ttm": "filed"})
             flows = keep if flows is None else flows.merge(keep, on=["cik", "period_end", "filed"], how="outer")
         inst = None
