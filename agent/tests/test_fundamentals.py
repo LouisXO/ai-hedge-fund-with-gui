@@ -56,7 +56,9 @@ def test_factor_scores_reject_negative_equity_and_shells():
     from agent.books.factors import factor_scores
     idx = pd.bdate_range("2025-01-01", periods=300)
     names = [f"T{i:02d}" for i in range(40)] + ["SHELL"]
-    px = pd.DataFrame(50.0, index=idx, columns=names)
+    # prices must vary, or momentum and vol are constant across names and have no z-score
+    px = pd.DataFrame(50.0 * np.exp(np.cumsum(np.random.default_rng(1).normal(0, 0.01, (300, len(names))), axis=0)),
+                      index=idx, columns=names)
 
     class M:                                  # the two frames factor_scores reads
         adj = px
