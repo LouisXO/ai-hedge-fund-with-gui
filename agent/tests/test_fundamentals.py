@@ -37,7 +37,7 @@ def test_restated_value_does_not_leak_backwards():
 
 
 def test_latest_before_uses_filing_date_not_period_end():
-    fund = pd.DataFrame({"ticker": ["A", "A"], "filed": pd.to_datetime(["2024-05-01", "2025-02-20"]),
+    fund = pd.DataFrame({"ticker": ["A", "A"], "filed": pd.to_datetime(["2024-11-01", "2025-02-20"]),
                          "ni_ttm": [1.0, 2.0]})
     assert latest_before(fund, pd.Timestamp("2025-01-31")).loc["A", "ni_ttm"] == 1.0   # 10-K not filed yet
     assert latest_before(fund, pd.Timestamp("2025-03-01")).loc["A", "ni_ttm"] == 2.0
