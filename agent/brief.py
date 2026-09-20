@@ -37,13 +37,31 @@ def one_line(d: dict, live: dict) -> str:
         r = sides.get(side)
         if r and r["n"]:
             hit += f" {side}{r['n']}:{(r['dir_hit'] or 0):.0%}"
+    n_stock = sum(1 for p in d["picks"] if p.get("instrument") == "stock")
     return (f"Agent[{d['mode']}] 便宜门 {d['gate']['passed']}/{d['gate']['of']} · "
-            f"候选 {len(d['picks'])} · 已验证 {len(d['validated_signals'])}" + (f" · 10日方向命中{hit}" if hit else ""))
+            f"期权候选 {len(d['picks']) - n_stock} · 内部人股票 {n_stock}" + (f" · 10日方向命中{hit}" if hit else ""))
+
+
+def _stock_rows(d: dict) -> str:
+    """The insider stock candidates get their own table: limit price and expected net matter."""
+    rows = []
+    for p in [x for x in d["picks"] if x.get("instrument") == "stock"][:8]:
+        net = p.get("expected_net_pct")
+        rows.append(f"<tr><td>{p['ticker']}</td><td>{p.get('gate_reason','')}</td>"
+                    f"<td>{p.get('limit_ref','—')}</td><td>{(p.get('spread_pct') or 0):.2f}%</td>"
+                    f"<td>{net:+.2f}%</td></tr>" if net is not None else "")
+    if not rows:
+        return ""
+    return ("<h3>内部人买入(股票,限价单)</h3><table>"
+            "<tr><th>标的</th><th>类型</th><th>限价参考</th><th>报价价差</th><th>预期净(半价差)</th></tr>"
+            + "".join(rows) + "</table>"
+            "<p class='muted'>只做小盘/中盘;微盘价差 1.41% 吞掉边际,大盘边际仅 0.07%。"
+            "必须挂限价,吃满价差则期望为零(S13)。</p>")
 
 
 def html(d: dict, live: dict) -> str:
     rows = []
-    for p in d["picks"][:10]:
+    for p in [x for x in d["picks"] if x.get("instrument") != "stock"][:10]:
         be = f"{p['breakeven_pct']:.2f}%" if p.get("breakeven_pct") is not None else "—"
         rows.append(f"<tr><td>{p['ticker']}</td><td>{p['signal_name']}</td><td>{'看涨' if p['side']=='C' else '看跌'}</td>"
                     f"<td>{p['rank']}</td><td>{p['value']:+.2f}</td><td>{p['iv']:.1f}%</td><td>{be}</td></tr>")
@@ -56,7 +74,8 @@ def html(d: dict, live: dict) -> str:
 便宜门通过 {d['gate']['passed']}/{d['gate']['of']} · 已验证信号 {len(d['validated_signals'])} 个 ·
 <b>不开仓</b>,只记录(S3:无信号通过阈值)</p>
 <table><tr><th>标的</th><th>信号</th><th>方向</th><th>排名</th><th>分数</th><th>IV</th><th>回本门槛(14天)</th></tr>
-{''.join(rows) or '<tr><td colspan="7">今日无候选</td></tr>'}</table>
+{''.join(rows) or '<tr><td colspan="7">今日无期权候选</td></tr>'}</table>
+{_stock_rows(d)}
 <ul class="muted">{score or '<li>还没有满 10 天的记录</li>'}
 <li>累计 {live.get('n_days', 0)} 天 / {live.get('n_signal_rows', 0)} 条信号记录</li></ul>"""
 

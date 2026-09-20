@@ -27,7 +27,7 @@ import uuid
 import numpy as np
 import pandas as pd
 
-from agent import ledger
+from agent import ledger, signals_insider
 from agent.backfill import backfill_bars, backfill_index
 from agent.s2_option_hurdle import breakeven_move
 from agent.s3_signals import DTE, K_IV, SPREAD_PCT, resid_reversal_5
@@ -106,6 +106,23 @@ def pick(frames: dict, g: pd.DataFrame, iv: pd.Series, hold: int = 14) -> list[d
     return out
 
 
+def insider_picks(store: PanelStore, day: pd.Timestamp, window: int = 3) -> list[dict]:
+    """Stock-side candidates (S11-S13): cluster or >=$250k buys, small/mid only, limit orders."""
+    df = signals_insider.candidates(store, day, window)
+    if df.empty:
+        return []
+    out = []
+    for rank, r in enumerate(df[df["eligible"]].itertuples(), 1):
+        edge = signals_insider.expected_edge(store, str(r.bucket), day.year)
+        out.append({"ticker": r.ticker, "signal_name": signals_insider.SIGNAL, "side": "L", "rank": rank,
+                    "value": float(min(r.buy_usd / signals_insider.BIG_USD, 5.0)),
+                    "iv": None, "rv20": None, "rv60": None, "breakeven_pct": None,
+                    "gate_passed": True, "gate_reason": r.kind, "status": MODE,
+                    "limit_ref": float(r.last_close), "spread_pct": edge["quoted_spread_pct"],
+                    "expected_net_pct": edge["net_at_half_spread_pct"], "instrument": "stock"})
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default=None)
@@ -131,6 +148,10 @@ def main() -> int:
     g = gate(state["iv"], state["rv20"], state["rv60"])
     regime = "stress" if state["vix"] >= VIX_KILL else "normal"
     picks = [] if regime == "stress" else pick(state["frames"], g, state["iv"])
+    for p in picks:
+        p.setdefault("instrument", "option")
+    with PanelStore(read_only=True) as store:                      # stock side, independent of the gate
+        picks += insider_picks(store, day)
 
     payload = {"as_of": str(day.date()), "run_id": run_id, "mode": MODE, "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
                "universe_n": len(state["members"]), "vix": state["vix"], "regime": regime,

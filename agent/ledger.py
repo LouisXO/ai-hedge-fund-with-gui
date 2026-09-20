@@ -33,7 +33,8 @@ DDL = [
     """CREATE TABLE IF NOT EXISTS agent_picks (
         as_of DATE, ticker VARCHAR, signal_name VARCHAR, side VARCHAR, rank INT, value DOUBLE,
         iv DOUBLE, rv20 DOUBLE, rv60 DOUBLE, breakeven_pct DOUBLE, gate_passed BOOLEAN, gate_reason VARCHAR,
-        status VARCHAR, ledger_id VARCHAR, run_id VARCHAR,
+        status VARCHAR, ledger_id VARCHAR, run_id VARCHAR, limit_ref DOUBLE, spread_pct DOUBLE,
+        expected_net_pct DOUBLE, instrument VARCHAR,
         PRIMARY KEY (as_of, ticker, signal_name, side))""",
     """CREATE TABLE IF NOT EXISTS agent_returns (
         as_of DATE, ticker VARCHAR, entry_px DOUBLE, ret1 DOUBLE, ret5 DOUBLE, ret10 DOUBLE, ret20 DOUBLE,
@@ -54,9 +55,19 @@ def connect(path: str = OPTRADAR_DB, read_only: bool = False, tries: int = 6, wa
     raise RuntimeError("unreachable")
 
 
+# columns added after the first deployment; DuckDB has no migration tool
+_ADD_COLUMNS = [("agent_picks", "limit_ref", "DOUBLE"), ("agent_picks", "spread_pct", "DOUBLE"),
+                ("agent_picks", "expected_net_pct", "DOUBLE"), ("agent_picks", "instrument", "VARCHAR")]
+
+
 def ensure_schema(con) -> None:
     for stmt in DDL:
         con.execute(stmt)
+    for table, col, typ in _ADD_COLUMNS:
+        try:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+        except Exception:
+            pass                      # already present
 
 
 def _insert(con, table: str, df: pd.DataFrame) -> int:
@@ -139,7 +150,7 @@ def fill_returns(con, panel_close: pd.DataFrame, panel_open: pd.DataFrame, spy: 
 def live_summary(con, horizon: str = "ret10") -> dict:
     """Realized stock-level scoreboard of the agent's shadow picks."""
     q = f"""SELECT p.side, count(*) n, avg(r.{horizon}) avg_ret,
-                   avg(CASE WHEN (p.side='C' AND r.{horizon}>0) OR (p.side='P' AND r.{horizon}<0)
+                   avg(CASE WHEN (p.side IN ('C','L') AND r.{horizon}>0) OR (p.side='P' AND r.{horizon}<0)
                             THEN 1.0 ELSE 0.0 END) dir_hit
             FROM agent_picks p JOIN agent_returns r ON r.as_of=p.as_of AND r.ticker=p.ticker
             WHERE r.{horizon} IS NOT NULL GROUP BY 1"""

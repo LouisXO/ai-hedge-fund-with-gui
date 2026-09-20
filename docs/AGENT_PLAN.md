@@ -361,6 +361,17 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
   3. **大盘完全无效**,不必浪费仓位;
   4. **晋升条件改成执行质量**:先在纸面账本里记录真实成交价相对中间价的滑点,积累到预注册的样本量后,用实测滑点替换这里的假设再判定。
 
+### S14(2026-09-20)— 内部人信号接入影子模式(股票腿)
+- **实盘数据通道**:`agent/sources/sec_daily_form4.py` 走 EDGAR 每日索引(季度批量集滞后数月,实盘没用)。实测周五 936 份 Form 4 → **154 条公开市场买入**。新增 launchd `com.louis.agent.form4`,工作日 06:00 PT,在 08:41 早报之前跑完。
+- **信号层** `agent/signals_insider.py`,规则全部来自 S11–S13:
+  - 只认公开市场买入,按申报日;
+  - 集中买入(≥2 人)或大额(≥$250k);
+  - **成交额 $3M–$100M**:下限排除微盘(价差 1.41% > 毛收益 0.60%),上限排除大盘(毛收益 0.07%);
+  - 输出带**限价参考价 + 当年实测价差 + 预期净收益**,而不是只给一个代码。
+- **接入**:`agent/daily.py` 现在同时产出期权影子候选和股票候选,`agent_picks` 加了 `limit_ref / spread_pct / expected_net_pct / instrument` 四列;早报 ⑨ 节多一张"内部人买入(股票,限价单)"表。
+- **实测(9/18)**:19 只符合信号,过流动性门后 **7 只可交易**。被排除的例子很有代表性:RVSB 有 4 位高管同时买入,但日成交额仅 34 万、价差 2.91%,预期净 −0.86%;TPL 是大盘股,毛收益 0.07%,净约等于零。
+- **仍是影子模式**:晋升条件是**实测滑点**——账本记录限价参考价与实际可成交价的差,攒够样本后用真实滑点替换 S13 的假设,再决定是否转真仓。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
