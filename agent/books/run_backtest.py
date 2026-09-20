@@ -15,7 +15,7 @@ import json
 import os
 
 from agent.books import long_term, short_term
-from agent.books.data import insider_flows, load_market
+from agent.books.data import fundamentals, insider_flows, load_market
 from agent.books.engine import simulate
 from hedge_fund.features.panel import PanelStore
 
@@ -34,13 +34,15 @@ def main() -> int:
     with PanelStore(read_only=True) as store:
         market = load_market(store, args.start)
         flows = insider_flows(store, (dt.date.fromisoformat(args.start) - dt.timedelta(days=200)).isoformat())
+        fund = fundamentals(store)
+    print("fundamentals:", "none" if fund is None else f"{len(fund)} filings / {fund['ticker'].nunique()} names", flush=True)
 
     runs = {}
     st = short_term.targets(market, flows, args.start, args.end)
     print(f"short-term: {sum(len(v) for v in st.values())} candidate-days", flush=True)
     runs["short_insider_5d"] = simulate(market, st, args.start, args.end, short_term.MAX_POSITIONS,
                                         short_term.HOLD_DAYS, args.exec_frac, cash_in_spy=args.cash_in_spy)
-    for name, tg in long_term.scores(market, flows, args.start, args.end).items():
+    for name, tg in long_term.scores(market, flows, fund, args.start, args.end).items():
         print(f"long-term {name}: {len(tg)} rebalances", flush=True)
         runs[f"long_{name}"] = simulate(market, tg, args.start, args.end, long_term.TOP_N, None, args.exec_frac,
                                         cash_in_spy=args.cash_in_spy)
@@ -59,12 +61,14 @@ def main() -> int:
          f"{args.start} → {args.end}, point-in-time universe, delisted names included, "
          f"{args.exec_frac:.2f} x quoted spread paid per side, entry at next open, equal weight, "
          f"idle slots in {'SPY' if args.cash_in_spy else 'cash'}.", "",
-         "| book | CAGR | SPY CAGR | excess | alpha/yr | alpha t | beta | Sharpe | MaxDD | SPY MaxDD | exposure | turnover/yr | trades | hit |",
-         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+         "| book | CAGR | SPY CAGR | excess | alpha/yr | alpha t | alpha2 (mkt+size) | alpha2 t | β mkt | β size | Sharpe | MaxDD | SPY MaxDD | exposure | turnover/yr | trades | hit |",
+         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for k, r in runs.items():
         m = r.metrics
         L.append(f"| {k} | {m['cagr_pct']:+.1f}% | {m['spy_cagr_pct']:+.1f}% | {m['excess_cagr_pct']:+.1f}% | "
-                 f"{m['alpha_ann_pct']:+.1f}% | {m['alpha_t_nw']:+.2f} | {m['beta']:.2f} | {m['sharpe']:.2f} | "
+                 f"{m['alpha_ann_pct']:+.1f}% | {m['alpha_t_nw']:+.2f} | "
+                 f"{m.get('alpha2_ann_pct', float('nan')):+.1f}% | {m.get('alpha2_t_nw', float('nan')):+.2f} | "
+                 f"{m.get('beta_mkt', float('nan')):.2f} | {m.get('beta_size', float('nan')):.2f} | {m['sharpe']:.2f} | "
                  f"{m['max_drawdown_pct']:.1f}% | {m['spy_max_drawdown_pct']:.1f}% | {m['avg_exposure']:.0%} | "
                  f"{m['turnover_ann']:.1f} | {m['n_trades']} | "
                  f"{m['trade_hit_rate']:.0%} |" if m['n_trades'] else f"{m['turnover_ann']:.1f} | 0 | — |")

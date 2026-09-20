@@ -30,7 +30,7 @@ from hedge_fund.features.panel import PanelStore
 
 LOOKBACK_DAYS = 400   # 12-1 momentum needs 252 trading days before the first member date
 TAIL_DAYS = 45        # forward returns up to 20 trading days after the last member date
-INDEX_SYMBOLS = ("SPY", "^VIX")
+INDEX_SYMBOLS = ("SPY", "^VIX", "IWM", "QQQ")
 SOURCE = "yfinance"
 
 

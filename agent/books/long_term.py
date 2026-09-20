@@ -1,19 +1,20 @@
-"""Long-term book: monthly rebalance, hold what insiders have been net buying.
+"""Long-term book v2: standard multi-factor selection, monthly rebalance.
 
-This one is NOT validated yet — the backtest is its first test, so the
-hypotheses are written here first and only these are run:
+v1 (S15) tested trailing insider net buying and found it decisively negative
+— the insider effect is a short-window one. v2 does what long-horizon quant
+books actually do: combine several weak, well-documented factors across a
+wide universe and rebalance slowly. Pre-registered books, all long-only,
+top-N equal weight, monthly:
 
-  L1 insider_net_6m   trailing 126 trading days of insider net buying
-                      (buys − sales, $) scaled by 20-day dollar volume;
-                      long the top N each month-end
-  L2 momentum_12_1    the classic control: 12-1 month return, top N
-  L3 insider_x_mom    names in the top half of BOTH (a conjunction, not a
-                      weighted blend, so there is nothing to tune)
+  composite   equal-weight mean of value, quality, momentum, low-vol z-scores
+  value       book/market + earnings yield
+  quality     gross profitability, ROE, accruals, asset growth
+  momentum_12_1   the price-only control from v1
+  insider_net_6m  kept from v1 as the negative control
 
-Universe: listed point-in-time, ADV >= $5M (wider than the short book —
-a month-long hold can absorb a larger spread), no ceiling. Equal weight,
-rebalanced at the first open after each month-end; positions not in the
-new list are sold. Costs as in the short book.
+Universe: listed point-in-time, ADV >= $5M, and a fundamentals row filed
+within the last 200 days (no filings = not investable here). Costs and
+execution as in the short book.
 """
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from agent.books.data import Market
+from agent.books.factors import factor_scores
 
 ADV_FLOOR = 5e6
 TOP_N = 30
@@ -32,7 +34,6 @@ def _month_ends(days: pd.DatetimeIndex) -> pd.DatetimeIndex:
 
 
 def net_buying_panel(market: Market, flows: pd.DataFrame) -> pd.DataFrame:
-    """Rolling 126-day net insider dollars per name, aligned to trading days."""
     f = flows[flows["ticker"].isin(market.adj.columns)]
     net = (f.assign(net=f["buy_usd"] - f["sell_usd"])
             .pivot_table(index="date", columns="ticker", values="net", aggfunc="sum")
@@ -41,25 +42,27 @@ def net_buying_panel(market: Market, flows: pd.DataFrame) -> pd.DataFrame:
     return net.rolling(NET_WINDOW, min_periods=20).sum()
 
 
-def scores(market: Market, flows: pd.DataFrame, start: str, end: str) -> dict[str, dict[pd.Timestamp, list[str]]]:
+def scores(market: Market, flows: pd.DataFrame, fund: pd.DataFrame | None, start: str, end: str,
+           top_n: int = TOP_N) -> dict[str, dict[pd.Timestamp, list[str]]]:
     days = market.adj.loc[start:end].index
     rebal = _month_ends(days)
     tradable = market.tradable(ADV_FLOOR, np.inf)
     net = net_buying_panel(market, flows)
     mom = market.adj.shift(21) / market.adj.shift(252) - 1
-    out = {"insider_net_6m": {}, "momentum_12_1": {}, "insider_x_mom": {}}
+    out: dict[str, dict] = {"momentum_12_1": {}, "insider_net_6m": {}}
+    if fund is not None:
+        out.update({"composite": {}, "value": {}, "quality": {}})
     for d in rebal:
         ok = tradable.loc[d]
         universe = ok[ok].index
-        s_net = (net.loc[d, universe] / market.adv20.loc[d, universe]).replace([np.inf, -np.inf], np.nan).dropna()
         s_mom = mom.loc[d, universe].dropna()
-        out["insider_net_6m"][d] = s_net[s_net > 0].sort_values(ascending=False).head(TOP_N).index.tolist()
-        out["momentum_12_1"][d] = s_mom.sort_values(ascending=False).head(TOP_N).index.tolist()
-        both = s_net.index.intersection(s_mom.index)
-        if len(both) >= 2 * TOP_N:
-            top_net = s_net[both].rank(pct=True) >= 0.5
-            top_mom = s_mom[both].rank(pct=True) >= 0.5
-            joint = both[(top_net & top_mom).reindex(both).fillna(False).to_numpy()]
-            # among the conjunction, order by net buying so the list is deterministic
-            out["insider_x_mom"][d] = s_net[joint].sort_values(ascending=False).head(TOP_N).index.tolist()
+        out["momentum_12_1"][d] = s_mom.sort_values(ascending=False).head(top_n).index.tolist()
+        s_net = (net.loc[d, universe] / market.adv20.loc[d, universe]).replace([np.inf, -np.inf], np.nan).dropna()
+        out["insider_net_6m"][d] = s_net[s_net > 0].sort_values(ascending=False).head(top_n).index.tolist()
+        if fund is not None:
+            fs = factor_scores(market, fund, d, universe)
+            fs = fs[fs["n_families"] >= 3]                     # need most of the picture, not one family
+            for book, col in (("composite", "composite"), ("value", "value"), ("quality", "quality")):
+                s = fs[col].dropna()
+                out[book][d] = s.sort_values(ascending=False).head(top_n).index.tolist()
     return out

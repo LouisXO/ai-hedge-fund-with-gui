@@ -53,6 +53,7 @@ class Result:
     exposure: pd.Series                  # share of NAV invested each day
     turnover: float
     metrics: dict = field(default_factory=dict)
+    size_factor: pd.Series | None = None  # daily IWM - SPY return, for the two-factor alpha
 
 
 def _mark(market: Market, p: Position, day: pd.Timestamp) -> float:
@@ -131,6 +132,9 @@ def simulate(market: Market, targets: dict[pd.Timestamp, list[str]], start: str,
     spy_nav = spy / spy.iloc[0] * capital
     years = max((days[-1] - days[0]).days / 365.25, 1e-9)
     res = Result(nav, spy_nav, trades, pd.Series(expo, index=days), traded_value / (capital * years) / 2)
+    if market.iwm is not None:
+        iwm = market.iwm.reindex(days).ffill()
+        res.size_factor = iwm.pct_change() - spy.pct_change()
     res.metrics = metrics(res, years)
     return res
 
@@ -145,6 +149,16 @@ def metrics(res: Result, years: float) -> dict:
     X = np.column_stack([np.ones(len(r)), m.to_numpy()])
     beta_hat = np.linalg.lstsq(X, r.to_numpy(), rcond=None)[0]
     resid = r.to_numpy() - X @ beta_hat
+    # two-factor version: SPY + size (IWM - SPY). A small/mid book's "alpha vs SPY" is
+    # mostly its size exposure; this is the number that survives that objection.
+    two = {}
+    if res.size_factor is not None:
+        f = res.size_factor.reindex(r.index).fillna(0).to_numpy()
+        X2 = np.column_stack([np.ones(len(r)), m.to_numpy(), f])
+        b2 = np.linalg.lstsq(X2, r.to_numpy(), rcond=None)[0]
+        resid2 = r.to_numpy() - X2 @ b2
+        two = {"alpha2_ann_pct": float(b2[0] * TRADING_DAYS * 100), "alpha2_t_nw": newey_west_t(resid2 + b2[0], lag=5),
+               "beta_mkt": float(b2[1]), "beta_size": float(b2[2])}
     active = (r - m).to_numpy()
     boot = bootstrap_ci(active, n_boot=2000)
     wins = [t.ret_pct for t in res.trades]
@@ -155,6 +169,7 @@ def metrics(res: Result, years: float) -> dict:
         "vol_pct": r.std() * np.sqrt(TRADING_DAYS) * 100,
         "sharpe": r.mean() / r.std() * np.sqrt(TRADING_DAYS) if r.std() > 0 else float("nan"),
         "max_drawdown_pct": dd * 100, "spy_max_drawdown_pct": (res.spy_nav / res.spy_nav.cummax() - 1).min() * 100,
+        **two,
         "beta": float(beta_hat[1]), "alpha_ann_pct": float(beta_hat[0] * TRADING_DAYS * 100),
         "alpha_t_nw": newey_west_t(resid + beta_hat[0], lag=5),
         "active_ann_pct": float(active.mean() * TRADING_DAYS * 100),

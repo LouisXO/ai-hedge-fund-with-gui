@@ -28,6 +28,7 @@ class Market:
     listed: pd.DataFrame       # point-in-time listing mask
     spy: pd.Series             # SPY adjusted close
     spread: dict               # (bucket, year) -> median quoted spread %
+    iwm: pd.Series | None = None   # IWM adjusted close (size factor)
 
     def tradable(self, adv_floor: float, adv_ceiling: float) -> pd.DataFrame:
         return self.listed & (self.adv20 >= adv_floor) & (self.adv20 <= adv_ceiling) & self.adj.notna()
@@ -56,7 +57,21 @@ def load_market(store: PanelStore, start: str, lookback_days: int = 400) -> Mark
     spy = store.index_series("SPY", "adj_close").reindex(adj.index).ffill()
     grid = store.con.execute("SELECT bucket, year, median_spread_pct FROM spread_grid").df()
     spread = {(r.bucket, int(r.year)): float(r.median_spread_pct) for r in grid.itertuples()}
-    return Market(adj, adj_open, close, adv20, listed, spy, spread)
+    try:
+        iwm = store.index_series("IWM", "adj_close").reindex(adj.index).ffill()
+    except Exception:
+        iwm = None
+    return Market(adj, adj_open, close, adv20, listed, spy, spread, iwm)
+
+
+def fundamentals(store: PanelStore) -> pd.DataFrame | None:
+    """panel.fundamentals_pit, built by agent.books.fundamentals.factor_inputs; None if absent."""
+    try:
+        df = store.con.execute("SELECT * FROM fundamentals_pit").df()
+    except Exception:
+        return None
+    df["filed"] = pd.to_datetime(df["filed"])
+    return df
 
 
 def insider_flows(store: PanelStore, start: str) -> pd.DataFrame:
