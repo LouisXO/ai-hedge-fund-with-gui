@@ -61,10 +61,14 @@ def test_factor_scores_reject_negative_equity_and_shells():
     class M:                                  # the two frames factor_scores reads
         adj = px
         close = px
+    rng = np.random.default_rng(0)
+    spread = 1 + rng.uniform(-0.5, 0.5, 40)          # identical values give a zero std and no z-score
     fund = pd.DataFrame({"ticker": names, "filed": pd.Timestamp("2025-11-01"),
-                         "ni_ttm": [1e7] * 40 + [-5e7], "rev_ttm": 1e8, "gp_ttm": 4e7, "cogs_ttm": 6e7,
-                         "cfo_ttm": 1e7, "assets": [1e9] * 40 + [2e7], "equity": [4e8] * 40 + [-3e7],
-                         "shares": [1e7] * 40 + [1e9], "assets_1y": 9e8})
+                         "ni_ttm": list(1e7 * spread) + [-5e7], "rev_ttm": list(1e8 * spread) + [1e8],
+                         "gp_ttm": list(4e7 * spread) + [4e7], "cogs_ttm": 6e7,
+                         "cfo_ttm": list(1e7 * spread) + [1e7], "assets": list(1e9 * spread) + [2e7],
+                         "equity": list(4e8 * spread) + [-3e7], "shares": [1e7] * 40 + [1e9],
+                         "assets_1y": list(9e8 * spread) + [9e8]})
     fs = factor_scores(M, fund, idx[-1], pd.Index(names))
     assert pd.isna(fs.loc["SHELL", "quality"])          # excluded, not ranked first
     assert fs.loc["T00", "n_families"] >= 3
