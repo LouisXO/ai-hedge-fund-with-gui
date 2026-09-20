@@ -45,6 +45,9 @@ DDL = [
         acq_disp VARCHAR, shares DOUBLE, price DOUBLE, value_usd DOUBLE, shares_after DOUBLE,
         source VARCHAR, fetched_at TIMESTAMP,
         PRIMARY KEY (accession, ticker, trans_date, trans_code, shares, price))""",
+    """CREATE TABLE IF NOT EXISTS issuer_seen (
+        ticker VARCHAR, cik VARCHAR, quarter VARCHAR, n_filings INT, first_filing DATE, last_filing DATE,
+        PRIMARY KEY (ticker, cik, quarter))""",
     """CREATE TABLE IF NOT EXISTS insider_load_log (
         quarter VARCHAR PRIMARY KEY, n_rows INT, n_tickers INT, loaded_at TIMESTAMP)""",
     """CREATE TABLE IF NOT EXISTS news_sentiment (

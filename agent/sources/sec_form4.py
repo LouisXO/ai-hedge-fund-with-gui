@@ -69,6 +69,29 @@ def download(q: str, ua: str) -> zipfile.ZipFile | None:
     return None
 
 
+def issuers(zf: zipfile.ZipFile, quarter: str) -> pd.DataFrame:
+    """Every issuer that had a Form 4 filed that quarter = a listed company, as filed.
+
+    This is the free point-in-time ticker record: it includes companies that
+    later delisted, which is exactly what a survivorship-free universe needs
+    (and what company_tickers.json, being current-only, cannot give).
+    """
+    with zf.open("SUBMISSION.tsv") as f:
+        sub = pd.read_csv(f, sep="\t", usecols=["FILING_DATE", "ISSUERCIK", "ISSUERTRADINGSYMBOL"], dtype=str,
+                          on_bad_lines="skip")
+    sub["ticker"] = sub["ISSUERTRADINGSYMBOL"].str.upper().str.strip()
+    sub["filing_date"] = pd.to_datetime(sub["FILING_DATE"], errors="coerce")
+    sub = sub[sub["ticker"].str.fullmatch(r"[A-Z][A-Z.\-]{0,5}", na=False) & sub["filing_date"].notna()]
+    g = sub.groupby(["ticker", "ISSUERCIK"])
+    out = g.agg(n_filings=("filing_date", "size"), first_filing=("filing_date", "min"),
+                last_filing=("filing_date", "max")).reset_index()
+    out = out.rename(columns={"ISSUERCIK": "cik"})
+    out["quarter"] = quarter
+    out["first_filing"] = out["first_filing"].dt.date
+    out["last_filing"] = out["last_filing"].dt.date
+    return out
+
+
 def parse(zf: zipfile.ZipFile, universe: set[str]) -> pd.DataFrame:
     def tsv(name, cols):
         with zf.open(name) as f:
@@ -119,6 +142,7 @@ def load(store: PanelStore, first: str, last: str, pause: float = 0.5, force: bo
         if zf is None:
             stats["missing"].append(q)
             continue
+        store.insert("issuer_seen", issuers(zf, q))
         df = parse(zf, universe)
         n = store.insert("insider_tx", df) if not df.empty else 0
         store.insert("insider_load_log", pd.DataFrame([{"quarter": q, "n_rows": int(n),

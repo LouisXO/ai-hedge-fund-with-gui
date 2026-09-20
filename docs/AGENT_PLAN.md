@@ -286,6 +286,15 @@ optradar/(3 处小改)
 - **63 日全部转负**,说明即便有效也是短窗口效应,不是长期持有的理由。
 - **universe 是主要限制**:内部人效应的文献证据集中在小盘股,而 S&P 500 大盘股里高管公开市场买入本来就罕见(10 年只有 2449 次 ≥$250k)。要检验这个信号,需要把股票池扩到中小盘——但免费的时点成分数据只有 S&P 500,这是下一个要解决的数据问题。
 
+### S9(2026-09-20)— 时点股票池建成,但免费价格数据撑不起中小盘
+- **股票池已解决(免费)**:用 SEC Form 4 的 `SUBMISSION.tsv` 反推每个季度的在市公司(每份文件都带当时的代码和 CIK,**包含后来退市的**)。`panel.issuer_seen`:2015q1→2026q2,**14,331 只票、21.2 万条季度记录,每季度约 4,500 只在市**。这是免费、时点正确、无幸存者偏差的名单——`company_tickers.json` 只有当前公司,做不到这点。
+- **价格数据是真正的墙**:从 2016q1 的非标普成分里随机抽 300 只,用 yfinance 查当年日线,**只有 44% 拿得到**(标普同期是 76%)。缺的全是后来被收购或退市的(UBSH、BONT、SFLY、NUAN、DWA…),缺失与结果强相关,用它做中小盘研究会系统性高估收益。
+- **Stooq 已不可用**:现在返回机器人验证页,程序抓不到。
+- **结论**:S8 的瓶颈无法用免费数据绕开。要检验内部人/13F/13D 这一类信号,必须有含退市股的价格源。三条路:
+  1. **付费 EODHD All World ≈ $20/月**:明确包含退市股,覆盖 14k 票的完整历史,同时带基本面。一次性解锁整类信号的检验。
+  2. **先试 Alpaca 免费档**(需注册):7 年以上历史,退市覆盖未知,值得先测一遍再决定花钱。
+  3. **留在标普 500**:接受"内部人/机构类信号无法被公正检验"的现实,不再往这个方向投入。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
