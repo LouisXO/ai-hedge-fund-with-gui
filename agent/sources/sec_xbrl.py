@@ -125,8 +125,10 @@ def load(store: PanelStore, since: str, limit: int | None = None, retry_failed: 
                 df = pd.DataFrame(batch)
                 for c in ("period_start", "period_end", "filed"):
                     df[c] = pd.to_datetime(df[c], errors="coerce").dt.date
-                df = df.dropna(subset=["period_end", "filed"]).drop_duplicates(
-                    subset=["cik", "ns", "tag", "period_start", "period_end", "accn"])
+                df = df.dropna(subset=["period_end", "filed"])
+                # a malformed start date coerces to NaT; the key must not be null
+                df["period_start"] = df["period_start"].where(df["period_start"].notna(), df["period_end"])
+                df = df.drop_duplicates(subset=["cik", "ns", "tag", "period_start", "period_end", "accn"])
                 stats["rows"] += store.insert("xbrl_facts", df)
                 batch = []
             store.insert("xbrl_load_log", pd.DataFrame(log))
