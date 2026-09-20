@@ -257,6 +257,21 @@ optradar/(3 处小改)
   - `com.louis.agent.news` 工作日 13:15 PT → `agent/sources/av_news.py`。实测一次调用覆盖约 25 小时、1000 篇文章、1100 条 S&P 成分股记录(347 只票);配额账本与 `bin/congress.py` 共享,周六自动让出 22 次。
 - **下一次决策点**:积累 3 个月实盘记录后,用 `agent_picks × agent_returns` 做一次实盘 IC 复核;期权链攒够 12 个月后重跑 S2/S3,用真实 IV 替换模型 IV。在此之前不加新信号(§9 的教训)。
 
+### S7(2026-09-19)— 同样的信号做股票:没有期权门槛,也没有超额
+起因:用户指出不只做期权,可以像 balder-ai.com 那样分长线/短线做股票。S2 的门槛是期权特有的,股票只需要扣交易成本,所以同样的信号值得单独测一遍。报告:`site-data/validation/s7_2026-09-19.md`,脚本 `agent/s7_stock_books.py`(当日成分股、次日开盘入场、每边 5bp 成本、前 20 名)。
+
+| 书 | 信号 | 持有 | 多头年化 | 超额(减市场) | 多空 | NW t(超额/多空) |
+|---|---|---|---|---|---|---|
+| 短线 | reversal_5 | 5 日 | +16.0% | +3.7% | +5.1% | 0.62 / 0.50 |
+| 短线 | reversal_5 | 21 日 | +14.0% | +1.7% | +1.5% | 0.67 / 0.39 |
+| 长线 | mom_12_1 | 21 日 | +15.8% | +3.5% | +3.4% | 0.72 / 0.38 |
+| 长线 | mom_12_1 | 63 日 | +16.9% | +4.8% | +6.3% | 1.16 / 0.88 |
+
+- **多头腿看着很好(t 2.4–3.4),但那是市场 beta**:同期市场本身 63 日 +3.51%(约年化 14.7%)。扣掉市场之后,超额全部不显著,bootstrap 区间都含 0,多空腿同理。
+- **和 KTD-Fin 对 LLM agent 的结论一致**:收益主要由被动市场暴露和风格暴露解释,选股 alpha 证据有限。
+- **结论**:去掉期权门槛后信号并没有"活过来",只是从负变成约等于零。所以**不是期权口径的问题,是这几个信号本身没有边际**。股票书同样进影子模式,不单独上线。
+- **真正的差异点在数据**(Balder 的做法值得抄的部分):13F 机构持仓、Form 4 内部人、13D 举牌、带日期的催化剂——全都在 EDGAR 免费、按申报日期天然时点正确,而我们目前一条都没接。下一批候选信号应该从这里来,而不是继续在价格序列上翻找。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
