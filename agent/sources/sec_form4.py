@@ -101,7 +101,8 @@ def parse(zf: zipfile.ZipFile, universe: set[str]) -> pd.DataFrame:
                                  "DOCUMENT_TYPE"])
     sub = sub[sub["DOCUMENT_TYPE"].isin(["4", "4/A"])]
     sub["ticker"] = sub["ISSUERTRADINGSYMBOL"].str.upper().str.strip()
-    sub = sub[sub["ticker"].isin(universe)]
+    if universe:
+        sub = sub[sub["ticker"].isin(universe)]
     if sub.empty:
         return pd.DataFrame()
     trans = tsv("NONDERIV_TRANS.tsv", ["ACCESSION_NUMBER", "TRANS_DATE", "TRANS_CODE", "TRANS_SHARES",
@@ -130,9 +131,11 @@ def parse(zf: zipfile.ZipFile, universe: set[str]) -> pd.DataFrame:
     return out.drop_duplicates(subset=["accession", "ticker", "trans_date", "trans_code", "shares", "price"])
 
 
-def load(store: PanelStore, first: str, last: str, pause: float = 0.5, force: bool = False) -> dict:
+def load(store: PanelStore, first: str, last: str, pause: float = 0.5, force: bool = False,
+         all_issuers: bool = False) -> dict:
+    """all_issuers=True keeps every exchange-listed filer, not just S&P members."""
     ua = user_agent()
-    universe = {t for _, m in store.membership_changes() for t in m}
+    universe = set() if all_issuers else {t for _, m in store.membership_changes() for t in m}
     done = {r[0] for r in store.con.execute("SELECT quarter FROM insider_load_log").fetchall()} if not force else set()
     stats = {"quarters": 0, "rows": 0, "missing": []}
     for q in quarters(first, last):
@@ -161,12 +164,14 @@ def main() -> int:
     ap.add_argument("--from", dest="first", default="2015q1")
     ap.add_argument("--to", dest="last", default=None)
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--all-issuers", action="store_true",
+                    help="keep every filer (needed for small/mid-cap studies), not only S&P members")
     args = ap.parse_args()
     today = dt.date.today()
     last = args.last or f"{today.year}q{(today.month - 1) // 3 + 1}"
     with PanelStore() as store:
         if args.cmd == "load":
-            print(load(store, args.first, last, force=args.force))
+            print(load(store, args.first, last, force=args.force, all_issuers=args.all_issuers))
         else:
             print(store.con.execute("""SELECT count(*) AS n_rows, count(DISTINCT ticker) AS n_tickers,
                                               min(filing_date) AS first_filing, max(filing_date) AS last_filing,

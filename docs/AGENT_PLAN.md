@@ -297,6 +297,21 @@ optradar/(3 处小改)
 - **补充(同日)**:Alpha Vantage 的 `LISTING_STATUS` 免费返回**带 IPO 日和退市日**的全量名单,已入库 `panel.listing_status`(活跃 14,455 + 退市 9,513;2015 年后退市 8,960)。它的日线接口**确实保留退市股**(NUAN 能返回到 2022-03-04 退市当日),但 `outputsize=full` 是付费功能,免费档只给最近 100 根,做不了历史。
 - **选型工具**:`agent/sources/price_probe.py`,对 Alpaca / Tiingo / EODHD 跑同一套覆盖率测试(和 yfinance 的 44% 基线可直接对比),拿到 key 就能十分钟出结果。第三方对比资料称 EODHD($19.99/月)明确包含退市股,Tiingo($30/月)不含——需用这个工具实测确认,不要只信宣传页。
 
+### S10(2026-09-20)— Alpaca 免费档解决了退市数据,不用付费
+用 `agent/sources/price_probe.py` 实测(150 只 2016q1 在市的非标普股票,看当年能否拿到 >150 根日线):
+
+| 来源 | 覆盖率 | 成本 |
+|---|---|---|
+| yfinance | 44% | 免费 |
+| **Alpaca(免费档)** | **77%** | **免费** |
+
+按交易所拆开后更清楚:**NYSE 98%、NASDAQ 85%、AMEX 80%**,漏掉的 44% 那一档全是场外仙股(本来就不该进样本)。
+
+- **关键事实**:Alpaca 免费账号**能取 SIP 全市场历史日线**——只有 15 分钟内的实时数据才需要订阅。IEX 源没有 2018 年前的历史,所以必须显式指定 `feed=sip`。
+- **结论:不需要买 EODHD 或 AV 付费档**。S9 的墙用免费数据翻过去了。
+- `agent/sources/alpaca_bars.py`:按 `listing_status` 里在交易所上市的股票回填日线,`adjustment=raw` 和 `=all` 各取一次,保持面板"原始 OHLC 算波动率、复权价算收益"的口径。
+- `sec_form4.py` 加 `--all-issuers`:之前解析时只保留标普成分股,中小盘研究需要全量重载。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf

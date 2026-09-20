@@ -24,8 +24,29 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 from hedge_fund.features.panel import PanelStore
+
+
+ENV_KEYS = {"alpaca": ("ALPACA_KEY_ID", "ALPACA_SECRET"), "tiingo": ("TIINGO_TOKEN", None),
+            "eodhd": ("EODHD_TOKEN", None)}
+
+
+def keys_from_env(provider: str) -> tuple[str, str]:
+    """Read credentials from ~/.hedge-fund/.env so they never reach a shell history."""
+    path = Path.home() / ".hedge-fund" / ".env"
+    env = {}
+    if path.exists():
+        for line in path.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+    key_name, sec_name = ENV_KEYS[provider]
+    if key_name not in env:
+        raise SystemExit(f"put {key_name}=... " + (f"and {sec_name}=... " if sec_name else "") +
+                         f"in {path} (chmod 600), or pass --key")
+    return env[key_name], env.get(sec_name or "", "")
 
 
 def sample(store: PanelStore, year: int, n: int) -> list[str]:
@@ -76,12 +97,14 @@ def bars_eodhd(t: str, year: int, key: str) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--provider", choices=["alpaca", "tiingo", "eodhd"], required=True)
-    ap.add_argument("--key", required=True)
+    ap.add_argument("--key", default=None, help="omit to read from ~/.hedge-fund/.env")
     ap.add_argument("--secret", default="")
     ap.add_argument("--year", type=int, default=2016)
     ap.add_argument("--n", type=int, default=150)
     ap.add_argument("--pause", type=float, default=0.3)
     args = ap.parse_args()
+    if not args.key:
+        args.key, args.secret = keys_from_env(args.provider)
 
     with PanelStore(read_only=True) as store:
         names = sample(store, args.year, args.n)
