@@ -45,6 +45,10 @@ DDL = [
         acq_disp VARCHAR, shares DOUBLE, price DOUBLE, value_usd DOUBLE, shares_after DOUBLE,
         source VARCHAR, fetched_at TIMESTAMP,
         PRIMARY KEY (accession, ticker, trans_date, trans_code, shares, price))""",
+    """CREATE TABLE IF NOT EXISTS listing_status (
+        symbol VARCHAR, name VARCHAR, exchange VARCHAR, asset_type VARCHAR,
+        ipo_date DATE, delisting_date DATE, status VARCHAR, fetched_at TIMESTAMP,
+        PRIMARY KEY (symbol, status))""",
     """CREATE TABLE IF NOT EXISTS issuer_seen (
         ticker VARCHAR, cik VARCHAR, quarter VARCHAR, n_filings INT, first_filing DATE, last_filing DATE,
         PRIMARY KEY (ticker, cik, quarter))""",
