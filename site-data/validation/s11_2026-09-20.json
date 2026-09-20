@@ -1,0 +1,227 @@
+{
+ "generated_at": "2026-09-20T13:16:32",
+ "start": "2016-01-01",
+ "min_adv_usd": 20000000.0,
+ "universe": "listed & liquid, point-in-time (Alpaca bars)",
+ "n_events": 18406,
+ "n_tickers": 2194,
+ "n_names_panel": 7995,
+ "horizons": {
+  "5": {
+   "all_buys": {
+    "label": "all",
+    "horizon": 5,
+    "n_events": 18400,
+    "n_dates": 2540,
+    "mean_abn_pct": 0.13593853381323576,
+    "median_abn_pct": 0.05292610710198162,
+    "t_nw": 1.4860487858338873,
+    "boot_ci95": [
+     -0.08530398466819718,
+     0.36526362269396223
+    ],
+    "hit_rate": 0.5118110236220472,
+    "share_years_positive": 0.7272727272727273,
+    "first_half": 0.14371095965475278,
+    "second_half": 0.1281661079717187
+   },
+   "cluster": {
+    "label": ">=2 buyers",
+    "horizon": 5,
+    "n_events": 2380,
+    "n_dates": 1280,
+    "mean_abn_pct": 0.4090655862504072,
+    "median_abn_pct": 0.2717250779320862,
+    "t_nw": 2.147001890520105,
+    "boot_ci95": [
+     -0.015869062267419912,
+     0.8194746520987957
+    ],
+    "hit_rate": 0.53203125,
+    "share_years_positive": 0.8181818181818182,
+    "first_half": 0.4096469777265625,
+    "second_half": 0.4084841947742519
+   },
+   "big_usd": {
+    "label": ">= $250k",
+    "horizon": 5,
+    "n_events": 7630,
+    "n_dates": 2200,
+    "mean_abn_pct": 0.3450450030298106,
+    "median_abn_pct": 0.26182470098112975,
+    "t_nw": 2.723060362875038,
+    "boot_ci95": [
+     0.06149370995505607,
+     0.6129520315538795
+    ],
+    "hit_rate": 0.5318181818181819,
+    "share_years_positive": 0.8181818181818182,
+    "first_half": 0.37683606804588715,
+    "second_half": 0.3132539380137342
+   },
+   "size_micro": {
+    "label": "micro caps",
+    "n_dates": 1
+   },
+   "size_small": {
+    "label": "small caps",
+    "horizon": 5,
+    "n_events": 525,
+    "n_dates": 346,
+    "mean_abn_pct": 0.06737443445715068,
+    "median_abn_pct": 0.24238670082132896,
+    "t_nw": 0.11881164931902788,
+    "boot_ci95": [
+     -1.0312490510525536,
+     1.2114253074363304
+    ],
+    "hit_rate": 0.5086705202312138,
+    "share_years_positive": 0.36363636363636365,
+    "first_half": -0.7512769085140247,
+    "second_half": 0.8860257774283261
+   },
+   "size_mid": {
+    "label": "mid caps",
+    "horizon": 5,
+    "n_events": 11040,
+    "n_dates": 2406,
+    "mean_abn_pct": 0.1856759492905592,
+    "median_abn_pct": 0.08819154157490838,
+    "t_nw": 1.6374704678042629,
+    "boot_ci95": [
+     -0.0919526575486811,
+     0.4608171645388183
+    ],
+    "hit_rate": 0.5133000831255196,
+    "share_years_positive": 0.6363636363636364,
+    "first_half": 0.3061294189203968,
+    "second_half": 0.06522247966072159
+   },
+   "size_large": {
+    "label": "large caps",
+    "horizon": 5,
+    "n_events": 6834,
+    "n_dates": 2179,
+    "mean_abn_pct": 0.088426544132746,
+    "median_abn_pct": -0.023195312352530806,
+    "t_nw": 0.9241355662086046,
+    "boot_ci95": [
+     -0.15403395454752375,
+     0.3373994420145255
+    ],
+    "hit_rate": 0.49701698026617713,
+    "share_years_positive": 0.6363636363636364,
+    "first_half": 0.12094968396088009,
+    "second_half": 0.05593324204757352
+   }
+  },
+  "10": {
+   "all_buys": {
+    "label": "all",
+    "horizon": 10,
+    "n_events": 18393,
+    "n_dates": 2540,
+    "mean_abn_pct": 0.14797496843178035,
+    "median_abn_pct": 0.0767537662621165,
+    "t_nw": 1.0644066980669717,
+    "boot_ci95": [
+     -0.23861705000941047,
+     0.558559227141935
+    ],
+    "hit_rate": 0.5059055118110236,
+    "share_years_positive": 0.6363636363636364,
+    "first_half": 0.11683906564647686,
+    "second_half": 0.17911087121708383
+   },
+   "cluster": {
+    "label": ">=2 buyers",
+    "horizon": 10,
+    "n_events": 2380,
+    "n_dates": 1280,
+    "mean_abn_pct": 0.4090627907384842,
+    "median_abn_pct": 0.2782000446304944,
+    "t_nw": 1.4252513220691991,
+    "boot_ci95": [
+     -0.2528315109307599,
+     1.0301876954698814
+    ],
+    "hit_rate": 0.51953125,
+    "share_years_positive": 0.6363636363636364,
+    "first_half": 0.21744502440510494,
+    "second_half": 0.6006805570718636
+   },
+   "big_usd": {
+    "label": ">= $250k",
+    "horizon": 10,
+    "n_events": 7626,
+    "n_dates": 2199,
+    "mean_abn_pct": 0.1895425250799784,
+    "median_abn_pct": 0.2858943033786381,
+    "t_nw": 0.9890641025793686,
+    "boot_ci95": [
+     -0.30536125323501245,
+     0.672222687437182
+    ],
+    "hit_rate": 0.527512505684402,
+    "share_years_positive": 0.6363636363636364,
+    "first_half": 0.24361623300016713,
+    "second_half": 0.13551797507608068
+   },
+   "size_micro": {
+    "label": "micro caps",
+    "n_dates": 1
+   },
+   "size_small": {
+    "label": "small caps",
+    "horizon": 10,
+    "n_events": 525,
+    "n_dates": 346,
+    "mean_abn_pct": -0.4388719752867498,
+    "median_abn_pct": -0.11136736134610414,
+    "t_nw": -0.4876549480591304,
+    "boot_ci95": [
+     -2.365729823379401,
+     1.3541881623047016
+    ],
+    "hit_rate": 0.49421965317919075,
+    "share_years_positive": 0.45454545454545453,
+    "first_half": -0.9604538677049425,
+    "second_half": 0.08270991713144331
+   },
+   "size_mid": {
+    "label": "mid caps",
+    "horizon": 10,
+    "n_events": 11036,
+    "n_dates": 2406,
+    "mean_abn_pct": 0.30587997293271885,
+    "median_abn_pct": 0.14629767808847294,
+    "t_nw": 1.6233002581848315,
+    "boot_ci95": [
+     -0.22816446259182493,
+     0.8048803697492275
+    ],
+    "hit_rate": 0.5091438071487947,
+    "share_years_positive": 0.6363636363636364,
+    "first_half": 0.3439265115042,
+    "second_half": 0.26783343436123774
+   },
+   "size_large": {
+    "label": "large caps",
+    "horizon": 10,
+    "n_events": 6831,
+    "n_dates": 2179,
+    "mean_abn_pct": -0.046148260230550193,
+    "median_abn_pct": -0.2033150936354331,
+    "t_nw": -0.32038839884425147,
+    "boot_ci95": [
+     -0.4518052463767963,
+     0.3470656416619991
+    ],
+    "hit_rate": 0.47911886186324004,
+    "share_years_positive": 0.6363636363636364,
+    "first_half": 0.12683769972326395,
+    "second_half": -0.2189755174688104
+   }
+  }
+ }
+}

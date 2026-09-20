@@ -101,6 +101,8 @@ def parse(zf: zipfile.ZipFile, universe: set[str]) -> pd.DataFrame:
                                  "DOCUMENT_TYPE"])
     sub = sub[sub["DOCUMENT_TYPE"].isin(["4", "4/A"])]
     sub["ticker"] = sub["ISSUERTRADINGSYMBOL"].str.upper().str.strip()
+    # filers without a trading symbol (private issuers, pending listings) cannot be joined to prices
+    sub = sub[sub["ticker"].str.fullmatch(r"[A-Z][A-Z.\-]{0,5}", na=False)]
     if universe:
         sub = sub[sub["ticker"].isin(universe)]
     if sub.empty:
