@@ -74,8 +74,8 @@ def _long_rows(d: dict, live_db) -> str:
     body = "".join(f"<tr><td>{t}</td><td>{r}</td><td>{v:+.2f}</td><td class='muted'>{g}</td></tr>" for t, r, v, g in rows)
     return (f"<h3>长线综合因子书(月度,{as_of})</h3><table><tr><th>标的</th><th>排名</th><th>综合分</th>"
             f"<th>价值/质量/动量/低波 z</th></tr>{body}</table>"
-            "<p class='muted'>价值+质量+动量+低波等权 z 分,月末评分、次月首日开盘入场、持有一个月。"
-            "回测 alpha2 +10.5%/年(t 1.94),未达显著,影子记录中。</p>")
+            "<p class='muted'>价值+质量+动量+低波等权 z 分,每日评分:进前 30 买入、跌出前 60 卖出,持有期由信号决定。"
+            "回测(2017–2026)alpha2 +12.6%/年(t 2.25),13 个变体校正后未达显著,影子记录中。</p>")
 
 
 def html(d: dict, live: dict) -> str:
