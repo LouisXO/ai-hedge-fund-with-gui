@@ -31,6 +31,8 @@ def main() -> int:
     ap.add_argument("--cash-in-spy", action="store_true", help="idle slots hold SPY instead of cash")
     ap.add_argument("--top-n", type=int, default=None, help="long-book breadth (default long_term.TOP_N)")
     ap.add_argument("--only", default=None, help="comma list of long books to run (default all)")
+    ap.add_argument("--daily-composite", action="store_true",
+                    help="also run the signal-driven composite: scored daily, enter top N, keep while in top 2N")
     args = ap.parse_args()
 
     with PanelStore(read_only=True) as store:
@@ -53,12 +55,17 @@ def main() -> int:
         runs[f"long_{name}_n{top_n}"] = simulate(market, tg, args.start, args.end, top_n, None, args.exec_frac,
                                                  cash_in_spy=args.cash_in_spy)
 
+    if args.daily_composite and fund is not None:
+        tg = long_term.daily_composite(market, fund, args.start, args.end, top_n=top_n)
+        print(f"long-term composite_daily: {len(tg)} scoring days", flush=True)
+        runs[f"long_composite_daily_n{top_n}"] = simulate(market, tg, args.start, args.end, top_n, None,
+                                                          args.exec_frac, cash_in_spy=args.cash_in_spy)
     stamp = dt.date.today().isoformat()
     os.makedirs(OUT_DIR, exist_ok=True)
     report = {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "start": args.start,
               "end": args.end, "exec_frac": args.exec_frac, "cash_in_spy": args.cash_in_spy,
               "books": {k: v.metrics for k, v in runs.items()}}
-    tag = ("_spycash" if args.cash_in_spy else "") + (f"_n{top_n}" if args.top_n else "")
+    tag = ("_spycash" if args.cash_in_spy else "") + (f"_n{top_n}" if args.top_n else "") + ("_daily" if args.daily_composite else "")
     path = os.path.join(OUT_DIR, f"books_{stamp}{tag}.json")
     with open(path, "w") as f:
         json.dump(report, f, indent=1, default=float)

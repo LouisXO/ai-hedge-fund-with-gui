@@ -42,6 +42,28 @@ def net_buying_panel(market: Market, flows: pd.DataFrame) -> pd.DataFrame:
     return net.rolling(NET_WINDOW, min_periods=20).sum()
 
 
+def daily_composite(market: Market, fund: pd.DataFrame, start: str, end: str, top_n: int = TOP_N,
+                    keep_mult: int = 2, every: int = 1) -> dict[pd.Timestamp, list[str]]:
+    """Signal-driven cadence: score every `every` days; the list is the top keep_mult*N by rank.
+
+    With the engine's slot limit of N, this means: enter a name when it ranks
+    inside the top N and a slot is free, keep it while it stays inside the top
+    keep_mult*N, sell when it falls out. Holding period is whatever the signal
+    dictates — a new filing or a price move can bring a name in or push it out
+    on any day, which is what a long book should mean (2026-09-20).
+    """
+    days = market.adj.loc[start:end].index[::every]
+    tradable = market.tradable(ADV_FLOOR, np.inf)
+    out: dict[pd.Timestamp, list[str]] = {}
+    for d in days:
+        ok = tradable.loc[d]
+        universe = ok[ok].index
+        fs = factor_scores(market, fund, d, universe)
+        fs = fs[fs["n_families"] >= 3]
+        out[d] = fs["composite"].dropna().sort_values(ascending=False).head(keep_mult * top_n).index.tolist()
+    return out
+
+
 def scores(market: Market, flows: pd.DataFrame, fund: pd.DataFrame | None, start: str, end: str,
            top_n: int = TOP_N) -> dict[str, dict[pd.Timestamp, list[str]]]:
     days = market.adj.loc[start:end].index

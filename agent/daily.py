@@ -126,7 +126,7 @@ def insider_picks(store: PanelStore, day: pd.Timestamp, window: int = 3) -> list
 
 
 def long_book_picks(day: pd.Timestamp, optradar_db: str) -> list[dict]:
-    """Composite long book, monthly: only on the first morning after a month-end."""
+    """Composite long book, scored every completed bar (signal-driven cadence)."""
     con = ledger.connect(optradar_db, read_only=True)
     try:
         row = con.execute("SELECT max(as_of) FROM agent_picks WHERE signal_name = ?", [long_live.SIGNAL]).fetchone()
@@ -135,7 +135,7 @@ def long_book_picks(day: pd.Timestamp, optradar_db: str) -> list[dict]:
     finally:
         con.close()
     last_recorded = pd.Timestamp(row[0]) if row and row[0] is not None else None
-    if not long_live.is_rebalance_day(day, pd.Timestamp(dt.date.today()), last_recorded):
+    if not long_live.should_score(day, last_recorded):
         return []
     with PanelStore(read_only=True) as store:
         market = load_market(store, (day - pd.Timedelta(days=420)).date().isoformat())
@@ -172,7 +172,7 @@ def main() -> int:
     with PanelStore(read_only=True) as store:                      # stock side, independent of the gate
         picks += insider_picks(store, day)
     try:
-        picks += long_book_picks(day, args.optradar_db)              # monthly; empty on other days
+        picks += long_book_picks(day, args.optradar_db)              # daily ranked list, once per bar
     except Exception as exc:
         print(f"agent: long book skipped: {exc}")
 

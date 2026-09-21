@@ -1,13 +1,19 @@
 """The long book, live: what the composite would hold from the next open.
 
-Rebalance rule mirrors the backtest exactly (agent/books/long_term.py):
-month-end scores, entered at the following open, held until the next
-month-end. In live terms: on the first run of a new month, score the
-universe as of the last completed bar (the prior month's last trading
-day) and record the top-N; on every other day, return nothing.
+Cadence is signal-driven, not calendar-driven (decided 2026-09-20: "long
+term" means the holding period, not month-ends). Every morning the
+universe is scored on the last completed bar and the top KEEP_MULT*N
+names are recorded with their rank. Read with the engine's slot rule that
+gives: enter when a name ranks inside the top N and a slot is free, keep
+it while it stays inside the top 2N, sell when it falls out — exactly
+agent/books/long_term.daily_composite, which is what the backtest ran.
 
-Shorting was allowed but not favoured (2026-09-20), so momentum stays a
-component of the composite and there is no long-short book.
+Recording the ranked list daily (rather than a held set) keeps the shadow
+record stateless: holdings are reconstructed by replaying the engine on
+the recorded lists, so the live record and the backtest use one code path.
+
+Shorting was allowed but not favoured, so momentum stays a component of
+the composite and there is no long-short book.
 """
 from __future__ import annotations
 
@@ -20,18 +26,15 @@ from agent.books.long_term import ADV_FLOOR, TOP_N
 from hedge_fund.features.panel import PanelStore
 
 SIGNAL = "composite_long"
+KEEP_MULT = 2
 
 
-def is_rebalance_day(last_bar: pd.Timestamp, today: pd.Timestamp, last_recorded: pd.Timestamp | None) -> bool:
-    """The morning run right after a month-end: today is in a new month, the last completed
-    bar is still the old month's (so it IS the month-end bar), and that bar has not been
-    recorded yet. Scoring on it and entering at today's open is exactly the backtest."""
-    if (last_bar.year, last_bar.month) == (today.year, today.month):
-        return False
+def should_score(last_bar: pd.Timestamp, last_recorded: pd.Timestamp | None) -> bool:
+    """Once per completed bar: skip if this bar's list is already recorded (reruns are idempotent)."""
     return last_recorded is None or last_recorded.normalize() != last_bar.normalize()
 
 
-def month_end_scores(store: PanelStore, market: Market, day: pd.Timestamp) -> pd.DataFrame:
+def day_scores(store: PanelStore, market: Market, day: pd.Timestamp) -> pd.DataFrame:
     fund = fundamentals(store)
     if fund is None:
         return pd.DataFrame()
@@ -44,16 +47,18 @@ def month_end_scores(store: PanelStore, market: Market, day: pd.Timestamp) -> pd
 
 
 def targets(store: PanelStore, market: Market, day: pd.Timestamp, top_n: int = TOP_N) -> list[dict]:
-    fs = month_end_scores(store, market, day)
+    """The day's ranked list: top KEEP_MULT*N. Ranks <= N are entry candidates, the rest are keep-only."""
+    fs = day_scores(store, market, day)
     if fs.empty:
         return []
     out = []
-    for rank, (ticker, row) in enumerate(fs.head(top_n).iterrows(), 1):
+    for rank, (ticker, row) in enumerate(fs.head(KEEP_MULT * top_n).iterrows(), 1):
         out.append({"ticker": ticker, "signal_name": SIGNAL, "side": "L", "rank": rank,
                     "value": float(row["composite"]), "instrument": "stock",
                     "limit_ref": float(market.close.at[day, ticker]),
                     "spread_pct": market.spread_pct(ticker, day),
-                    "gate_passed": True, "gate_reason": f"v{row['value']:+.2f} q{row['quality']:+.2f} "
+                    "gate_passed": rank <= top_n,                   # False = keep-only zone (N < rank <= 2N)
+                    "gate_reason": f"v{row['value']:+.2f} q{row['quality']:+.2f} "
                                                         f"m{row['momentum']:+.2f} lv{row['lowvol']:+.2f}",
                     "expected_net_pct": None, "iv": None, "rv20": None, "rv60": None, "breakeven_pct": None})
     return out
