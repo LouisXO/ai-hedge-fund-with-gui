@@ -13,10 +13,10 @@
   <key>StandardOutPath</key><string>/Users/louis/optradar/out/agent/execute.log</string>
   <key>StandardErrorPath</key><string>/Users/louis/optradar/out/agent/execute.log</string>
   <key>StartCalendarInterval</key><array>
-    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>40</integer><key>Weekday</key><integer>1</integer></dict>
-    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>40</integer><key>Weekday</key><integer>2</integer></dict>
-    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>40</integer><key>Weekday</key><integer>3</integer></dict>
-    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>40</integer><key>Weekday</key><integer>4</integer></dict>
-    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>40</integer><key>Weekday</key><integer>5</integer></dict>
+    <dict><key>Hour</key><integer>16</integer><key>Minute</key><integer>10</integer><key>Weekday</key><integer>1</integer></dict>
+    <dict><key>Hour</key><integer>16</integer><key>Minute</key><integer>10</integer><key>Weekday</key><integer>2</integer></dict>
+    <dict><key>Hour</key><integer>16</integer><key>Minute</key><integer>10</integer><key>Weekday</key><integer>3</integer></dict>
+    <dict><key>Hour</key><integer>16</integer><key>Minute</key><integer>10</integer><key>Weekday</key><integer>4</integer></dict>
+    <dict><key>Hour</key><integer>16</integer><key>Minute</key><integer>10</integer><key>Weekday</key><integer>5</integer></dict>
   </array>
 </dict></plist>

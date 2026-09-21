@@ -1,5 +1,5 @@
 #!/bin/zsh
-# After the close (13:40 PT = 16:40 ET, com.louis.agent.execute): pull today's Form 4 index,
+# After the close (16:10 PT = 19:10 ET, com.louis.agent.execute; Alpaca takes OPG orders only 19:00-09:28 ET): pull today's Form 4 index,
 # refresh bars for the whole universe, then run the paper executor. Orders are only sent
 # when AGENT_EXEC=on is set in ~/.hedge-fund/.env; anything else is a dry run that prints
 # the order list to the log. The broker client refuses non-paper credentials regardless.

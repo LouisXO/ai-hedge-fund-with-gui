@@ -7,6 +7,7 @@ real paper account:
   ------------------------------------      ------------------------------------------
   targets chosen with data through day D    scored on D's completed bar, after 16:00 ET
   fills at D+1 open                         OPG orders: limit-on-open buys, market-on-open sells
+                                            (DAY orders queued for the open if run 09:28-19:00 ET)
   cost = 0.5 x quoted spread each side      whatever the opening auction gives; measured, not assumed
   long book: enter rank<=30 into free       same, with the book's own lots as the state
     slots, exit when rank>60
@@ -72,9 +73,17 @@ def client_id(book: str, as_of: dt.date, ticker: str, side: str) -> str:
 
 
 # ---------------------------------------------------------------- planning (pure) ----
+def opg_window(now_et: dt.datetime) -> bool:
+    """Alpaca accepts OPG orders only after 19:00 and before 09:28 ET (error 40310000 otherwise).
+    Outside that window the same orders go as DAY: submitted after the close they are queued for
+    the next open, so a limit buy still fills at the opening print when it is under the cap."""
+    t = now_et.time()
+    return t >= dt.time(19, 0) or t < dt.time(9, 28)
+
+
 def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: set[str], as_of: dt.date,
               next_session: dt.date, ref_close: dict[str, float], spread_pct: dict[str, float],
-              cash_usd: float, blocked: set[str], scored: bool = True) -> list[dict]:
+              cash_usd: float, blocked: set[str], scored: bool = True, tif: str = "opg") -> list[dict]:
     """The engine's one-day step, as orders for the next open.
 
     lots: this book's open lots ({ticker, qty, hold_until}); ranked: entry candidates
@@ -92,7 +101,7 @@ def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: s
         if (expired or dropped) and t not in exits:
             exits.add(t)
             orders.append({"client_order_id": client_id(book, as_of, t, "sell"), "book": book, "as_of": as_of,
-                           "ticker": t, "side": "sell", "qty": int(lot["qty"]), "order_type": "market", "tif": "opg",
+                           "ticker": t, "side": "sell", "qty": int(lot["qty"]), "order_type": "market", "tif": tif,
                            "limit_price": None, "ref_close": ref_close.get(t),
                            "reason": "hold_expired" if expired else "rank_out"})
     equity = cash_usd + sum(float(l["qty"]) * ref_close.get(l["ticker"], float(l.get("entry_px") or 0.0)) for l in lots)
@@ -117,7 +126,7 @@ def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: s
         if qty < 1:
             continue
         orders.append({"client_order_id": client_id(book, as_of, t, "buy"), "book": book, "as_of": as_of,
-                       "ticker": t, "side": "buy", "qty": qty, "order_type": "limit", "tif": "opg",
+                       "ticker": t, "side": "buy", "qty": qty, "order_type": "limit", "tif": tif,
                        "limit_price": limit, "ref_close": px, "reason": "entry"})
         cash_plan -= qty * limit
         n_open += 1
@@ -316,6 +325,7 @@ def main() -> int:
             lots_all = open_lots(con)
             blocked, msgs = reconcile(lots_all, positions)
             next_session = _sessions_after(calendar, day.date(), 1)
+            tif = "opg" if opg_window(dt.datetime.now(ET)) else "day"
             close_row = market.close.loc[day]
             ref_close = {t: float(v) for t, v in close_row.dropna().items()}
             plans: list[dict] = []
@@ -332,7 +342,7 @@ def main() -> int:
                         ranked, keep, scored = insider_targets(store, day, con), set(), True
                     spreads = {t: market.spread_pct(t, day) for t in ranked}
                     plans += plan_book(book, cfg, lots, ranked, keep, day.date(), next_session, ref_close, spreads,
-                                       books[book]["cash_usd"], blocked | others, scored)
+                                       books[book]["cash_usd"], blocked | others, scored, tif)
                     targets_dbg[book] = {"n_ranked": len(ranked), "n_keep": len(keep), "scored": scored,
                                          "top": ranked[:10]}
             nav = mark_books(con, day.date(), ref_close, float(acct["equity"]))
@@ -358,11 +368,13 @@ def main() -> int:
             o["submitted_at"] = pd.Timestamp.now()
             sent.append(o)
         if args.submit:
-            ledger._insert(con, "agent_orders", pd.DataFrame(sent)) if sent else None
+            ok = [o for o in sent if o["alpaca_id"]]                  # a rejected POST is not an order
+            if ok:
+                ledger._insert(con, "agent_orders", pd.DataFrame(ok))
     finally:
         con.close()
 
-    summary = {"as_of": str(day.date()), "last_session": str(last_session), "stale_bars": stale,
+    summary = {"as_of": str(day.date()), "last_session": str(last_session), "stale_bars": stale, "tif": tif,
                "mode": "submit" if args.submit else "dry_run", "account_equity": float(acct["equity"]),
                "account_cash": float(acct["cash"]), "sync": sync, "model_px_filled": n_model,
                "reconcile": msgs, "targets": targets_dbg, "books": nav,
@@ -372,7 +384,7 @@ def main() -> int:
     with open(os.path.join(OUT_DIR, f"exec_{day.date()}.json"), "w") as f:
         json.dump(summary, f, indent=1, default=str)
     tag = "SUBMITTED" if args.submit else "DRY RUN"
-    print(f"[{tag}] bar {day.date()} (last session {last_session}{', STALE — nothing planned' if stale else ''}) "
+    print(f"[{tag}] bar {day.date()} (last session {last_session}{', STALE — nothing planned' if stale else ''}) tif={tif} "
           f"· account ${float(acct['equity']):,.0f} · fills synced {sync['filled']}+{sync['closed']} · "
           f"reconcile {'ok' if not msgs else msgs}")
     for b in nav:
