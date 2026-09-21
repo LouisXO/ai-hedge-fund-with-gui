@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.louis.agent.fundamentals</string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/zsh</string><string>/Users/louis/hedge-fund/agent/bin/weekly_fundamentals.sh</string>
+  </array>
+  <key>StandardOutPath</key><string>/Users/louis/optradar/out/agent/collect.log</string>
+  <key>StandardErrorPath</key><string>/Users/louis/optradar/out/agent/collect.log</string>
+  <key>StartCalendarInterval</key><dict>
+    <key>Hour</key><integer>3</integer><key>Minute</key><integer>0</integer><key>Weekday</key><integer>0</integer>
+  </dict>
+</dict></plist>

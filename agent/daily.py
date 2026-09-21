@@ -28,6 +28,8 @@ import numpy as np
 import pandas as pd
 
 from agent import ledger, signals_insider
+from agent.books import live as long_live
+from agent.books.data import load_market
 from agent.backfill import backfill_bars, backfill_index
 from agent.s2_option_hurdle import breakeven_move
 from agent.s3_signals import DTE, K_IV, SPREAD_PCT, resid_reversal_5
@@ -123,6 +125,23 @@ def insider_picks(store: PanelStore, day: pd.Timestamp, window: int = 3) -> list
     return out
 
 
+def long_book_picks(day: pd.Timestamp, optradar_db: str) -> list[dict]:
+    """Composite long book, monthly: only on the first morning after a month-end."""
+    con = ledger.connect(optradar_db, read_only=True)
+    try:
+        row = con.execute("SELECT max(as_of) FROM agent_picks WHERE signal_name = ?", [long_live.SIGNAL]).fetchone()
+    except Exception:
+        row = (None,)
+    finally:
+        con.close()
+    last_recorded = pd.Timestamp(row[0]) if row and row[0] is not None else None
+    if not long_live.is_rebalance_day(day, pd.Timestamp(dt.date.today()), last_recorded):
+        return []
+    with PanelStore(read_only=True) as store:
+        market = load_market(store, (day - pd.Timedelta(days=420)).date().isoformat())
+        return long_live.targets(store, market, day)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default=None)
@@ -152,6 +171,10 @@ def main() -> int:
         p.setdefault("instrument", "option")
     with PanelStore(read_only=True) as store:                      # stock side, independent of the gate
         picks += insider_picks(store, day)
+    try:
+        picks += long_book_picks(day, args.optradar_db)              # monthly; empty on other days
+    except Exception as exc:
+        print(f"agent: long book skipped: {exc}")
 
     payload = {"as_of": str(day.date()), "run_id": run_id, "mode": MODE, "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
                "universe_n": len(state["members"]), "vix": state["vix"], "regime": regime,

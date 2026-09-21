@@ -59,6 +59,25 @@ def _stock_rows(d: dict) -> str:
             "必须挂限价,吃满价差则期望为零(S13)。</p>")
 
 
+def _long_rows(d: dict, live_db) -> str:
+    """Composite long book: the current month's 30 names (from the DB, since picks are monthly)."""
+    try:
+        rows = live_db.execute("""SELECT ticker, rank, value, gate_reason FROM agent_picks
+                                  WHERE signal_name = 'composite_long'
+                                    AND as_of = (SELECT max(as_of) FROM agent_picks WHERE signal_name = 'composite_long')
+                                  ORDER BY rank LIMIT 30""").fetchall()
+        as_of = live_db.execute("SELECT max(as_of) FROM agent_picks WHERE signal_name='composite_long'").fetchone()[0]
+    except Exception:
+        rows, as_of = [], None
+    if not rows:
+        return ""
+    body = "".join(f"<tr><td>{t}</td><td>{r}</td><td>{v:+.2f}</td><td class='muted'>{g}</td></tr>" for t, r, v, g in rows)
+    return (f"<h3>长线综合因子书(月度,{as_of})</h3><table><tr><th>标的</th><th>排名</th><th>综合分</th>"
+            f"<th>价值/质量/动量/低波 z</th></tr>{body}</table>"
+            "<p class='muted'>价值+质量+动量+低波等权 z 分,月末评分、次月首日开盘入场、持有一个月。"
+            "回测 alpha2 +10.5%/年(t 1.94),未达显著,影子记录中。</p>")
+
+
 def html(d: dict, live: dict) -> str:
     rows = []
     for p in [x for x in d["picks"] if x.get("instrument") != "stock"][:10]:
@@ -76,6 +95,7 @@ def html(d: dict, live: dict) -> str:
 <table><tr><th>标的</th><th>信号</th><th>方向</th><th>排名</th><th>分数</th><th>IV</th><th>回本门槛(14天)</th></tr>
 {''.join(rows) or '<tr><td colspan="7">今日无期权候选</td></tr>'}</table>
 {_stock_rows(d)}
+{live.get('_long_html', '')}
 <ul class="muted">{score or '<li>还没有满 10 天的记录</li>'}
 <li>累计 {live.get('n_days', 0)} 天 / {live.get('n_signal_rows', 0)} 条信号记录</li></ul>"""
 
@@ -94,6 +114,7 @@ def main() -> int:
         con = ledger.connect(args.optradar_db, read_only=True)
         try:
             live = ledger.live_summary(con)
+            live["_long_html"] = _long_rows(d, con)
         finally:
             con.close()
     except Exception:
