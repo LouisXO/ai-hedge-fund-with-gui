@@ -19,6 +19,7 @@ shells stay out.
 
 Usage:
   python -m agent.sources.alpaca_bars backfill [--start 2015-01-01] [--limit 500]
+  python -m agent.sources.alpaca_bars update [--days 7] [--extra AAPL,MSFT]   # after the close, whole universe
   python -m agent.sources.alpaca_bars coverage
 """
 from __future__ import annotations
@@ -77,9 +78,9 @@ def fetch_batch(symbols: list[str], start: str, end: str, key: str, secret: str,
 
 
 def backfill(store: PanelStore, start: str, end: str, limit: int | None = None,
-             pause: float = 0.35) -> dict:
+             pause: float = 0.35, symbols: list[str] | None = None, quiet: bool = False) -> dict:
     key, secret = keys_from_env("alpaca")
-    syms = universe(store, limit)
+    syms = symbols if symbols is not None else universe(store, limit)
     stats = {"symbols": len(syms), "rows": 0, "with_data": 0}
     now = pd.Timestamp.now()
     for i in range(0, len(syms), BATCH):
@@ -106,23 +107,45 @@ def backfill(store: PanelStore, start: str, end: str, limit: int | None = None,
             stats["with_data"] += 1
         if frames:
             stats["rows"] += store.upsert_bars(pd.concat(frames, ignore_index=True))
-        print(f"  [{min(i + BATCH, len(syms))}/{len(syms)}] rows {stats['rows']} "
-              f"symbols with data {stats['with_data']}", flush=True)
+        if not quiet:
+            print(f"  [{min(i + BATCH, len(syms))}/{len(syms)}] rows {stats['rows']} "
+                  f"symbols with data {stats['with_data']}", flush=True)
         time.sleep(pause)
+    return stats
+
+
+def update(store: PanelStore, days: int = 7, extra: list[str] | None = None) -> dict:
+    """Incremental: the last `days` calendar days for the whole listed universe (+ `extra`).
+
+    Today's daily bar is served once the session has closed (the free tier only
+    withholds the last 15 minutes of intraday data), so an after-close run gets
+    the completed bar the books need. ~80 requests, under a minute.
+    """
+    syms = sorted(set(universe(store)) | set(extra or []))
+    start = (dt.date.today() - dt.timedelta(days=days)).isoformat()
+    # the free tier 403s when the query's END bound is inside the last 15 minutes; a bound
+    # 16 minutes back still returns today's bar in full once the session has closed
+    end = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=16)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stats = backfill(store, start, end, symbols=syms, pause=0.2, quiet=True)
+    stats["last_bar"] = store.con.execute("SELECT max(trade_date) FROM bars WHERE source = ?", [SOURCE]).fetchone()[0]
     return stats
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["backfill", "coverage"])
+    ap.add_argument("cmd", choices=["backfill", "update", "coverage"])
     ap.add_argument("--start", default="2015-01-01")
     ap.add_argument("--end", default=None)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--days", type=int, default=7)
+    ap.add_argument("--extra", default="", help="comma-separated symbols to include (e.g. current positions)")
     args = ap.parse_args()
     end = args.end or (dt.date.today() - dt.timedelta(days=1)).isoformat()
     with PanelStore() as store:
         if args.cmd == "backfill":
             print(backfill(store, args.start, end, args.limit))
+        elif args.cmd == "update":
+            print(update(store, args.days, [s for s in args.extra.split(",") if s]))
         else:
             print(store.con.execute("""SELECT source, count(*) AS n_rows, count(DISTINCT ticker) AS n_tickers,
                                               min(trade_date) AS first, max(trade_date) AS last

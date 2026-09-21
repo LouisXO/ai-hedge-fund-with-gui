@@ -78,6 +78,35 @@ def _long_rows(d: dict, live_db) -> str:
             "回测(2017–2026)alpha2 +12.6%/年(t 2.25),13 个变体校正后未达显著,影子记录中。</p>")
 
 
+def _paper_rows(live_db) -> str:
+    """Alpaca paper account (agent/execute.py): per-book equity, fills of the last session, model-vs-paper gap."""
+    try:
+        nav = live_db.execute("""SELECT book, equity_usd, cash_usd, n_positions, as_of FROM agent_book_nav
+                                 WHERE as_of = (SELECT max(as_of) FROM agent_book_nav) ORDER BY book""").fetchall()
+        alloc = dict(live_db.execute("SELECT book, alloc_usd FROM agent_books").fetchall())
+        fills = live_db.execute("""SELECT book, ticker, side, filled_qty, filled_avg_px, model_px, reason FROM agent_orders
+                                   WHERE filled_qty > 0 AND dry_run = FALSE
+                                     AND CAST(filled_at AS DATE) = (SELECT max(CAST(filled_at AS DATE)) FROM agent_orders WHERE filled_qty > 0)
+                                   ORDER BY book, side, ticker""").fetchall()
+        pend = live_db.execute("""SELECT count(*) FROM agent_orders WHERE dry_run = FALSE
+                                  AND status NOT IN ('filled','canceled','expired','rejected','done_for_day','replaced')""").fetchone()[0]
+        gap = live_db.execute("""SELECT avg(CASE WHEN side='buy' THEN (filled_avg_px/model_px-1) ELSE (model_px/filled_avg_px-1) END)*100,
+                                        count(*) FROM agent_orders WHERE filled_qty > 0 AND model_px > 0 AND dry_run = FALSE""").fetchone()
+    except Exception:
+        return ""
+    if not nav:
+        return ""
+    head = " · ".join(f"{b} ${e:,.0f}({(e / alloc.get(b, e) - 1) * 100:+.1f}%,{n}仓)" for b, e, c, n, _ in nav)
+    rows = "".join(f"<tr><td>{b}</td><td>{t}</td><td>{'买' if sd == 'buy' else '卖'}</td><td>{q:g}</td><td>{px:.2f}</td>"
+                   f"<td>{(m or 0):.2f}</td><td>{((px / m - 1) * 100 if m else 0):+.2f}%</td><td class='muted'>{r}</td></tr>"
+                   for b, t, sd, q, px, m, r in fills)
+    table = (f"<table><tr><th>书</th><th>标的</th><th>方向</th><th>股数</th><th>成交价</th><th>模型价(开盘)</th><th>偏差</th><th>原因</th></tr>{rows}</table>"
+             if rows else "<p class='muted'>上一交易日无成交</p>")
+    cost = f",平均执行成本 {gap[0]:+.2f}%/边({gap[1]} 笔)" if gap and gap[1] else ""
+    return (f"<h3>Alpaca 模拟盘({nav[0][4]})</h3><p>{head} · 挂单 {pend}{cost}</p>{table}"
+            "<p class='muted'>收盘后打分,次日开盘竞价成交(买:限价开盘单,卖:市价开盘单)。偏差 = 模拟成交价 vs 回测假设的开盘价。</p>")
+
+
 def html(d: dict, live: dict) -> str:
     rows = []
     for p in [x for x in d["picks"] if x.get("instrument") != "stock"][:10]:
@@ -96,6 +125,7 @@ def html(d: dict, live: dict) -> str:
 {''.join(rows) or '<tr><td colspan="7">今日无期权候选</td></tr>'}</table>
 {_stock_rows(d)}
 {live.get('_long_html', '')}
+{live.get('_paper_html', '')}
 <ul class="muted">{score or '<li>还没有满 10 天的记录</li>'}
 <li>累计 {live.get('n_days', 0)} 天 / {live.get('n_signal_rows', 0)} 条信号记录</li></ul>"""
 
@@ -115,6 +145,7 @@ def main() -> int:
         try:
             live = ledger.live_summary(con)
             live["_long_html"] = _long_rows(d, con)
+            live["_paper_html"] = _paper_rows(con)
         finally:
             con.close()
     except Exception:

@@ -40,6 +40,23 @@ DDL = [
         as_of DATE, ticker VARCHAR, entry_px DOUBLE, ret1 DOUBLE, ret5 DOUBLE, ret10 DOUBLE, ret20 DOUBLE,
         spy_ret5 DOUBLE, spy_ret10 DOUBLE, source VARCHAR, filled_at TIMESTAMP,
         PRIMARY KEY (as_of, ticker))""",
+    # --- Alpaca paper execution (agent/execute.py). One paper account, several books; a
+    # --- ticker belongs to at most one book at a time, so lots reconcile to positions 1:1.
+    """CREATE TABLE IF NOT EXISTS agent_books (
+        book VARCHAR PRIMARY KEY, alloc_usd DOUBLE, cash_usd DOUBLE, max_positions INT,
+        started DATE, updated TIMESTAMP)""",
+    """CREATE TABLE IF NOT EXISTS agent_orders (
+        client_order_id VARCHAR PRIMARY KEY, book VARCHAR, as_of DATE, ticker VARCHAR, side VARCHAR,
+        qty INT, order_type VARCHAR, tif VARCHAR, limit_price DOUBLE, ref_close DOUBLE, reason VARCHAR,
+        alpaca_id VARCHAR, status VARCHAR, submitted_at TIMESTAMP, filled_qty DOUBLE, filled_avg_px DOUBLE,
+        filled_at TIMESTAMP, model_px DOUBLE, dry_run BOOLEAN)""",
+    """CREATE TABLE IF NOT EXISTS agent_lots (
+        lot_id VARCHAR PRIMARY KEY, book VARCHAR, ticker VARCHAR, qty DOUBLE, entry_day DATE, entry_px DOUBLE,
+        entry_model_px DOUBLE, hold_until DATE, exit_day DATE, exit_px DOUBLE, exit_model_px DOUBLE,
+        ret_pct DOUBLE, status VARCHAR, entry_order VARCHAR, exit_order VARCHAR)""",
+    """CREATE TABLE IF NOT EXISTS agent_book_nav (
+        as_of DATE, book VARCHAR, cash_usd DOUBLE, market_value_usd DOUBLE, equity_usd DOUBLE, n_positions INT,
+        account_equity_usd DOUBLE, PRIMARY KEY (as_of, book))""",
 ]
 
 
