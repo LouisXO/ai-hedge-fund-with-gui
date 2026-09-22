@@ -30,7 +30,7 @@ import pandas as pd
 from agent import ledger, signals_insider
 from agent.books import live as long_live
 from agent.books.data import load_market
-from agent.backfill import backfill_bars, backfill_index
+from agent.backfill import backfill_bars, backfill_index, session_closed
 from agent.s2_option_hurdle import breakeven_move
 from agent.s3_signals import DTE, K_IV, SPREAD_PCT, resid_reversal_5
 from hedge_fund.features.factors import mom_12_1, reversal_5
@@ -57,7 +57,12 @@ def compute(store: PanelStore, as_of: str | None) -> dict:
     opn, high, low = store.bars_wide("open"), store.bars_wide("high"), store.bars_wide("low")
     spy = store.index_series("SPY", "adj_close").reindex(adj.index).ffill()
     vix = store.index_series("^VIX", "close").reindex(adj.index).ffill()
-    day = adj.index[-1] if as_of is None else adj.index[adj.index <= pd.Timestamp(as_of)][-1]
+    if as_of is None:
+        # last COMPLETED bar: during the session anything dated today is partial
+        cutoff = pd.Timestamp(dt.date.today()) if session_closed() else pd.Timestamp(dt.date.today()) - pd.Timedelta(days=1)
+        day = adj.index[adj.index <= cutoff][-1]
+    else:
+        day = adj.index[adj.index <= pd.Timestamp(as_of)][-1]
     mask = store.membership_mask(pd.DatetimeIndex([day]), sorted(adj.columns)).iloc[0]
 
     rv20 = yang_zhang(opn, high, low, close, 20).loc[day]

@@ -49,6 +49,13 @@ def _windows(ivs: list[Interval], start: pd.Timestamp, today: pd.Timestamp) -> d
     return out
 
 
+def session_closed(now: dt.datetime | None = None) -> bool:
+    """True once today's US session is over (16:15 ET or later), or on a weekend."""
+    from zoneinfo import ZoneInfo
+    now = now or dt.datetime.now(ZoneInfo("America/New_York"))
+    return now.weekday() >= 5 or (now.hour, now.minute) >= (16, 15)
+
+
 def _download(symbols: list[str], start: str, end: str) -> pd.DataFrame:
     for attempt in range(4):
         try:
@@ -83,7 +90,11 @@ def backfill_bars(store: PanelStore, start: str = "2014-01-01", chunk: int = 50,
         dl_start = (today - pd.Timedelta(days=10)).date().isoformat()
     else:
         dl_start = (pd.Timestamp(start) - pd.Timedelta(days=LOOKBACK_DAYS)).date().isoformat()
-    dl_end = (today + pd.Timedelta(days=1)).date().isoformat()
+    # yfinance returns the in-progress session as a daily row while the market is open; a
+    # half-day bar stored as a close corrupts every signal scored on it (seen 2026-09-22).
+    # Before ~16:15 ET, stop at yesterday (end is exclusive); the after-close Alpaca update
+    # supplies today's completed bar.
+    dl_end = (today + pd.Timedelta(days=0 if not session_closed() else 1)).date().isoformat()
 
     stats = {"ok": 0, "partial": 0, "missing": 0, "reused": 0, "rows": 0}
     now = pd.Timestamp.now()
