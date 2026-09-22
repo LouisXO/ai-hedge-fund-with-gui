@@ -494,6 +494,12 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - 解读:"技术性修复"没有可做多的形态——大跌不反弹(继续跌),大涨之后是最差的买点。Tetlock 的无消息反转在 2017 年后的美股小盘不成立(或 Benzinga 覆盖不到的"无消息"其实有消息)。**唯一的用处是负面过滤器**:过去 5 天出现 3σ 大涨的票,长线书进场应回避——作为新规则另行预注册再测,不现在改。
 - 处置:四格不上线,Holm 预算 +4(→ 36)。短线事件线这一轮结束:内部人 v1 是唯一活着的线。
 
+### S26(2026-09-22,进行中)— 真实期权价格;多重检验账本正式化;执行层端到端测试
+- **数据源结论**:免费且有历史的真实期权链只有 **Alpaca**(每个合约的日成交 K 线,含已到期合约,2024 年 1 月起;合约列表带行权价/到期/OI;当前快照带 IV/Greeks/NBBO)。DoltHub 的社区抓取(2019→)质量不稳;CBOE DataShop / ORATS / ThetaData / IVolatility 都是付费(ThetaData 约 $80/月、历史到 2012,是付费里性价比最好的)。yfinance 和 AV 只有当前链。Balder 的 27,829 个跨式就是 Alpaca 这份数据。
+- 加载器 `agent/sources/alpaca_options.py` → `~/.hedge-fund/agent/options.db`:时点标普成分、月度到期、行权价 ±15%、到期前 70 天窗口;两只票测试 988 合约 / 27,126 根 K 线,全量后台回填中(约 4 小时)。下一步 S26 正式部分:用真实价格重测便宜门(IV/RV 低半 + RV20<RV60)对 7/14 天买方收益的作用,替代 S2/S3 的代理 IV。
+- **多重检验账本**:`hedge_fund/validation/family_log.py` 自动从 `site-data/validation/*.json` 收集所有书级变体(去掉重复的对照和从未交易的因子格),两侧 p + Holm。**38 个变体**:唯一 Holm 显著的是 S25 的"有消息大涨后做多"(t −4.65,p_holm < 0.001)——方向为负,只能当过滤器;momcrash p_holm 0.34,base 0.81,内部人 v1 1.0。**没有任何一条可做多的规则在家族层面显著。** 这是记分板的现状,不是失败:样本内 t 2–2.6 在 38 次尝试里就是这个位置。
+- 执行层端到端测试 `agent/tests/test_execute_e2e.py`(假 broker:下单 → 成交 → lot → 现金 → 对账 → 换仓),37 个测试全过。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf

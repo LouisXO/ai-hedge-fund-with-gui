@@ -160,7 +160,12 @@ def backfill(start: dt.date, limit: int | None = None) -> dict:
         if u in done:
             continue
         sym = u.replace(".", "")                                  # BRK.B -> BRKB in OCC symbols
-        rows = contracts_for(sym, start, key, secret)
+        try:
+            rows = contracts_for(sym, start, key, secret)
+        except urllib.error.HTTPError as e:                       # unknown / renamed underlying: skip, keep going
+            print(f"  {u}: contracts {e.code}, skipped", flush=True)
+            con.execute("INSERT OR REPLACE INTO opt_load_log VALUES (?, 0, 0, ?)", [u, pd.Timestamp.now()])
+            continue
         close = closes.get(u, pd.Series(dtype=float)).dropna()
         sel = select_contracts(rows, close, expiries)
         n_bars = 0
@@ -173,7 +178,11 @@ def backfill(start: dt.date, limit: int | None = None) -> dict:
             for exp, g in sel.groupby("expiry"):
                 syms = g["symbol"].tolist()
                 for j in range(0, len(syms), BATCH):
-                    bars = fetch_bars(syms[j:j + BATCH], (exp - dt.timedelta(days=70)).isoformat(), exp.isoformat(), key, secret)
+                    try:
+                        bars = fetch_bars(syms[j:j + BATCH], (exp - dt.timedelta(days=70)).isoformat(), exp.isoformat(), key, secret)
+                    except urllib.error.HTTPError as e:
+                        print(f"  {u} {exp}: bars {e.code}, batch skipped", flush=True)
+                        continue
                     if bars:
                         con.register("_b", pd.DataFrame(bars))
                         con.execute("INSERT OR REPLACE INTO opt_bars SELECT * FROM _b")
