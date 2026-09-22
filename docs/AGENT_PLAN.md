@@ -473,6 +473,12 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - 解读:大盘的 PEAD 早已消失(S3、Martineau 2021),小盘也没有留下可交易的漂移——至少从 10-Q 申报日起没有。新闻稿(8-K 2.02)通常早于 10-Q 几天到几周,公告日的反应不在本测试里;如果以后接了 8-K 日期可以做 v2,但申报后的漂移为零说明剩余部分即使存在也很薄。
 - 处置:不上线,Holm 预算 +3(→ 19)。
 
+### S23(2026-09-22)— 内部人线 v2 候选:五个过滤都不比 v1 好;真正的改进是消掉一天延迟
+- 预注册五个变体(`agent/events/insider_v2.py`),每个 = v1 规则 + 一个条件:`opp`(剔除例行内部人:同一人同一票在过去 3 年里 ≥ 2 年的同一个月买过,占买入 9.7%)、`officer`(至少一个执行官)、`ceo`(CEO/CFO/总裁)、`contrarian`(申报前 20 日跌超 5%)、`opp_ceo`。持有期、universe 和 v1 相同。报告 `site-data/validation/s23_insider_*_2026-09-22.md`。
+- 做成书(持 5 日,alpha2/年,t):v1 +8.4%(1.93)· opp +7.6%(1.75)· officer +5.7%(1.68)· ceo +3.5%(1.08)· contrarian −0.2%(−0.05)· opp_ceo +2.5%(0.75)。**每个过滤都减少了事件数,单个事件的超额收益没有相应提高**(h1 全样本:v1 +0.27%,officer +0.36%,ceo +0.34%),书的收益是"事件数 × 薄边际",筛掉事件就是筛掉收益。Cohen–Malloy–Pomorski 的例行/机会区分在这个 universe 和持有期上没有增量。
+- **真正有用的发现**:所有变体的超额收益都集中在申报后**第一个交易日**(h1 +0.27~0.39%,t 4~4.8),h5 只比 h1 多 0~0.1 个点,h20 归零,h40 为负。而线上执行因为 EDGAR 日索引在收盘后才出,一直是 D+2 开盘才买——正好错过最厚的那一天。
+- 处置:五个变体都不采用,Holm 预算 +5(→ 24)。**实施**:`sec_daily_form4 --realtime` 改用 EDGAR 全文检索(申报后几分钟可见),16:10 PT 的执行任务先拉当天 Form 4 再打分,从 9/23 起内部人线按 D+1 开盘执行,与回测一致。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf

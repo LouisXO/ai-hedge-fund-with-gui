@@ -11,7 +11,18 @@ price), matching the research definition in S11/S13.
 SEC asks for 10 requests/second at most and a contact in the User-Agent
 (SEC_USER_AGENT in ~/.hedge-fund/.env).
 
-Usage: python -m agent.sources.sec_daily_form4 [--days 3]
+Two indexes:
+  daily index  form.YYYYMMDD.idx — complete, but published after our
+               after-close run, so a filing on D reached the panel on D+1
+               and was traded at D+2's open (one day later than the backtest);
+  --realtime   EDGAR full-text search (efts.sec.gov) lists a Form 4 within
+               minutes of acceptance, so the 16:10 PT run sees D's filings
+               and trades them at D+1's open, as the backtest assumed.
+               S23 (2026-09-22): most of the insider edge is in the first
+               session after the filing, so this lag is worth more than any
+               refinement of the rule.
+
+Usage: python -m agent.sources.sec_daily_form4 [--days 3] [--realtime]
 """
 from __future__ import annotations
 
@@ -53,6 +64,32 @@ def index_form4(day: dt.date, ua: str) -> list[str]:
         if parts and parts[-1].endswith(".txt"):
             out.append(parts[-1])
     return out
+
+
+def efts_form4_paths(start: dt.date, end: dt.date, ua: str) -> list[tuple[str, dt.date]]:
+    """(filing path, file_date) for every Form 4 accepted in [start, end], from full-text search."""
+    import json
+    import urllib.parse
+    out, frm = [], 0
+    while True:
+        q = urllib.parse.urlencode({"q": '"4"', "forms": "4", "dateRange": "custom", "startdt": start.isoformat(),
+                                    "enddt": end.isoformat(), "from": frm})
+        txt = _get(f"https://efts.sec.gov/LATEST/search-index?{q}", ua)
+        if not txt:
+            break
+        d = json.loads(txt)
+        hits = d.get("hits", {}).get("hits", [])
+        for h in hits:
+            src = h["_source"]
+            if src.get("form") != "4" or not src.get("ciks"):
+                continue
+            acc = h["_id"].split(":")[0]
+            out.append((f"edgar/data/{int(src['ciks'][0])}/{acc}.txt", dt.date.fromisoformat(src["file_date"])))
+        frm += len(hits)
+        if not hits or frm >= d["hits"]["total"]["value"] or frm >= 10_000:
+            break
+        time.sleep(PAUSE)
+    return list(dict.fromkeys(out))
 
 
 def _xml_url(path: str) -> str:
@@ -118,28 +155,38 @@ def parse_filing(path: str, ua: str) -> list[dict]:
     return rows
 
 
-def crawl(store: PanelStore, days: int = 3, limit_filings: int | None = None) -> dict:
+def crawl(store: PanelStore, days: int = 3, limit_filings: int | None = None, realtime: bool = False) -> dict:
     ua = user_agent()
     today = dt.date.today()
-    stats = {"days": 0, "filings": 0, "rows": 0}
+    stats = {"days": 0, "filings": 0, "rows": 0, "skipped_known": 0}
     frames = []
+    known = {r[0] for r in store.con.execute("SELECT DISTINCT accession FROM insider_tx WHERE filing_date >= ?",
+                                             [today - dt.timedelta(days=days + 3)]).fetchall()}
+    if realtime:
+        pairs = efts_form4_paths(today - dt.timedelta(days=days - 1), today, ua)
+        by_day: dict[dt.date, list[str]] = {}
+        for p, d in pairs:
+            by_day.setdefault(d, []).append(p)
     for back in range(days):
         day = today - dt.timedelta(days=back)
         if day.weekday() >= 5:
             continue
-        paths = index_form4(day, ua)
+        paths = by_day.get(day, []) if realtime else index_form4(day, ua)
         time.sleep(PAUSE)
         if not paths:
             continue
         stats["days"] += 1
         for p in paths[:limit_filings]:
+            if p.rsplit("/", 1)[-1].replace(".txt", "") in known:
+                stats["skipped_known"] += 1
+                continue
             rows = parse_filing(p, ua)
             time.sleep(PAUSE)
             stats["filings"] += 1
             if rows:
                 df = pd.DataFrame(rows)
                 df["filing_date"] = day
-                df["source"] = "edgar_daily"
+                df["source"] = "edgar_realtime" if realtime else "edgar_daily"
                 df["fetched_at"] = pd.Timestamp.now()
                 frames.append(df.drop(columns=["period_of_report"]))
     if frames:
@@ -151,9 +198,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=3)
     ap.add_argument("--limit-filings", type=int, default=None, help="cap per day, for testing")
+    ap.add_argument("--realtime", action="store_true", help="use full-text search (same-day) instead of the daily index")
     args = ap.parse_args()
     with PanelStore() as store:
-        print(crawl(store, args.days, args.limit_filings))
+        print(crawl(store, args.days, args.limit_filings, args.realtime))
     return 0
 
 

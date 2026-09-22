@@ -10,7 +10,7 @@ LOG=/Users/louis/optradar/out/agent/execute.log
 export PYTHONPATH=/Users/louis/hedge-fund
 AGENT_EXEC=$(grep -E '^AGENT_EXEC=' "$HOME/.hedge-fund/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
 echo "=== execute $(date) AGENT_EXEC=${AGENT_EXEC:-off} ===" >> "$LOG"
-$PY -W ignore -m agent.sources.sec_daily_form4 --days 2 >> "$LOG" 2>&1 || echo "form4 refresh failed (non-fatal)" >> "$LOG"
+$PY -W ignore -m agent.sources.sec_daily_form4 --realtime --days 2 >> "$LOG" 2>&1 || echo "form4 realtime refresh failed (non-fatal)" >> "$LOG"
 $PY -W ignore -m agent.sources.sec_13d update --days 5 >> "$LOG" 2>&1 || echo "13d refresh failed (non-fatal)" >> "$LOG"
 $PY -W ignore -m agent.sources.alpaca_news update --days 3 >> "$LOG" 2>&1 || echo "news refresh failed (non-fatal)" >> "$LOG"
 if [ "${AGENT_EXEC:-off}" = "on" ]; then
