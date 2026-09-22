@@ -488,6 +488,12 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - 处置:v1 不改。**建议**把 v1 + momcrash 预注册为 v2 影子线并排记录(是否上线由用户决定);行业中性和 combo 不采用;Holm 预算 +8(→ 32)。
 - 同日:用户的 moomoo 实盘接入记分板(`optradar/bin/account_snapshot.py`,只读):2026 至今 +64.8%(app 收益日历)对长线 v1 +35.7%、SPY +12.4%;月度形态与长线书相似(4、5 月大赚、7 月亏),9 月 +15.8% 是自由裁量的一笔。账户约 $1.7 万,期权为主,九个月分不清判断和运气,和长线书一样。
 
+### S25(2026-09-22)— 大幅波动 ± 新闻(Tetlock 2010):四个格子全部否定;大动之后两个方向都跑输
+- 数据:Alpaca News(Benzinga)2017→ 全量回填,193 万条带股票标签的标题,`~/.hedge-fund/agent/news.db`(独立文件),每晚增量。线:`agent/events/move_news.py`,预注册:|超额| ≥ max(5%, 3σ60)、新闻 = 收盘到收盘窗口内 ≤ 3 个标签、非榜单类标题;ADV $3M–$1B;做多两格(无消息大跌反转、有消息大涨延续),另两格只记录。报告 `site-data/validation/s25_move_*_2026-09-22.md`。
+- 结果(次日开盘起,超额 vs SPY):无消息大跌 h1 −0.38%(t −4.3,小盘 −0.72%,t −5.6),h20 −1.0%;有消息大涨 h5 −0.75%(t −4.2),h20 −2.5%(t −7.8);无消息大涨 h5 −0.97%(t −3.2);有消息大跌 h5 −0.54%(t −3.5)。做多成书:无消息大跌 −17.8%/年,有消息大涨 −41.7%/年。安慰剂 −0.3~−0.9%(这类股票本身负漂移),事件在此之上再贡献 −1 到 −2 个点。
+- 解读:"技术性修复"没有可做多的形态——大跌不反弹(继续跌),大涨之后是最差的买点。Tetlock 的无消息反转在 2017 年后的美股小盘不成立(或 Benzinga 覆盖不到的"无消息"其实有消息)。**唯一的用处是负面过滤器**:过去 5 天出现 3σ 大涨的票,长线书进场应回避——作为新规则另行预注册再测,不现在改。
+- 处置:四格不上线,Holm 预算 +4(→ 36)。短线事件线这一轮结束:内部人 v1 是唯一活着的线。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
