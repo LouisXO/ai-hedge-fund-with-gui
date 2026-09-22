@@ -46,3 +46,25 @@ def test_parse_hit_reads_subject_ticker_and_filers():
     hit["_source"]["display_names"][0] = "No Ticker Co  (CIK 0000000001)"
     r = parse_hit(hit)
     assert r["is_amendment"] and r["ticker_display"] is None
+
+
+def test_news_session_assignment_uses_the_16et_close_and_skips_weekends():
+    from agent.events.move_news import assign_session
+    ts = pd.Series(pd.to_datetime(["2026-09-21T19:59:00Z",    # Mon 15:59 ET -> Monday's session
+                                   "2026-09-21T20:00:01Z",    # Mon 16:00:01 ET -> Tuesday
+                                   "2026-09-19T15:00:00Z",    # Sat -> Monday
+                                   "2026-09-18T21:00:00Z"]))  # Fri 17:00 ET -> Monday
+    assert list(assign_session(ts).dt.strftime("%a %m-%d")) == ["Mon 09-21", "Tue 09-22", "Mon 09-21", "Mon 09-21"]
+
+
+def test_move_screen_flags_only_large_abnormal_moves():
+    from agent.events.move_news import screen
+    idx = pd.bdate_range("2026-01-01", periods=80)
+    rng = np.random.default_rng(0)
+    px = pd.DataFrame(100 * np.cumprod(1 + rng.normal(0, 0.01, (80, 2)), axis=0), index=idx, columns=["A", "B"])
+    px.loc[idx[70]:, "A"] *= 0.85                                          # one -15% day (~15 sd), then normal
+    adv = pd.DataFrame(5e6, index=idx, columns=["A", "B"])
+    listed = pd.DataFrame(True, index=idx, columns=["A", "B"])
+    m = Market(px, px, px, adv, listed, pd.Series(100.0, index=idx), {})
+    sc = screen(m, str(idx[0].date()), str(idx[-1].date()), 3e6, 1e9)
+    assert list(sc["ticker"]) == ["A"] and sc["date"].iloc[0] == idx[70] and sc["abn"].iloc[0] < -14
