@@ -14,6 +14,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 
 from agent import ledger
 
@@ -23,7 +24,7 @@ AGENT_OUT = "/Users/louis/optradar/out/agent"
 def load(date: str) -> dict | None:
     path = os.path.join(AGENT_OUT, f"{date}.json")
     if not os.path.exists(path):
-        cands = sorted(f for f in os.listdir(AGENT_OUT) if f.endswith(".json")) if os.path.isdir(AGENT_OUT) else []
+        cands = sorted(f for f in os.listdir(AGENT_OUT) if re.fullmatch(r"\d{4}-\d{2}-\d{2}\.json", f)) if os.path.isdir(AGENT_OUT) else []
         if not cands:
             return None
         path = os.path.join(AGENT_OUT, cands[-1])

@@ -132,7 +132,11 @@ def backfill_index(store: PanelStore, start: str = "2012-01-01") -> int:
     raw = _download(list(INDEX_SYMBOLS), start, (dt.date.today() + dt.timedelta(days=1)).isoformat())
     frames = []
     for sym in INDEX_SYMBOLS:
-        sub = _frame(raw, sym).reset_index().rename(columns={"Date": "trade_date"})
+        sub = _frame(raw, sym)
+        if sub.empty:                              # a failed download must not become a KeyError
+            print(f"  index {sym}: no rows returned, kept existing")
+            continue
+        sub = sub.reset_index().rename(columns={"Date": "trade_date"})
         sub.insert(0, "symbol", sym)
         sub["trade_date"] = pd.to_datetime(sub["trade_date"]).dt.date
         sub["source"] = SOURCE

@@ -152,11 +152,17 @@ def main() -> int:
 
     run_id = f"{dt.date.today().isoformat()}-{uuid.uuid4().hex[:6]}"
     status, error = "ok", None
-    try:
-        if not args.no_update:
+    if not args.no_update:
+        # yfinance is flaky under launchd (sqlite cache "unable to open database file", 2026-09-22);
+        # the after-close Alpaca update already holds the last completed bar, so a failed refresh
+        # must not stop the run — score on what the panel has.
+        try:
             with PanelStore() as store:
                 backfill_bars(store, incremental=True, pause=1.0)
                 backfill_index(store)
+        except Exception as exc:
+            print(f"agent: panel refresh failed, scoring on the existing panel: {exc}")
+    try:
         with PanelStore(read_only=True) as store:
             state = compute(store, args.date)
     except Exception as exc:                       # a bad panel must not take the brief down
