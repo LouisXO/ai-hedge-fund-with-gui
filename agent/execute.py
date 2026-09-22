@@ -262,6 +262,11 @@ def long_targets(store: PanelStore, market, day: pd.Timestamp, con) -> tuple[lis
                            [long_live.SIGNAL, day.date()]).fetchone()[0]
     if not recorded:                                   # the morning shadow run then finds this bar done
         ledger.write_picks(con, [{**r, "as_of": day.date(), "status": "paper", "ledger_id": None, "run_id": "exec"} for r in rows])
+        try:                                           # v2 shadow line recorded alongside (never traded)
+            v2 = long_live.targets(store, market, day, TOP_N, v2=True)
+            ledger.write_picks(con, [{**r, "as_of": day.date(), "status": "shadow", "ledger_id": None, "run_id": "exec"} for r in v2])
+        except Exception as exc:
+            print(f"v2 shadow skipped: {exc}")
     ranked = [r["ticker"] for r in rows if r["gate_passed"]]
     keep = {r["ticker"] for r in rows}
     return ranked, keep, True

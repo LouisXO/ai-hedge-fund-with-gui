@@ -33,3 +33,15 @@ def test_engine_sizes_and_stop_rule():
     # sizing: A got 30% of equity, B 10% -> exposure on day 1 is 40%
     assert res.exposure.iloc[1] == pytest.approx(0.40, abs=0.01)
     # A re-enters after the stop because it is still in the target list (no cooling-off rule in v1)
+
+
+def test_v2_shadow_matches_v1_outside_a_crash_and_drops_momentum_inside():
+    from agent.books.long_v2 import spy_in_crash_regime
+    from agent.books.data import Market
+    idx = pd.bdate_range("2024-01-01", periods=600)
+    spy = pd.Series(100.0, index=idx)
+    spy.iloc[550:] = 75.0                                                  # -25% from the 2-year high
+    m = Market(pd.DataFrame(index=idx), pd.DataFrame(index=idx), pd.DataFrame(index=idx), pd.DataFrame(index=idx),
+               pd.DataFrame(index=idx), spy, {})
+    r = spy_in_crash_regime(m)
+    assert not r.iloc[540] and r.iloc[560]

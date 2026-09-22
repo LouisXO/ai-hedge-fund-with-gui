@@ -144,7 +144,12 @@ def long_book_picks(day: pd.Timestamp, optradar_db: str) -> list[dict]:
         return []
     with PanelStore(read_only=True) as store:
         market = load_market(store, (day - pd.Timedelta(days=420)).date().isoformat())
-        return long_live.targets(store, market, day)
+        rows = long_live.targets(store, market, day)
+        try:                                                   # v2 shadow line (S24): same list unless SPY is in a crash regime
+            rows += long_live.targets(store, market, day, v2=True)
+        except Exception as exc:
+            print(f"agent: v2 shadow skipped: {exc}")
+        return rows
 
 
 def main() -> int:
