@@ -38,8 +38,21 @@ def one_line(d: dict, live: dict) -> str:
         if r and r["n"]:
             hit += f" {side}{r['n']}:{(r['dir_hit'] or 0):.0%}"
     n_stock = sum(1 for p in d["picks"] if p.get("instrument") == "stock")
+    paper = " · ".join(f"{b} {r:+.1f}%/{n}仓" for b, r, n in live.get("_paper", []))
     return (f"Agent[{d['mode']}] 便宜门 {d['gate']['passed']}/{d['gate']['of']} · "
-            f"期权候选 {len(d['picks']) - n_stock} · 内部人股票 {n_stock}" + (f" · 10日方向命中{hit}" if hit else ""))
+            f"期权候选 {len(d['picks']) - n_stock} · 内部人股票 {n_stock}" + (f" · 10日方向命中{hit}" if hit else "")
+            + (f" · 模拟盘 {paper}" if paper else ""))
+
+
+def _paper_line(live_db) -> list[tuple]:
+    """[(book, return_pct_since_start, n_positions)] for the one-line summary / notification."""
+    try:
+        rows = live_db.execute("""SELECT n.book, n.equity_usd / b.alloc_usd * 100 - 100, n.n_positions
+                                  FROM agent_book_nav n JOIN agent_books b USING (book)
+                                  WHERE n.as_of = (SELECT max(as_of) FROM agent_book_nav) ORDER BY n.book""").fetchall()
+        return [(b, float(r), int(n)) for b, r, n in rows]
+    except Exception:
+        return []
 
 
 def _stock_rows(d: dict) -> str:
@@ -146,6 +159,7 @@ def main() -> int:
             live = ledger.live_summary(con)
             live["_long_html"] = _long_rows(d, con)
             live["_paper_html"] = _paper_rows(con)
+            live["_paper"] = _paper_line(con)
         finally:
             con.close()
     except Exception:
