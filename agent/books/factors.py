@@ -37,7 +37,22 @@ def latest_before(fund: pd.DataFrame, day: pd.Timestamp, max_age_days: int = 200
     return f.sort_values("filed").drop_duplicates("ticker", keep="last").set_index("ticker")
 
 
-def factor_scores(market: Market, fund: pd.DataFrame, day: pd.Timestamp, universe: pd.Index) -> pd.DataFrame:
+def _z_by_group(out: pd.DataFrame, groups: pd.Series, min_n: int = 15) -> pd.DataFrame:
+    """z within industry group; groups too small fall back to the global z (S24 sector-neutral variant)."""
+    g = groups.reindex(out.index).fillna("Other")
+    glob = out.apply(_z)
+    parts = []
+    for name, idx in out.groupby(g).groups.items():
+        sub = out.loc[idx]
+        parts.append(sub.apply(_z) if len(sub) >= min_n else glob.loc[idx])
+    return pd.concat(parts).reindex(out.index)
+
+
+def factor_scores(market: Market, fund: pd.DataFrame, day: pd.Timestamp, universe: pd.Index,
+                  groups: pd.Series | None = None, issuance: bool = False, drop_momentum: bool = False) -> pd.DataFrame:
+    """v1 when called with defaults. S24 options: `groups` = sector-neutral z-scores; `issuance` adds
+    net share issuance (lower is better) to the quality family; `drop_momentum` = momentum-crash
+    filter (composite is the mean of the other three families that day)."""
     f = latest_before(fund, day).reindex(universe)
     raw_px = market.close.loc[day].reindex(universe)
     mcap = raw_px * f["shares"]
@@ -59,16 +74,21 @@ def factor_scores(market: Market, fund: pd.DataFrame, day: pd.Timestamp, univers
     out["roe"] = f["ni_ttm"] / f["equity"]
     out["accruals"] = -(f["ni_ttm"] - f["cfo_ttm"]) / f["assets"]
     out["asset_growth"] = -(f["assets"] / f["assets_1y"] - 1)
+    if issuance:
+        f1 = latest_before(fund, day - pd.Timedelta(days=365), max_age_days=200).reindex(universe)
+        out["issuance"] = -(f["shares"] / f1["shares"] - 1)          # buybacks score high, dilution low
     # momentum, low vol
     hist = market.adj.loc[:day]
     out["mom"] = (hist.iloc[-22] / hist.iloc[-253] - 1).reindex(universe) if len(hist) > 253 else np.nan
     rets = np.log(hist.iloc[-253:] / hist.iloc[-253:].shift(1))
     out["lowvol"] = -rets.std().reindex(universe)
-    z = out.apply(_z)
+    z = _z_by_group(out, groups) if groups is not None else out.apply(_z)
+    qcols = ["gpa", "roe", "accruals", "asset_growth"] + (["issuance"] if issuance else [])
     fam = pd.DataFrame({"value": z[["bm", "ey"]].mean(axis=1),
-                        "quality": z[["gpa", "roe", "accruals", "asset_growth"]].mean(axis=1),
+                        "quality": z[qcols].mean(axis=1),
                         "momentum": z["mom"], "lowvol": z["lowvol"]})
-    fam["composite"] = fam[["value", "quality", "momentum", "lowvol"]].mean(axis=1)
+    fams = ["value", "quality", "lowvol"] if drop_momentum else ["value", "quality", "momentum", "lowvol"]
+    fam["composite"] = fam[fams].mean(axis=1)
     fam["n_families"] = fam[["value", "quality", "momentum", "lowvol"]].notna().sum(axis=1)
     fam["mcap"] = mcap
     return fam

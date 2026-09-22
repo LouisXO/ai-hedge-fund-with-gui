@@ -34,6 +34,8 @@ class Position:
     entry_px: float                      # includes the entry cost
     entry_cost_pct: float
     hold_until: pd.Timestamp | None      # None = until the book drops it
+    high: float = 0.0                    # highest mark since entry (stop rule)
+    stopped: bool = False                # flagged at a mark, sold at the next open
 
 
 @dataclass
@@ -66,8 +68,14 @@ def _mark(market: Market, p: Position, day: pd.Timestamp) -> float:
 
 def simulate(market: Market, targets: dict[pd.Timestamp, list[str]], start: str, end: str,
              max_positions: int, hold_days: int | None, exec_frac: float, capital: float = 100_000.0,
-             cash_in_spy: bool = False) -> Result:
-    """targets[day] = names the book wants to hold from the NEXT open, chosen with data through `day`."""
+             cash_in_spy: bool = False, sizes: dict[pd.Timestamp, dict[str, float]] | None = None,
+             stop_pct: float | None = None) -> Result:
+    """targets[day] = names the book wants to hold from the NEXT open, chosen with data through `day`.
+
+    sizes[day][ticker] = fraction of equity to put in a new position (default 1/max_positions,
+    equal slots). stop_pct: sell at the next open once a position has fallen stop_pct % from
+    its highest close since entry (S24 construction variants; None = the v1 rule, no stops).
+    """
     days = market.adj.loc[start:end].index
     cash, positions = capital, {}
     nav, expo, trades = [], [], []
@@ -79,7 +87,7 @@ def simulate(market: Market, targets: dict[pd.Timestamp, list[str]], start: str,
         wanted = set(targets.get(prev_day, [])) if prev_day is not None else set()
         for t in list(positions):
             p = positions[t]
-            expired = p.hold_until is not None and day >= p.hold_until
+            expired = (p.hold_until is not None and day >= p.hold_until) or p.stopped
             dropped = p.hold_until is None and t not in wanted and prev_day is not None and prev_day in targets
             px = market.adj_open.at[day, t]
             if pd.isna(px):
@@ -101,14 +109,16 @@ def simulate(market: Market, targets: dict[pd.Timestamp, list[str]], start: str,
         if prev_day is not None and prev_day in targets:
             equity = cash + sum(p.shares * _mark(market, p, prev_day) for p in positions.values())
             slot = equity / max_positions
+            day_sizes = sizes.get(prev_day, {}) if sizes else {}
             for t in targets[prev_day]:
                 if len(positions) >= max_positions or t in positions:
                     continue
                 px = market.adj_open.at[day, t] if t in market.adj_open.columns else np.nan
-                if pd.isna(px) or px <= 0 or cash < slot * 0.5:
+                want = equity * day_sizes[t] if t in day_sizes else slot
+                if pd.isna(px) or px <= 0 or cash < want * 0.5:
                     continue
                 cost = exec_frac * market.spread_pct(t, day) / 100
-                spend = min(slot, cash)
+                spend = min(want, cash)
                 shares = spend / (px * (1 + cost))
                 cash -= spend
                 traded_value += spend
@@ -116,8 +126,13 @@ def simulate(market: Market, targets: dict[pd.Timestamp, list[str]], start: str,
                 if hold_days is not None:
                     pos = days.get_loc(day)
                     hold_until = days[min(pos + hold_days, len(days) - 1)]
-                positions[t] = Position(t, shares, day, px * (1 + cost), cost * 100, hold_until)
-        # 3) mark
+                positions[t] = Position(t, shares, day, px * (1 + cost), cost * 100, hold_until, high=px)
+        # 3) mark (and the stop rule: flag now, sell at the next open)
+        for p in positions.values():
+            m = _mark(market, p, day)
+            p.high = max(p.high, m)
+            if stop_pct is not None and p.high > 0 and m <= p.high * (1 - stop_pct / 100):
+                p.stopped = True
         value = cash + sum(p.shares * _mark(market, p, day) for p in positions.values())
         if cash_in_spy and prev_day is not None:
             # idle cash earns the index: removes cash drag from the comparison with SPY
