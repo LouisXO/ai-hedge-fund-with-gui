@@ -467,6 +467,12 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - 处置:13D 线**不上线**,记入 Holm 预算(变体 +3 → 16)。数据继续采集,留给以后的"修订申报 / 持股变动"研究。
 - 下一条线:大幅波动 + 有无新闻(Tetlock 2010),需要先接 Alpaca News。
 
+### S22(2026-09-22)— 小盘 PEAD 线(XBRL 申报日):**否定**
+- 线:`agent/events/pead.py`。惊喜 = 季度净利润的季节性变化 / 其前 8 季标准差(Bernard–Thomas 的 SUE,不用分析师);事件日 = 该季数字在 EDGAR 公开的日期(10-Q/10-K 申报日,要求距季末 ≤ 60 天);SUE ≥ 2 做多(变体 ≥ 1);ADV $3M–$500M;持 20 日上线(10/40 为变体)。通用报告器 `agent/event_report.py --line X --tag sN`。
+- 6,117 个可交易事件,2017–2026。**从申报日次日开盘算,所有期限 ≈ 0 或为负**(h20 全样本 −0.23%,t −0.7;中盘 h40 −1.2%,t −2.3),命中率 44–49%;做成书 h20 CAGR +15.0% ≈ SPY,alpha2 +2.2%(t 0.95),h10/h40 为负。报告 `site-data/validation/s22_pead_small_2026-09-22.md`。
+- 解读:大盘的 PEAD 早已消失(S3、Martineau 2021),小盘也没有留下可交易的漂移——至少从 10-Q 申报日起没有。新闻稿(8-K 2.02)通常早于 10-Q 几天到几周,公告日的反应不在本测试里;如果以后接了 8-K 日期可以做 v2,但申报后的漂移为零说明剩余部分即使存在也很薄。
+- 处置:不上线,Holm 预算 +3(→ 19)。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
