@@ -479,6 +479,15 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - **真正有用的发现**:所有变体的超额收益都集中在申报后**第一个交易日**(h1 +0.27~0.39%,t 4~4.8),h5 只比 h1 多 0~0.1 个点,h20 归零,h40 为负。而线上执行因为 EDGAR 日索引在收盘后才出,一直是 D+2 开盘才买——正好错过最厚的那一天。
 - 处置:五个变体都不采用,Holm 预算 +5(→ 24)。**实施**:`sec_daily_form4 --realtime` 改用 EDGAR 全文检索(申报后几分钟可见),16:10 PT 的执行任务先拉当天 Form 4 再打分,从 9/23 起内部人线按 D+1 开盘执行,与回测一致。
 
+### S24(2026-09-22)— 长线组合构建:分散/止损/行业中性都不能在保住 alpha 的前提下降风险;只有动量崩盘过滤有效
+- 引擎加了逐票仓位比例和止损;因子加了行业内 z(SIC→Fama-French 12,`agent/books/industry.py`,SIC 来自 EDGAR submissions 接口)、净股份发行、动量崩盘开关。8 个预注册变体,每个只改一件事,报告 `site-data/validation/s24_long_v2_2026-09-22.md`。
+- 结果(2017–2026,alpha2/年,t):**base +12.6%(2.25)**· n50 +8.9%(1.89)· invvol +9.1%(2.04)· stop20 +11.5%(2.17)· **momcrash +14.7%(2.58)**· issuance +11.3%(2.03)· **secneutral +1.2%(0.30)**· combo +1.9%(0.63)。最大回撤全部 ≈ −49%(2020 年 3 月,任何多头书都一样)。
+- **关键发现:行业中性把 alpha 杀没了。** v1 的超额收益几乎全部来自行业押注(2022 能源、2026 AI 硬件),不是行业内选股;它本质上是价值+质量+动量驱动的行业轮动。beta 1.69、7 月 −11.8%、前 5 名占今年 70% 都是这个本体的表现,不是可以修掉的 bug。
+- 2026 至今(1 月空仓起算到 9/18):base +35.7%(7 月 −11.8%,MaxDD −18%,β 1.69);n50 +35.2%(7 月更差 −14.2%:第 31–50 名是同一个主题);invvol +30.6%(7 月 −6.4%,MaxDD −11%,β 1.30:唯一改变了形态的,用收益换风险);stop20 +32.4%(7 月不变:整本书一起跌,没有单票触发);momcrash = base(今年未触发)。
+- **动量崩盘过滤**:SPY 距两年高点跌超 20% 时把动量族拿掉。2020 +48% 对 +25%,2022 +21% 对 +12%,其余年份完全相同。机制有几十年文献(Daniel–Moskowitz),阈值预注册;但样本内只触发两次,t 从 2.25 到 2.58 是两个事件推的,**证据是"机制合理 + 两次成功",不是独立统计证据**。
+- 处置:v1 不改。**建议**把 v1 + momcrash 预注册为 v2 影子线并排记录(是否上线由用户决定);行业中性和 combo 不采用;Holm 预算 +8(→ 32)。
+- 同日:用户的 moomoo 实盘接入记分板(`optradar/bin/account_snapshot.py`,只读):2026 至今 +64.8%(app 收益日历)对长线 v1 +35.7%、SPY +12.4%;月度形态与长线书相似(4、5 月大赚、7 月亏),9 月 +15.8% 是自由裁量的一笔。账户约 $1.7 万,期权为主,九个月分不清判断和运气,和长线书一样。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
