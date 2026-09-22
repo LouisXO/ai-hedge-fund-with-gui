@@ -11,6 +11,7 @@ export PYTHONPATH=/Users/louis/hedge-fund
 AGENT_EXEC=$(grep -E '^AGENT_EXEC=' "$HOME/.hedge-fund/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')
 echo "=== execute $(date) AGENT_EXEC=${AGENT_EXEC:-off} ===" >> "$LOG"
 $PY -W ignore -m agent.sources.sec_daily_form4 --days 2 >> "$LOG" 2>&1 || echo "form4 refresh failed (non-fatal)" >> "$LOG"
+$PY -W ignore -m agent.sources.sec_13d update --days 5 >> "$LOG" 2>&1 || echo "13d refresh failed (non-fatal)" >> "$LOG"
 if [ "${AGENT_EXEC:-off}" = "on" ]; then
   $PY -W ignore -m agent.execute --submit >> "$LOG" 2>&1 || echo "execute failed" >> "$LOG"
 else

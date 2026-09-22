@@ -453,6 +453,20 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - **注意**:2026 年至今 +53.2% 明显偏高,是近期的样本,不能当常态;t 2.25 是到目前 13 个变体里的最高值,**Holm 校正后 p ≈ 0.3,仍不显著**——这是目前最好的规则,不是已证明的规则。
 - **已上线**:每天记录前 60 的排名表(`agent_picks`,`signal_name='composite_long'`,`gate_passed` 标记是否在入场区),早报 ⑨ 节显示。首次记录 2026-09-18 月末盘。复核日期不变:2027-03-31、2027-09-30。
 
+### S20(2026-09-21/22)— Alpaca 模拟盘执行
+- 两本股票书接到 Alpaca **paper** 账户(PA3W95…,$100k 虚拟):长线 $60k/30 槽、内部人 $30k/20 槽。`agent/execute.py` 收盘后打分、次日开盘竞价单(买限价开盘单、卖市价开盘单);Alpaca 只在 19:00–09:28 ET 接受 OPG,任务定在 16:10 PT,窗口外自动改 DAY 单。护栏:只认 paper 域名 / PK key / PA 账户;`AGENT_EXEC=on` 才发单。
+- 每笔成交存 `model_px`(当天开盘价 = 回测假设的成交价),成交价与它的差就是执行成本的实测。首批 30 单 9/22 开盘全部成交。
+- 修了两个数据 bug:08:41 的 yfinance 刷新在盘中把当天半截 K 线存成日线(9/22 曾据此打分);刷新失败会让整个 agent 步骤中断。现在盘中只取到昨天、打分只用严格早于今天的 bar。
+
+### S21(2026-09-22)— 事件线框架;13D 举牌线:**否定**
+- 短线书改成"多条事件线共用引擎":`agent/events/base.py`(`EventLine.events/targets`,每线自带持有期、槽位上限、ADV 区间、假设),内部人线原样迁入(`insider_buy` v1,回测数字不变:alpha2 +8.4%/年,t 1.93)。
+- 新数据:`panel.sch13d`——EDGAR 全文检索接口拉 2015→ 的全部 Schedule 13D(初次 vs 修订分开;主体公司 CIK/ticker 与申报人分开),初次申报每年约 1,100–1,500 件,95% 映射到 ticker(`issuer_seen` 时点映射优先)。每天随 `execute.sh` 增量更新。
+- **预注册**:初次 13D、申报日次日开盘进、ADV $3M–$500M、持 10 日上线(5/20 为变体)。报告 `site-data/validation/s21_13d_2026-09-22.md`,2,090 个可交易事件。
+- **结果:申报日之后什么都不剩。** 从次日开盘算,h1/h5/h10/h20 全部 ≈ 0 或为负(全样本 h10 −0.27%,t −0.5;中盘 h20 −2.0%,t −1.9),命中率 44–48%,安慰剂(+60 日)同样为负。做成书:持 5/10/20 日 CAGR +1.4%~+3.0% 对 SPY +15.3%,alpha2 为负。
+- **管道是对的**:同一批事件申报日当天 +1.25%(t 3.6)、申报前 5 天 +3.2%(t 4.1),和 Brav 等的文献一致——**+7% 全在申报前和当天**,那是举牌者自己建仓和消息当天的反应,不是我们能拿到的。文献里的"后续漂移"在 2017–2026 的数据里不存在。
+- 处置:13D 线**不上线**,记入 Holm 预算(变体 +3 → 16)。数据继续采集,留给以后的"修订申报 / 持股变动"研究。
+- 下一条线:大幅波动 + 有无新闻(Tetlock 2010),需要先接 Alpaca News。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
