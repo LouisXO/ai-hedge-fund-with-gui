@@ -236,6 +236,7 @@ def render(date: str, masters: dict | None, anomalies: list,
          f"<title>AI 对冲基金 · 大师信号 {date}</title>",
          f"<style>{CSS}</style></head><body><div class='wrap'>",
          "<header><h1>AI 对冲基金 · 大师信号</h1>",
+         "<p style='margin:4px 0 8px'><a href='paper.html'>→ 模拟盘 / Paper portfolio</a></p>",
          f"<div class='sub'>{date} · 5 位投资大师 persona 独立评估 · "
          "数据 moomoo OpenD,判断由 Claude 生成</div></header>"]
 

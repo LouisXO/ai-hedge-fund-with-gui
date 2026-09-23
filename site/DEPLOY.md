@@ -2,7 +2,7 @@
 
 ## 公开层 — Netlify(观点与市场事实,无仓位)
 
-内容:大师共识/分歧 + 各家理由、市场异动。**绝不含**持仓、成本、盈亏、期权结构。
+内容:大师共识/分歧 + 各家理由、市场异动,以及 `paper.html`(Alpaca **模拟盘**:净值 vs SPY、持仓、平仓、执行偏差、回测、评估点;中英文切换)。**绝不含**真实账户(moomoo)的持仓、成本、盈亏、期权结构。
 
 1. 本地预览:`open /Users/louis/hedge-fund/site/public/index.html`
 2. Netlify 配置(一次性,在 Netlify UI):

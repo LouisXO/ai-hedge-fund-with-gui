@@ -5,6 +5,7 @@ set -e
 cd /Users/louis/hedge-fund
 DATE="${1:-$(date +%F)}"
 ~/.hedgefund-venv/bin/python site/build_site.py "$DATE"
+PYTHONPATH=/Users/louis/hedge-fund ~/.hedgefund-venv/bin/python site/build_paper.py || echo "paper page failed (non-fatal)"
 
 if [ "$PUBLISH" != "1" ]; then
   echo "PUBLISH!=1 → 只生成未推送(本地预览: open site/public/index.html)"
