@@ -110,6 +110,18 @@ def main() -> int:
     ua = user_agent()
     with PanelStore(read_only=True) as store:
         results = [check(t, cfg, store, state, ua) for t, cfg in wl.items()]
+    try:                                                  # retail attention (ApeWisdom + Stocktwits), stored daily in retail.db
+        from agent.sources.retail_heat import snapshot
+        heat = snapshot(list(wl))
+        for r in results:
+            h = heat.get(r["ticker"], {})
+            a, st = h.get("apewisdom"), h.get("stocktwits")
+            r["retail"] = (f"Reddit 提及 {a['mentions']}/24h(排名 {a['rank']},前日 {a['mentions_24h_ago']})" if a else "Reddit 榜外") + \
+                          (f" · Stocktwits {st['watchers']:,} 关注,近 30 条 {st['bullish']} 多 / {st['bearish']} 空" if st else "")
+            if a and a["mentions_24h_ago"] and a["mentions"] >= 3 * a["mentions_24h_ago"] and a["mentions"] >= 30:
+                r["alerts"].append(f"散户热度 {a['mentions_24h_ago']} → {a['mentions']} 提及/24h")
+    except Exception as exc:
+        print(f"retail heat skipped: {exc}")
     os.makedirs(AGENT_DIR, exist_ok=True)
     with open(STATE, "w") as f:
         json.dump(state, f)
