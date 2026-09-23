@@ -29,9 +29,12 @@ def test_long_book_enters_top_n_in_rank_order_and_exits_outside_keep():
     assert [o["ticker"] for o in sells] == ["Z"] and sells[0]["order_type"] == "market" and sells[0]["tif"] == "opg"
     assert [o["ticker"] for o in buys] == ["C"]                   # one slot freed by Z, highest-ranked new name
     b = buys[0]
-    assert b["order_type"] == "limit" and b["tif"] == "opg" and b["limit_price"] == pytest.approx(10.30)
-    # slot = equity / N = (1000 + 3*100*10) / 3; cash plan includes Z's proceeds
+    assert b["order_type"] == "market" and b["tif"] == "opg" and b["limit_price"] is None   # market-on-open in the auction
+    # slot = equity / N = (1000 + 3*100*10) / 3, sized off the capped price; cash plan includes Z's proceeds
     assert b["qty"] == int(((1000 + 3000) / 3) // 10.30)
+    day = plan_book("long", cfg, lots, ranked, keep, AS_OF, NEXT, close, {}, cash_usd=1000.0, blocked=set(), tif="day")
+    db = [o for o in day if o["side"] == "buy"][0]
+    assert db["order_type"] == "limit" and db["limit_price"] == pytest.approx(10.30)             # DAY fallback keeps the cap
 
 
 def test_no_entries_when_not_scored_and_no_exits_either():
@@ -47,7 +50,10 @@ def test_insider_book_exits_on_hold_until_and_caps_entry_at_one_spread():
     orders = plan_book("insider", cfg, lots, ["N"], set(), AS_OF, NEXT, {"H": 20.0, "K": 20.0, "N": 8.0},
                        {"N": 0.4}, cash_usd=28_000.0, blocked=set())
     assert [(o["ticker"], o["side"]) for o in orders] == [("H", "sell"), ("N", "buy")]
-    assert orders[1]["limit_price"] == pytest.approx(round(8.0 * 1.004, 2))   # cents
+    assert orders[1]["order_type"] == "market" and orders[1]["limit_price"] is None
+    day = plan_book("insider", cfg, lots, ["N"], set(), AS_OF, NEXT, {"H": 20.0, "K": 20.0, "N": 8.0},
+                    {"N": 0.4}, cash_usd=28_000.0, blocked=set(), tif="day")
+    assert day[1]["limit_price"] == pytest.approx(round(8.0 * 1.004, 2))   # cents, DAY fallback
     assert orders[1]["reason"] == "entry" and orders[0]["reason"] == "hold_expired"
 
 

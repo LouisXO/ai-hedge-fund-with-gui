@@ -125,9 +125,13 @@ def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: s
         qty = math.floor(spend / limit)
         if qty < 1:
             continue
+        # In the opening auction there is no spread to cross and the backtest bought at the open print,
+        # so an OPG entry is market-on-open (2026-09-23: paper left 5 of 7 limit-on-open orders unfilled
+        # although the open printed inside the limit). The cap only applies to the DAY fallback.
+        otype = "market" if tif == "opg" else "limit"
         orders.append({"client_order_id": client_id(book, as_of, t, "buy"), "book": book, "as_of": as_of,
-                       "ticker": t, "side": "buy", "qty": qty, "order_type": "limit", "tif": tif,
-                       "limit_price": limit, "ref_close": px, "reason": "entry"})
+                       "ticker": t, "side": "buy", "qty": qty, "order_type": otype, "tif": tif,
+                       "limit_price": None if otype == "market" else limit, "ref_close": px, "reason": "entry"})
         cash_plan -= qty * limit
         n_open += 1
     return orders
