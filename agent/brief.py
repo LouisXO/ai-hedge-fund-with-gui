@@ -121,6 +121,28 @@ def _paper_rows(live_db) -> str:
             "<p class='muted'>收盘后打分,次日开盘竞价成交(买:限价开盘单,卖:市价开盘单)。偏差 = 模拟成交价 vs 回测假设的开盘价。</p>")
 
 
+def narrator_input(d: dict, live: dict) -> dict:
+    """Numbers only — what the narrator is allowed to say."""
+    n_stock = sum(1 for p in d["picks"] if p.get("instrument") == "stock")
+    return {"as_of": d["as_of"], "vix": round(float(d.get("vix") or 0), 1), "regime": d.get("regime"),
+            "gate_passed": d["gate"]["passed"], "gate_of": d["gate"]["of"],
+            "n_option_picks": len(d["picks"]) - n_stock, "n_insider_picks": n_stock,
+            "paper": {b: round(r, 2) for b, r, _ in live.get("_paper", [])},
+            "n_days_recorded": live.get("n_days", 0)}
+
+
+def narration_html(d: dict, live: dict) -> str:
+    if os.environ.get("AGENT_NO_LLM"):
+        return ""
+    try:
+        from agent import narrator
+        n = narrator.narrate(narrator_input(d, live))
+    except Exception:
+        return ""
+    return (f"<p><b>{n['headline']}</b> {n['commentary']} <span class='muted'>{n['caveat']}</span> "
+            f"<span class='muted'>[{n.get('source', '')}]</span></p>")
+
+
 def html(d: dict, live: dict) -> str:
     rows = []
     for p in [x for x in d["picks"] if x.get("instrument") != "stock"][:10]:
@@ -138,6 +160,7 @@ def html(d: dict, live: dict) -> str:
 <table><tr><th>标的</th><th>信号</th><th>方向</th><th>排名</th><th>分数</th><th>IV</th><th>回本门槛(14天)</th></tr>
 {''.join(rows) or '<tr><td colspan="7">今日无期权候选</td></tr>'}</table>
 {_stock_rows(d)}
+{narration_html(d, live)}
 {live.get('_long_html', '')}
 {live.get('_paper_html', '')}
 <ul class="muted">{score or '<li>还没有满 10 天的记录</li>'}

@@ -69,12 +69,14 @@ def _mark(market: Market, p: Position, day: pd.Timestamp) -> float:
 def simulate(market: Market, targets: dict[pd.Timestamp, list[str]], start: str, end: str,
              max_positions: int, hold_days: int | None, exec_frac: float, capital: float = 100_000.0,
              cash_in_spy: bool = False, sizes: dict[pd.Timestamp, dict[str, float]] | None = None,
-             stop_pct: float | None = None) -> Result:
+             stop_pct: float | None = None, fixed_cost_pct: float | None = None) -> Result:
     """targets[day] = names the book wants to hold from the NEXT open, chosen with data through `day`.
 
     sizes[day][ticker] = fraction of equity to put in a new position (default 1/max_positions,
     equal slots). stop_pct: sell at the next open once a position has fallen stop_pct % from
     its highest close since entry (S24 construction variants; None = the v1 rule, no stops).
+    fixed_cost_pct: if given, every side costs this % of price instead of exec_frac x quoted
+    spread — the measured paper execution cost (S27).
     """
     days = market.adj.loc[start:end].index
     cash, positions = capital, {}
@@ -98,7 +100,7 @@ def simulate(market: Market, targets: dict[pd.Timestamp, list[str]], start: str,
                 if not (expired or dropped or dead):
                     continue
             if expired or dropped or pd.isna(market.adj_open.at[day, t]):
-                cost = exec_frac * market.spread_pct(t, day) / 100
+                cost = (fixed_cost_pct if fixed_cost_pct is not None else exec_frac * market.spread_pct(t, day)) / 100
                 proceeds = p.shares * px * (1 - cost)
                 cash += proceeds
                 traded_value += p.shares * px
@@ -117,7 +119,7 @@ def simulate(market: Market, targets: dict[pd.Timestamp, list[str]], start: str,
                 want = equity * day_sizes[t] if t in day_sizes else slot
                 if pd.isna(px) or px <= 0 or cash < want * 0.5:
                     continue
-                cost = exec_frac * market.spread_pct(t, day) / 100
+                cost = (fixed_cost_pct if fixed_cost_pct is not None else exec_frac * market.spread_pct(t, day)) / 100
                 spend = min(want, cash)
                 shares = spend / (px * (1 + cost))
                 cash -= spend
