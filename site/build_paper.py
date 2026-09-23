@@ -15,6 +15,7 @@ import glob
 import html
 import json
 import os
+import shutil
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,6 +26,8 @@ from hedge_fund.features.panel import PanelStore  # noqa: E402
 OUT = os.path.join(ROOT, "site", "public")
 VALID = os.path.join(ROOT, "site-data", "validation")
 THEME = "/Users/louis/optradar/bin/theme.css"
+PRIVATE_OUT = "/Users/louis/optradar/out"
+sys.path.insert(0, "/Users/louis/optradar/bin")
 BOOKS = {"long": ("长线综合因子", "Long composite"), "insider": ("内部人短线", "Insider short-term")}
 
 
@@ -255,10 +258,17 @@ def long_sections(d: dict) -> tuple[str, str]:
     return card, detail
 
 
-def page(d: dict) -> str:
+def page(d: dict, private: bool = False) -> str:
     n, lt, bt = d["nav"], d["latest"], d["bt"]
     theme = open(THEME).read()
     long_card, long_detail = long_sections(d)
+    lang_btn = "<span class='lang' role='group' aria-label='Language'><button type='button' data-l='zh'>中文</button><button type='button' data-l='en'>EN</button></span>"
+    if private:                      # same page inside the private site: its nav bar, plus the language switch
+        import site_theme
+        nav_slot = site_theme.nav("paper").replace("<span class='sp'></span>", "<span class='sp'></span>" + lang_btn, 1)
+    else:
+        nav_slot = (f"<nav class='nav'><span class='brand'>AI Hedge Fund</span><a href='index.html' class='on'>{T('模拟盘', 'Paper portfolio')}</a>"
+                    f"<a href='masters/index.html'>{T('大师信号(已停止)', 'Master signals (retired)')}</a><span class='sp'></span>{lang_btn}</nav>")
     cards = []
     for b, (zh, en) in BOOKS.items():
         if b in lt:
@@ -332,9 +342,7 @@ def page(d: dict) -> str:
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>{theme}{CSS_EXTRA}</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script></head><body>
-<nav class='nav'><span class='brand'>AI Hedge Fund</span><a href='index.html' class='on'>{T('模拟盘', 'Paper portfolio')}</a>
-<a href='masters/index.html'>{T('大师信号(已停止)', 'Master signals (retired)')}</a><span class='sp'></span>
-<span class='lang' role='group' aria-label='Language'><button type='button' data-l='zh'>中文</button><button type='button' data-l='en'>EN</button></span></nav>
+{nav_slot}
 <h1>{T('模拟盘', 'Paper portfolio')}</h1>
 <p class='lede'>{T('两本规则驱动的股票书在 Alpaca 模拟账户上实时交易,虚拟资金 $100,000。每天收盘后打分,次日开盘下单,没有人工干预,也没有 LLM 做方向判断。这是回测之后的前瞻记录。',
                    'Two rule-based stock books trade live on an Alpaca paper account with $100,000 of simulated money. They are scored after each close and ordered for the next open, with no discretion and no LLM making directional calls. This is the out-of-sample record that follows the backtests.')}</p>
@@ -381,6 +389,13 @@ def main() -> int:
     for name in ("index.html", "paper.html"):            # the home page; paper.html kept for links already shared
         with open(os.path.join(OUT, name), "w") as f:
             f.write(html_)
+    # everything public is also on the private site: the same page, and the master-signal archive
+    if os.path.isdir(PRIVATE_OUT):
+        with open(os.path.join(PRIVATE_OUT, "paper.html"), "w") as f:
+            f.write(page(d, private=True))
+        src = os.path.join(OUT, "masters")
+        if os.path.isdir(src):
+            shutil.copytree(src, os.path.join(PRIVATE_OUT, "masters"), dirs_exist_ok=True)
     print(f"paper.html: {len(d['nav']['days'])} days, {len(d['holdings'])} holdings, {len(d['closed'])} closed")
     return 0
 

@@ -9,7 +9,7 @@
 
 1. **Alpaca 只有模拟盘。** `agent/broker/alpaca.py` 拒绝非 paper URL、非 `PK` 开头的 key、非 `PA` 开头的账户。发单的唯一开关是 `~/.hedge-fund/.env` 里的 `AGENT_EXEC=on`;没有它一律 dry run。
 2. **moomoo 永远只读,永远不下单。** 它只提供行情、期权链、真实账户快照。
-3. **真实账户(moomoo)的任何数字、持仓、成交永远不上公开站**,只进私有站 https://optradar.tail5b470b.ts.net(Tailscale 内)。**例外(用户 2026-09-23 决定):Alpaca 模拟盘可以公开**,在 hedge-fund.louisleng.com/paper.html(`site/build_paper.py`,中英文切换,每天 08:41 随公开站发布)。该脚本不读任何 `acct_*` 表,改它时保持这一点。
+3. **真实账户(moomoo)的任何数字、持仓、成交永远不上公开站**,只进私有站 https://optradar.tail5b470b.ts.net(Tailscale 内)。**例外(用户 2026-09-23 决定):Alpaca 模拟盘可以公开**,在 hedge-fund.louisleng.com/paper.html(`site/build_paper.py`,中英文切换,每天 08:41 随公开站发布)。该脚本不读任何 `acct_*` 表,改它时保持这一点。**公开站有的信息私有站必须都有**:`build_paper.py` 同时写 `optradar/out/paper.html`(私有导航)并把 `/masters/` 存档复制进私有站;13:25 和 16:10 任务都会重建。以后公开站加任何内容,都要从同一个生成器同时写私有版本。
 4. **密钥只在 `~/.hedge-fund/.env`(chmod 600)**:`SEC_USER_AGENT`、`ALPACA_KEY_ID`/`ALPACA_SECRET`(paper)、`AGENT_EXEC`。Alpha Vantage 的 key 只在 `~/optradar/.env`,不复制。任何 key 不进仓库、不进日志、不进对话。
 5. **LLM 不出方向信号。** 只做早报叙述(`agent/narrator.py`,密封、只能复述输入里的数字)和新闻标题翻译(`agent/translate.py`)。决策路径上没有 LLM。大师信号(5 个 persona)2026-09-23 退役并删除;上游 virattt 代码同日删除,tag `pre-cleanup-2026-09-23` 可恢复。依赖清单是 `requirements.txt`(没有 pyproject)。
 6. **先预注册再看结果。** 每个实验先写阈值和读法,报告进 `site-data/validation/`,结论进 `docs/AGENT_PLAN.md` §9,Holm 家族账本自动累计(`hedge_fund/validation/family_log.py`)。不达标就写"不采用",不调参数再跑。
