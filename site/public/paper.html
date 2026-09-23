@@ -1,0 +1,189 @@
+<!doctype html><html lang="zh" data-lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex">
+<title>Paper Portfolio · AI Hedge Fund</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>/* OptRadar private-site theme. One source file, inlined by every page generator
+   (bin/private_index.py, radar/report.py, hedge-fund agent/review.py, agent/dashboard.py).
+   Dark-first; a light palette follows the OS setting. Chart series colors are the
+   dataviz reference palette (slot 1 blue = paper long, slot 2 orange = insider,
+   slot 3 aqua = real account; benchmark SPY is always the muted ink, dashed). */
+:root{
+  color-scheme:dark;
+  --bg:#0e1116;--surface:#151a21;--surface-2:#1b2129;--line:#262d38;--line-2:#323b48;
+  --tx:#e8ebf1;--tx-2:#aeb7c6;--dim:#8a94a6;
+  --acc:#3987e5;--acc-ink:#0e1116;
+  --bull:#3fb950;--bear:#e66767;--warn:#c98500;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--bench:#8a94a6;
+  --div-pos:#3987e5;--div-neg:#e66767;
+  --radius:10px;--gutter:18px;
+  --font:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,'PingFang SC',monospace;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    color-scheme:light;
+    --bg:#f6f7f9;--surface:#ffffff;--surface-2:#f0f2f5;--line:#e2e5ea;--line-2:#cfd4dc;
+    --tx:#141821;--tx-2:#3d4655;--dim:#6b7484;
+    --acc:#2a78d6;--acc-ink:#ffffff;
+    --bull:#1e8e3e;--bear:#d13d3d;--warn:#b26f00;
+    --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--bench:#6b7484;
+    --div-pos:#2a78d6;--div-neg:#e34948;
+  }
+}
+*{box-sizing:border-box;min-width:0}
+html,body{overflow-x:hidden;max-width:100%}
+body{margin:0 auto;background:var(--bg);color:var(--tx);max-width:1040px;padding-block:22px 72px;padding-inline:var(--gutter);
+  font:14px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+h1{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:0 0 4px;text-wrap:balance}
+h2{font-size:15px;font-weight:600;margin:34px 0 10px;display:flex;align-items:center;gap:8px;letter-spacing:.01em}
+h2::before{content:"";width:3px;height:15px;background:var(--acc);border-radius:2px}
+h3{font-size:13px;font-weight:600;color:var(--tx-2);margin:18px 0 6px;text-transform:none}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+p{margin:6px 0}
+.muted{color:var(--dim);font-size:12px}
+.num,td,.card .v,.card .s{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono);font-size:12.5px}
+.pos{color:var(--bull)}.neg{color:var(--bear)}.warn{color:var(--warn)}
+/* nav */
+.nav{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;font-size:13px;margin:0 0 18px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.nav .brand{font-weight:600;color:var(--tx);margin-right:8px;letter-spacing:.02em}
+.nav a{color:var(--tx-2);padding:2px 0}.nav a:hover{color:var(--tx);text-decoration:none}.nav a.on{color:var(--acc);border-bottom:2px solid var(--acc)}
+.nav .sp{flex:1}.nav .when{color:var(--dim);font-size:12px}
+/* cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.card .k{color:var(--dim);font-size:12px;letter-spacing:.02em}
+.card .v{font-size:22px;font-weight:600;line-height:1.2;font-family:var(--mono)}
+.card .s{font-size:12px;color:var(--dim)}
+.cta{display:inline-block;background:var(--acc);color:var(--acc-ink);font-weight:600;padding:9px 16px;border-radius:8px;margin:6px 0 2px}
+.cta:hover{text-decoration:none;filter:brightness(1.08)}
+/* tables */
+.tbl{overflow-x:auto;margin:6px 0}
+table{border-collapse:collapse;width:100%;font-size:13px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:right;vertical-align:top}
+th{background:var(--surface-2);color:var(--dim);font-weight:500;font-size:12px;white-space:nowrap;position:sticky;top:0}
+tr:last-child td{border-bottom:0}td:first-child,th:first-child{text-align:left}
+tbody tr:hover td{background:var(--surface-2)}
+td.l,th.l{text-align:left}
+.red td,tr.red td{background:color-mix(in srgb,var(--bear) 12%,transparent)}
+.warn td,tr.warn td{background:color-mix(in srgb,var(--warn) 12%,transparent)}
+td.bad{color:var(--bear)}tr.ref td{color:var(--dim);font-size:12px}
+.tag{display:inline-block;padding:1px 7px;border-radius:4px;background:var(--surface-2);color:var(--dim);font-size:11px;margin-right:5px;border:1px solid var(--line)}
+.flag{display:inline-block;border:1px solid var(--warn);color:var(--warn);border-radius:6px;padding:0 6px;font-size:12px;margin:1px 2px 1px 0;background:color-mix(in srgb,var(--warn) 10%,transparent)}
+.flag.ok{border-color:var(--bull);color:var(--bull);background:color-mix(in srgb,var(--bull) 10%,transparent)}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;border:1px solid var(--line-2);color:var(--tx-2)}
+/* lists */
+ul{list-style:none;padding:0;margin:0}
+ul.plain{list-style:disc;padding-left:20px}ul.plain li{margin:2px 0}
+ul.list li{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 13px;margin-bottom:6px;font-size:13.5px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+details{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px}
+summary{cursor:pointer;color:var(--tx-2)}
+footer{margin:44px 0 0;padding-top:16px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;line-height:1.8}
+/* charts */
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 14px 10px;margin:8px 0}
+.chart .t{font-size:13px;font-weight:600;margin:0 0 2px}.chart .st{font-size:12px;color:var(--dim);margin:0 0 8px}
+.chart .cv{position:relative;height:280px}.chart.short .cv{height:200px}.chart.tall .cv{height:360px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:10px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--tx-2);margin:0 0 6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+@media(max-width:560px){body{padding-block:16px 60px;--gutter:14px}h1{font-size:19px}table{font-size:12px}th,td{padding:6px 7px}.chart .cv{height:230px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* watchlist cards */
+.wl{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px}
+.wl .w{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.wl .hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.wl .tk{font-weight:600;font-size:16px}.wl .px{font-family:var(--mono);font-size:15px}
+.wl .note{color:var(--dim);font-size:12px;line-height:1.5}
+.wl .sec{font-size:11px;color:var(--dim);letter-spacing:.04em;margin-bottom:2px}
+.wl ul.ev li,.wl ul.nw li{padding:3px 0;border-top:1px dashed var(--line);font-size:13px;line-height:1.5}
+.wl ul.ev li:first-child,.wl ul.nw li:first-child{border-top:0}
+.wl ul.nw li{color:var(--tx-2)}.wl .rt{color:var(--dim);font-size:12px}
+.wl .w.hot{border-color:color-mix(in srgb,var(--warn) 55%,var(--line))}
+
+[data-lang=en] .zh{display:none}[data-lang=zh] .en{display:none}
+.lang{display:inline-flex;border:1px solid var(--line-2);border-radius:999px;overflow:hidden;font-size:12px}
+.lang button{background:none;border:0;color:var(--tx-2);padding:3px 10px;cursor:pointer;font:inherit}
+.lang button.on{background:var(--acc);color:var(--acc-ink)}
+.lang button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.lede{color:var(--tx-2);max-width:68ch;line-height:1.65}
+.note{color:var(--dim);font-size:12px;max-width:80ch}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script></head><body>
+<nav class='nav'><span class='brand'>AI Hedge Fund</span><a href='index.html'><span class='zh'>大师信号</span><span class='en'>Master signals</span></a>
+<a href='paper.html' class='on'><span class='zh'>模拟盘</span><span class='en'>Paper portfolio</span></a><span class='sp'></span>
+<span class='lang' role='group' aria-label='Language'><button type='button' data-l='zh'>中文</button><button type='button' data-l='en'>EN</button></span></nav>
+<h1><span class='zh'>模拟盘</span><span class='en'>Paper portfolio</span></h1>
+<p class='lede'><span class='zh'>两本规则驱动的股票书在 Alpaca 模拟账户上实时交易,虚拟资金 $100,000。每天收盘后打分,次日开盘下单,没有人工干预,也没有 LLM 做方向判断。这是回测之后的前瞻记录。</span><span class='en'>Two rule-based stock books trade live on an Alpaca paper account with $100,000 of simulated money. They are scored after each close and ordered for the next open, with no discretion and no LLM making directional calls. This is the out-of-sample record that follows the backtests.</span></p>
+<p class='muted'><span class='zh'>数据截至</span><span class='en'>Data as of</span> 2026-09-23 · <span class='zh'>模拟资金,非真实账户</span><span class='en'>simulated money, not a real account</span></p>
+<div class='cards'><div class='card'><div class='k'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></div><div class='v'><span class='neg'>-3.31%</span></div><div class='s'>$58,017 · 30 <span class='zh'>仓</span><span class='en'>positions</span> · <span class='zh'>分配</span><span class='en'>allocated</span> $60,000</div></div><div class='card'><div class='k'><span class='zh'>内部人短线</span><span class='en'>Insider short-term</span></div><div class='v'><span class='neg'>-0.07%</span></div><div class='s'>$29,979 · 2 <span class='zh'>仓</span><span class='en'>positions</span> · <span class='zh'>分配</span><span class='en'>allocated</span> $30,000</div></div><div class='card'><div class='k'><span class='zh'>两本合计</span><span class='en'>Both books</span></div><div class='v'><span class='neg'>-2.23%</span></div><div class='s'><span class='zh'>自</span><span class='en'>since</span> 2026-09-18</div></div><div class='card'><div class='k'><span class='zh'>SPY 同期</span><span class='en'>SPY, same period</span></div><div class='v'><span class='pos'>+0.80%</span></div><div class='s'>4 <span class='zh'>个交易日</span><span class='en'>sessions</span></div></div></div>
+
+<h2><span class='zh'>净值 vs SPY</span><span class='en'>NAV vs SPY</span></h2>
+<div class='chart tall'><p class='t'><span class='zh'>两本书净值</span><span class='en'>Book NAV</span></p><p class='st'><span class='zh'>自 2026-09-18 起,各自起点 = 100;虚线为合计与 SPY。</span><span class='en'>Since 2026-09-18, each book indexed to 100; dashed lines are the total and SPY.</span></p>
+<div class='cv'><canvas id='c_nav'></canvas></div></div>
+
+<h2><span class='zh'>两本书的规则</span><span class='en'>The two books</span></h2>
+<div class='grid2'>
+<div class='card'><div class='k'><span class='zh'>长线综合因子 · $60,000 · 30 仓</span><span class='en'>Long composite · $60,000 · 30 slots</span></div>
+<p><span class='zh'>每天给全市场打分:动量、价值、质量、低波动四个因子等权合成,先过基本面过滤(近 200 天有申报、市值超过 1 亿美元、权益超过资产 5%)。排名进前 30 买入,跌出前 60 卖出,等权。</span><span class='en'>Every day the whole market is scored on four equal-weighted factor families (momentum, value, quality, low volatility) after a fundamentals filter (a filing in the last 200 days, market cap above $100M, equity above 5% of assets). Names enter in the top 30 and leave when they fall out of the top 60, equal weight.</span></p></div>
+<div class='card'><div class='k'><span class='zh'>内部人短线 · $30,000 · 20 仓</span><span class='en'>Insider short-term · $30,000 · 20 slots</span></div>
+<p><span class='zh'>公司高管或董事在公开市场用自己的钱买入本公司股票(SEC Form 4)后,次日开盘买入,持有 5 个交易日卖出。回测里一半的超额收益出现在入场第一天,所以只用开盘市价单。</span><span class='en'>When an officer or director buys their own company’s stock in the open market (SEC Form 4), the book buys at the next open and sells five sessions later. Half of the backtested edge arrives on the first day, so entries are market-on-open only.</span></p></div></div>
+
+<h2><span class='zh'>当前持仓</span><span class='en'>Holdings</span> · 32</h2>
+<div class='tbl'><table><tr><th class='l'><span class='zh'>书</span><span class='en'>Book</span></th><th><span class='zh'>代码</span><span class='en'>Ticker</span></th><th><span class='zh'>入场日</span><span class='en'>Entered</span></th><th><span class='zh'>入场价</span><span class='en'>Entry</span></th><th><span class='zh'>最新</span><span class='en'>Last</span></th><th><span class='zh'>收益</span><span class='en'>Return</span></th><th><span class='zh'>权重</span><span class='en'>Weight</span></th><th><span class='zh'>计划出场</span><span class='en'>Planned exit</span></th></tr><tr><td class='l'><span class='zh'>内部人短线</span><span class='en'>Insider short-term</span></td><td><b>GSAT</b></td><td>2026-09-23</td><td>82.58</td><td>82.50</td><td><span class='neg'>-0.1%</span></td><td>4.4%</td><td>2026-09-30</td></tr><tr><td class='l'><span class='zh'>内部人短线</span><span class='en'>Insider short-term</span></td><td><b>PRTA</b></td><td>2026-09-23</td><td>8.98</td><td>8.68</td><td><span class='neg'>-3.3%</span></td><td>1.9%</td><td>2026-09-30</td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>DEC</b></td><td>2026-09-22</td><td>13.71</td><td>13.89</td><td><span class='pos'>+1.3%</span></td><td>3.4%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>ATEX</b></td><td>2026-09-22</td><td>84.00</td><td>83.98</td><td><span class='neg'>-0.0%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>BZ</b></td><td>2026-09-22</td><td>14.51</td><td>14.41</td><td><span class='neg'>-0.7%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>PSEC</b></td><td>2026-09-22</td><td>2.23</td><td>2.17</td><td><span class='neg'>-2.7%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>RLAY</b></td><td>2026-09-22</td><td>18.39</td><td>18.03</td><td><span class='neg'>-2.0%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>XIFR</b></td><td>2026-09-22</td><td>10.84</td><td>10.67</td><td><span class='neg'>-1.5%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>GSBD</b></td><td>2026-09-22</td><td>9.96</td><td>9.64</td><td><span class='neg'>-3.2%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>HG</b></td><td>2026-09-22</td><td>34.06</td><td>33.47</td><td><span class='neg'>-1.7%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>RVMD</b></td><td>2026-09-22</td><td>192.10</td><td>190.74</td><td><span class='neg'>-0.7%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>MFA</b></td><td>2026-09-22</td><td>8.54</td><td>8.32</td><td><span class='neg'>-2.5%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>MCHB</b></td><td>2026-09-22</td><td>15.39</td><td>15.00</td><td><span class='neg'>-2.5%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>PERI</b></td><td>2026-09-22</td><td>8.92</td><td>8.64</td><td><span class='neg'>-3.1%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>WDC</b></td><td>2026-09-22</td><td>445.01</td><td>473.69</td><td><span class='pos'>+6.4%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>ARI</b></td><td>2026-09-22</td><td>6.47</td><td>6.26</td><td><span class='neg'>-3.3%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>PACS</b></td><td>2026-09-22</td><td>42.89</td><td>41.05</td><td><span class='neg'>-4.3%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>VSTS</b></td><td>2026-09-22</td><td>14.30</td><td>13.87</td><td><span class='neg'>-3.0%</span></td><td>3.3%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>GNW</b></td><td>2026-09-22</td><td>10.09</td><td>9.63</td><td><span class='neg'>-4.6%</span></td><td>3.2%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>SYRE</b></td><td>2026-09-22</td><td>93.81</td><td>88.17</td><td><span class='neg'>-6.0%</span></td><td>3.2%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>GMRS</b></td><td>2026-09-22</td><td>11.90</td><td>11.00</td><td><span class='neg'>-7.6%</span></td><td>3.2%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>STX</b></td><td>2026-09-22</td><td>868.47</td><td>923.86</td><td><span class='pos'>+6.4%</span></td><td>3.2%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>UHAL</b></td><td>2026-09-22</td><td>64.81</td><td>61.58</td><td><span class='neg'>-5.0%</span></td><td>3.2%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>ADAM</b></td><td>2026-09-22</td><td>8.68</td><td>8.43</td><td><span class='neg'>-2.9%</span></td><td>3.2%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>TK</b></td><td>2026-09-22</td><td>13.89</td><td>13.52</td><td><span class='neg'>-2.7%</span></td><td>3.1%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>TXG</b></td><td>2026-09-22</td><td>77.81</td><td>75.62</td><td><span class='neg'>-2.8%</span></td><td>3.1%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>ERAS</b></td><td>2026-09-22</td><td>15.21</td><td>13.95</td><td><span class='neg'>-8.3%</span></td><td>3.1%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>ORKA</b></td><td>2026-09-22</td><td>94.99</td><td>89.92</td><td><span class='neg'>-5.3%</span></td><td>3.1%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>CLYM</b></td><td>2026-09-22</td><td>13.89</td><td>12.52</td><td><span class='neg'>-9.9%</span></td><td>3.1%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>TWST</b></td><td>2026-09-22</td><td>164.80</td><td>158.50</td><td><span class='neg'>-3.8%</span></td><td>3.0%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>EDRY</b></td><td>2026-09-22</td><td>69.60</td><td>51.34</td><td><span class='neg'>-26.2%</span></td><td>2.5%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr><tr><td class='l'><span class='zh'>长线综合因子</span><span class='en'>Long composite</span></td><td><b>MU</b></td><td>2026-09-22</td><td>1040.64</td><td>1071.88</td><td><span class='pos'>+3.0%</span></td><td>1.8%</td><td><span class='zh'>排名跌出前 60</span><span class='en'>until rank > 60</span></td></tr></table></div>
+
+<h2><span class='zh'>已平仓交易</span><span class='en'>Closed trades</span></h2>
+<p class='muted'><span class='zh'>还没有平仓的交易。</span><span class='en'>No closed trades yet.</span></p>
+
+<h2><span class='zh'>执行</span><span class='en'>Execution</span></h2><p class='note'><span class='zh'>32 笔成交,对模型开盘价平均偏差 +0.59%/边;其中开盘竞价成交 2 笔,平均 +0.26%。模拟器对非竞价单在开盘后逐笔撮合,那部分偏差不代表真实成本。</span><span class='en'>32 fills, mean gap to the model's open +0.59% per side; 2 opening-auction fills averaging +0.26%. The simulator fills non-auction orders one by one after the open, so that part of the gap is not a real cost.</span></p>
+
+<h2><span class='zh'>回测对照</span><span class='en'>Backtest</span></h2><div class='chart tall'><p class='t'><span class='zh'>回测 · 按年收益 vs SPY</span><span class='en'>Backtest · calendar-year returns vs SPY</span></p><p class='st'><span class='zh'>2017 → 2026-08,次日开盘入场,每边扣半个报价价差,闲置资金放 SPY。长线 CAGR +19.4%,两因子 alpha +8.1%/年(t 1.46);内部人 CAGR +20.4%,alpha +8.4%/年(t 1.93)。多重检验校正后都不显著,所以要用模拟盘攒证据。</span><span class='en'>2017 → 2026-08, entry at the next open, half the quoted spread per side, idle cash in SPY. Long book CAGR +19.4%, two-factor alpha +8.1%/yr (t 1.46); insider line CAGR +20.4%, alpha +8.4%/yr (t 1.93). Neither survives a multiple-testing correction, which is why the paper record exists.</span></p><div class='cv'><canvas id='c_bt'></canvas></div></div>
+
+<h2><span class='zh'>什么时候下结论</span><span class='en'>When we judge it</span></h2>
+<p class='note'><span class='zh'>评估点在模拟盘开始之前就写死了。到点之前,不根据好坏改规则。</span><span class='en'>The evaluation points were fixed before the paper record started. Until then no rule changes on the strength of results.</span></p>
+<ul class='plain'><li><span class='zh'>长线综合因子</span><span class='en'>Long composite</span>: <span class='zh'>100 笔平仓或 2027-06-30,先到为准</span><span class='en'>100 closed trades or 2027-06-30, whichever comes first</span></li><li><span class='zh'>内部人短线</span><span class='en'>Insider short-term</span>: <span class='zh'>200 笔平仓或 2027-06-30,先到为准</span><span class='en'>200 closed trades or 2027-06-30, whichever comes first</span></li></ul>
+
+<footer><span class='zh'><b>免责声明</b> 本页是个人研究项目的自动输出,资金为模拟资金,不构成投资建议。作者可能持有页内标的。</span><span class='en'><b>Disclaimer</b> Automated output of a personal research project. The money is simulated. Nothing here is investment advice; the author may hold names shown.</span>
+ · <span class='zh'>生成于</span><span class='en'>Generated</span> 2026-09-23 14:20 · Alpaca paper · SEC EDGAR</footer>
+<script>window.PAPER = {"nav": {"days": ["2026-09-18", "2026-09-21", "2026-09-22", "2026-09-23"], "long": [100.0, 100.0, 99.436, 96.695], "insider": [100.0, 100.0, 100.0, 99.929], "total": [100.0, 100.0, 99.624, 97.773], "spy": [100.0, 101.55, 101.535, 100.803]}, "bt": {"years": ["2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"], "long": [8.1, -3.9, 10.5, 18.1, 32.4, 12.4, 37.6, 24.1, 17.8, 38.5], "insider": [20.4, 4.2, 40.6, 32.4, 47.5, -21.9, 16.5, 17.8, 47.7, 7.1], "spy": [20.8, -5.2, 31.1, 17.2, 30.5, -18.6, 26.7, 25.6, 18.0, 12.9]}};</script><script>
+const css = getComputedStyle(document.documentElement), C = k => css.getPropertyValue(k).trim();
+const D = window.PAPER; let charts = [];
+function lang() { try { return localStorage.getItem('lang') } catch (e) { return null } }
+function setLang(l) {
+  document.documentElement.dataset.lang = l; document.documentElement.lang = l === 'en' ? 'en' : 'zh';
+  document.querySelectorAll('.lang button').forEach(b => b.classList.toggle('on', b.dataset.l === l));
+  try { localStorage.setItem('lang', l) } catch (e) {}
+  draw(l);
+}
+function draw(l) {
+  charts.forEach(c => c.destroy()); charts = [];
+  const L = (zh, en) => l === 'en' ? en : zh;
+  Chart.defaults.font.family = C('--font'); Chart.defaults.color = C('--dim'); Chart.defaults.borderColor = C('--line');
+  Object.assign(Chart.defaults.plugins.legend.labels, {boxWidth: 10, boxHeight: 10, usePointStyle: true});
+  Object.assign(Chart.defaults.plugins.tooltip, {backgroundColor: C('--surface-2'), titleColor: C('--tx'), bodyColor: C('--tx-2'),
+    borderColor: C('--line-2'), borderWidth: 1, padding: 8, bodyFont: {family: C('--mono')}});
+  const grid = {color: C('--line'), drawTicks: false}, pct = v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+  const line = (label, data, color, dash) => ({label, data, borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 0,
+    pointHoverRadius: 5, pointHoverBorderWidth: 2, pointHoverBorderColor: C('--surface'), tension: .15, spanGaps: true, borderDash: dash || []});
+  const bar = (label, data, color) => ({label, data, backgroundColor: color, borderColor: C('--surface'), borderWidth: 1, borderRadius: 4,
+    borderSkipped: 'start', maxBarThickness: 30});
+  const cross = {id: 'x', afterDraw(ch) { const a = ch.tooltip?.getActiveElements?.() || []; if (!a.length) return;
+    const x = a[0].element.x, y = ch.chartArea, g = ch.ctx; g.save(); g.strokeStyle = C('--line-2'); g.setLineDash([3, 3]);
+    g.beginPath(); g.moveTo(x, y.top); g.lineTo(x, y.bottom); g.stroke(); g.restore(); }};
+  const n = D.nav;
+  if (n.days.length) charts.push(new Chart(document.getElementById('c_nav'), {type: 'line', plugins: [cross],
+    data: {labels: n.days, datasets: [line(L('长线', 'Long'), n.long, C('--s1')), line(L('内部人', 'Insider'), n.insider, C('--s2')),
+      line(L('合计', 'Total'), n.total, C('--tx'), [2, 3]), line('SPY', n.spy, C('--bench'), [6, 4])]},
+    options: {maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {position: 'top', align: 'end'}, tooltip: {callbacks: {label: c => ` ${c.dataset.label}  ${c.parsed.y == null ? '—' : c.parsed.y.toFixed(2)}  (${c.parsed.y == null ? '—' : pct(c.parsed.y - 100)})`}}},
+      scales: {x: {grid: {display: false}, ticks: {maxTicksLimit: 8}}, y: {grid, title: {display: true, text: L('指数(起点 = 100)', 'Index (start = 100)')}}}}}));
+  if (D.bt) charts.push(new Chart(document.getElementById('c_bt'), {type: 'bar',
+    data: {labels: D.bt.years, datasets: [bar(L('长线', 'Long'), D.bt.long, C('--s1')), bar(L('内部人', 'Insider'), D.bt.insider, C('--s2')), bar('SPY', D.bt.spy, C('--bench'))]},
+    options: {maintainAspectRatio: false, interaction: {mode: 'index', intersect: false}, plugins: {legend: {position: 'top', align: 'end'},
+      tooltip: {callbacks: {label: c => ` ${c.dataset.label}  ${pct(c.parsed.y)}`}}},
+      scales: {x: {grid: {display: false}}, y: {grid, ticks: {callback: v => v + '%'}}}}}));
+}
+const pref = lang() || ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en');
+document.querySelectorAll('.lang button').forEach(b => b.addEventListener('click', () => setLang(b.dataset.l)));
+setLang(pref);
+</script></body></html>
