@@ -325,7 +325,9 @@ def real_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float 
             row.update({"expiry": str(p["expiry"]), "cp": p["cp"], "strike": p["strike"], "dte": dte,
                         "moneyness_pct": ((p["strike"] / spot - 1) * 100 * (1 if p["cp"] == "C" else -1)) if spot else None, "rv20": c.get("rv20")})
             if d["side"] == "BUY":
-                if dte <= 10:
+                if dte <= 0:
+                    row["tags"].append("当日到期(0DTE):回本要求标的在剩余几小时反向走完整个权利金")
+                elif dte <= 10:
                     row["tags"].append(f"买入时只剩 {dte} 天(theta 区)")
                 if row["moneyness_pct"] is not None and row["moneyness_pct"] >= 10:
                     row["tags"].append(f"虚值 {row['moneyness_pct']:.0f}%(彩票结构)")
@@ -384,12 +386,15 @@ def real_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float 
             row["tags"].append(f"占净值 {row['weight_pct']:.0f}%")
         out["positions"].append(row)
 
+    for code, g in today[today["side"] == "BUY"].groupby("code"):
+        if len(g) >= 2:
+            out["flags"].append({"rule": "real_add_same_day", "text": f"{parse_code(code)['ticker']} 同一合约当日买入 {len(g)} 次({', '.join(f'{p:.2f}' for p in g['price'])})"})
     n_deals = len(out["deals"])
     if n_deals >= 5:
         out["flags"].append({"rule": "real_overtrading", "text": f"当日 {n_deals} 笔成交"})
     for d in out["deals"]:
         for tg in d["tags"]:
-            key = ("real_buy_after_jump" if tg.startswith("S25") else "real_short_dte" if "只剩" in tg else "real_otm_lottery" if "虚值" in tg
+            key = ("real_buy_after_jump" if tg.startswith("S25") else "real_0dte" if tg.startswith("当日到期") else "real_short_dte" if "只剩" in tg else "real_otm_lottery" if "虚值" in tg
                    else "real_buy_high" if tg.startswith("买在") else "real_sell_low" if tg.startswith("卖在") else "real_vs_insiders" if "净卖出" in tg else None)
             if key:
                 out["flags"].append({"rule": key, "text": f"{d['ticker']} {d['side']}:{tg}"})
@@ -420,9 +425,9 @@ def record_lessons(day: dt.date, flags: list[dict]) -> dict[str, int]:
 
 
 RULE_NAMES = {"paper_unfilled": "模拟盘未成交", "paper_exec_gap": "执行偏差 > 0.5%", "paper_insider_limit": "内部人限价入场", "paper_big_move": "持仓大动",
-              "real_overtrading": "实盘当日 ≥ 5 笔", "real_buy_after_jump": "实盘大动后追买(S25)", "real_short_dte": "实盘买临期期权",
+              "real_overtrading": "实盘当日 ≥ 5 笔", "real_buy_after_jump": "实盘大动后追买(S25)", "real_short_dte": "实盘买临期期权", "real_0dte": "实盘买当日到期期权",
               "real_otm_lottery": "实盘买深虚值", "real_buy_high": "实盘买在日高附近", "real_sell_low": "实盘卖在日低附近",
-              "real_vs_insiders": "实盘逆内部人卖出买入", "real_concentration": "实盘单一持仓 ≥ 40%"}
+              "real_vs_insiders": "实盘逆内部人卖出买入", "real_concentration": "实盘单一持仓 ≥ 40%", "real_add_same_day": "实盘同一合约当日加仓"}
 
 
 # ------------------------------------------------------------------ render ----
@@ -441,7 +446,8 @@ def summary_lines(rep: dict) -> list[str]:
     r = rep["real"]
     if r["nav"]:
         n = r["nav"]
-        L.append(f"实盘 {usd(n['total'])}" + (f",当日 {n['pnl']:+,.0f}({n['ret']:+.2f}%,对 SPY {n['vs_spy']:+.2f}%)" if n.get("pnl") is not None else ""))
+        L.append(f"实盘 {usd(n['total'])}" + (f",当日 {n['pnl']:+,.0f}({n['ret']:+.2f}%" + (f",对 SPY {n['vs_spy']:+.2f}%" if n.get("vs_spy") is not None else "") + ")"
+                                             if n.get("pnl") is not None else ""))
     if r["deals"]:
         L.append(f"实盘成交 {len(r['deals'])} 笔" + (f",平仓 {len(r['round_trips'])} 笔:" + "; ".join(f"{x['ticker']} {x['ret_pct']:+.0f}%" for x in r["round_trips"]) if r["round_trips"] else ""))
     else:
@@ -475,7 +481,7 @@ def render_html(rep: dict) -> str:
                      f"<td>{esc(o['type'])}{(' ' + str(o['limit'])) if o['limit'] else ''}</td><td>{esc(o['status'])}</td>"
                      f"<td>{(f'{int(o['filled_qty'])} @ {o['fill_px']:.2f}') if o['filled_qty'] else '—'}</td><td>{(f'{o['model_px']:.2f}') if o['model_px'] else '—'}</td>"
                      f"<td>{pct(o['gap_pct'])}</td><td>{pct(o['day1_pct'])}</td><td class='muted'>{esc(o['reason'])} {tags(o['tags'])}</td></tr>" for o in po)
-    paper_orders = (f"<table><tr><th>书</th><th>标的</th><th>方向</th><th>单型</th><th>状态</th><th>成交</th><th>模型价(开盘)</th><th>偏差</th><th>首日</th><th>原因 / 标记</th></tr>{porows}</table>"
+    paper_orders = (f"<table><tr><th>书</th><th>标的</th><th>方向</th><th>单型</th><th>状态</th><th>成交</th><th>模型价(开盘)</th><th>对开盘偏差<br><span class='muted'>模拟器逐单撮合</span></th><th>首日</th><th>原因 / 标记</th></tr>{porows}</table>"
                     if po else "<p class='muted'>今日无订单</p>")
     pp = rep["paper"]["positions"]
     movers = [p for p in pp if p["day_ret"] is not None]
