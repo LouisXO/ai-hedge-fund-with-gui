@@ -18,5 +18,6 @@ if [ "${AGENT_EXEC:-off}" = "on" ]; then
 else
   $PY -W ignore -m agent.execute >> "$LOG" 2>&1 || echo "execute (dry) failed" >> "$LOG"
 fi
+$PY -W ignore -m agent.watch >> "$LOG" 2>&1 || echo "watchlist failed (non-fatal)" >> "$LOG"
 /Users/louis/.moomoo/venv/bin/python -W ignore /Users/louis/optradar/bin/account_snapshot.py --quiet >> "$LOG" 2>&1 || echo "account snapshot failed (non-fatal)" >> "$LOG"
 /Users/louis/.moomoo/venv/bin/python /Users/louis/optradar/bin/private_index.py >> "$LOG" 2>&1 || echo "private index failed (non-fatal)" >> "$LOG"

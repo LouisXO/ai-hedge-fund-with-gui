@@ -1,0 +1,17 @@
+# Names the user asked to be alerted on (agent/watch.py, run after the close from execute.sh).
+# Events checked every run: new SEC filings (any form listed), open-market insider buys/sells,
+# 13D, news headlines about the name, price crossing a level, a move >= 5% on the day.
+# Alerts go to the brief's ⑨ section, the private site, and a Mac notification.
+watch:
+  NEOV:
+    cik: "0001748137"
+    note: "年报 ≤ 9/28;12 月起每月还本;等 ① 年报 ② 内部人再买 ③ 稀释消化;$1.9–2.3 是有人真钱买过的区间"
+    forms: ["10-K", "10-Q", "8-K", "424B5", "424B3", "S-3", "S-3/A", "4", "SCHEDULE 13D", "SCHEDULE 13G"]
+    below: [2.5, 2.05]
+    above: [4.24]
+  RKLB:
+    cik: "0001819994"
+    note: "持有 40 股(零成本);Iridium 收购进行中(S-4 8/13、融资 9/15);ATM 在卖;内部人 12 个月卖 $6.4 亿"
+    forms: ["10-K", "10-Q", "8-K", "425", "S-4", "S-4/A", "DEFM14A", "424B5", "4", "SCHEDULE 13D"]
+    below: [60.0, 50.0]
+    above: [80.6, 100.0]

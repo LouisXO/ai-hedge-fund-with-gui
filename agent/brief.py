@@ -143,6 +143,20 @@ def narration_html(d: dict, live: dict) -> str:
             f"<span class='muted'>[{n.get('source', '')}]</span></p>")
 
 
+def watch_html() -> str:
+    """The user's watchlist (agent/watch.py): last close, today's alerts, fresh headlines."""
+    path = os.path.join(AGENT_OUT, "watch_latest.json")
+    if not os.path.exists(path):
+        return ""
+    w = json.load(open(path))
+    rows = []
+    for r in w.get("names", []):
+        al = "<br>".join(f"⚠ {a}" for a in r["alerts"]) or "<span class='muted'>无事件</span>"
+        hl = "<br>".join(f"· {h[:70]}" for h in r["headlines"][:3])
+        rows.append(f"<tr><td><b>{r['ticker']}</b><br><span class='muted'>{r['note'][:60]}</span></td><td>{r['last']}</td><td>{al}</td><td class='muted'>{hl}</td></tr>")
+    return (f"<h3>关注名单({w['date']})</h3><table><tr><th>标的</th><th>收盘</th><th>事件</th><th>新闻</th></tr>{''.join(rows)}</table>") if rows else ""
+
+
 def html(d: dict, live: dict) -> str:
     rows = []
     for p in [x for x in d["picks"] if x.get("instrument") != "stock"][:10]:
@@ -161,6 +175,7 @@ def html(d: dict, live: dict) -> str:
 {''.join(rows) or '<tr><td colspan="7">今日无期权候选</td></tr>'}</table>
 {_stock_rows(d)}
 {narration_html(d, live)}
+{watch_html()}
 {live.get('_long_html', '')}
 {live.get('_paper_html', '')}
 <ul class="muted">{score or '<li>还没有满 10 天的记录</li>'}
