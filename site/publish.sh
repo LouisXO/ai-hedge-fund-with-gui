@@ -18,6 +18,6 @@ fi
 git add site/public
 git commit -q -m "site: daily public signals $DATE"
 # another machine (or a manual push) may have moved the branch since the last run
-git pull -q --rebase origin v2-rebuild
+git pull -q --rebase --autostash origin v2-rebuild
 git push -q origin v2-rebuild
 echo "已推送 → Netlify 将自动部署"
