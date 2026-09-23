@@ -137,7 +137,8 @@ def main() -> int:
         for a in r["alerts"]:
             print("   -", a)
     if fired and not args.no_notify:
-        msg = "; ".join(f"{t}: {a[:60]}" for t, a in fired[:4])
+        import re as _re
+        msg = "; ".join(f"{t}: {_re.sub(r' https?://\S+', '', a)[:60]}" for t, a in fired[:4])
         tn = "/opt/homebrew/bin/terminal-notifier"                    # absolute: launchd's PATH lacks /opt/homebrew/bin
         if os.path.exists(tn):
             subprocess.run([tn, "-title", "关注名单", "-message", msg, "-open", "https://optradar.tail5b470b.ts.net/",

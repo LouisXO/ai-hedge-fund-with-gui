@@ -170,7 +170,12 @@ def watch_html() -> str:
     w = json.load(open(path))
     rows = []
     for r in w.get("names", []):
-        al = "<br>".join(f"⚠ {a}" for a in r["alerts"]) or "<span class='muted'>无事件</span>"
+        try:
+            import sys as _s; _s.path.insert(0, "/Users/louis/optradar/bin"); import site_theme as _t
+            al = "<br>".join(_t.alert_html(a) for a in r["alerts"])
+        except Exception:
+            al = "<br>".join(f"⚠ {a}" for a in r["alerts"])
+        al = al or "<span class='muted'>无事件</span>"
         hl = "<br>".join(f"· {h[:70]}" for h in r["headlines"][:3])
         rows.append(f"<tr><td><b>{r['ticker']}</b><br><span class='muted'>{r['note'][:60]}</span></td><td>{r['last']}</td><td>{al}</td>"
                     f"<td class='muted'>{hl}</td><td class='muted'>{r.get('retail', '')}</td></tr>")
