@@ -36,7 +36,7 @@ def spy_in_crash_regime(market: Market) -> pd.Series:
 
 
 def daily_scores(market: Market, fund: pd.DataFrame, start: str, end: str, groups: pd.Series | None = None,
-                 issuance: bool = False, momcrash: bool = False, every: int = 1) -> dict[pd.Timestamp, pd.Series]:
+                 issuance: bool = False, momcrash: bool = False, every: int = 1, norm: str = "winsor_z") -> dict[pd.Timestamp, pd.Series]:
     """day -> composite score (Series over the day's universe), with n_families >= 3."""
     days = market.adj.loc[start:end].index[::every]
     tradable = market.tradable(ADV_FLOOR, np.inf)
@@ -46,7 +46,7 @@ def daily_scores(market: Market, fund: pd.DataFrame, start: str, end: str, group
         ok = tradable.loc[d]
         universe = ok[ok].index
         fs = factor_scores(market, fund, d, universe, groups=groups, issuance=issuance,
-                           drop_momentum=bool(crash.get(d, False)) if momcrash else False)
+                           drop_momentum=bool(crash.get(d, False)) if momcrash else False, norm=norm)
         fs = fs[fs["n_families"] >= 3]
         out[d] = fs["composite"].dropna().sort_values(ascending=False)
     return out

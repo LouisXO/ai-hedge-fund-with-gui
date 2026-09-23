@@ -35,6 +35,7 @@ URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
 TAGS = {
     "us-gaap": ["NetIncomeLoss", "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",
                 "SalesRevenueNet", "GrossProfit", "CostOfRevenue", "CostOfGoodsAndServicesSold",
+                "CostOfGoodsSold", "CostOfServices",
                 "OperatingIncomeLoss", "NetCashProvidedByUsedInOperatingActivities", "Assets",
                 "StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
                 "LongTermDebtNoncurrent", "LongTermDebt", "CommonStockSharesOutstanding",

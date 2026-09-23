@@ -71,6 +71,16 @@ def fundamentals(store: PanelStore) -> pd.DataFrame | None:
     except Exception:
         return None
     df["filed"] = pd.to_datetime(df["filed"])
+    # shares_override: a few names report every share count per class (V, BRK.B, STZ, ERIE), which the
+    # XBRL feed cannot see; their current count from yfinance stands in (not point-in-time — a share
+    # count moves a few % a year, the price is what moves the ratio). Audit S28, 2026-09-22.
+    df.loc[df["shares"] <= 1000, "shares"] = np.nan             # 0 / 1 / negative counts are XBRL noise (FOX, HOOD, EL...)
+    try:
+        ov = store.con.execute("SELECT ticker, shares FROM shares_override").df().set_index("ticker")["shares"]
+        m = df["ticker"].map(ov)
+        df["shares"] = m.where(m.notna(), df["shares"])
+    except Exception:
+        pass
     return df
 
 

@@ -32,6 +32,8 @@ VARIANTS = {
     "issuance":   (30,   {"issuance": True},                       None,      None),
     "secneutral": (30,   {"groups": "ff12"},                       None,      None),
     "combo":      (50,   {"groups": "ff12"},                       "invvol",  None),
+    "rankz":      (30,   {"norm": "rank"},                         None,      None),   # rank-normal scores, no winsor pile-up
+    "rankz_momcrash": (30, {"norm": "rank", "momcrash": True},      None,      None),
 }
 
 

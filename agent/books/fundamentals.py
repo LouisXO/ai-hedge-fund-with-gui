@@ -28,6 +28,8 @@ FLOW_TAGS = {
     "rev": ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet"],
     "gp": ["GrossProfit"],
     "cogs": ["CostOfRevenue", "CostOfGoodsAndServicesSold"],
+    "cogs_g": ["CostOfGoodsSold"],          # companies that split goods and services (VZ, JNJ...): summed below
+    "cogs_s": ["CostOfServices"],
     "opinc": ["OperatingIncomeLoss"],
     "cfo": ["NetCashProvidedByUsedInOperatingActivities"],
 }
@@ -133,6 +135,13 @@ def build(store: PanelStore) -> pd.DataFrame:
             sw["filed"] = pd.to_datetime(sw["filed"])
             sw = sw[["cik", "period_end", "filed", "shares_w"]]
             inst = sw if inst is None else inst.merge(sw, on=["cik", "period_end", "filed"], how="outer")
+        if flows is not None and "cogs_ttm" in flows.columns and ("cogs_g_ttm" in flows.columns or "cogs_s_ttm" in flows.columns):
+            parts_sum = flows[[c for c in ("cogs_g_ttm", "cogs_s_ttm") if c in flows.columns]].sum(axis=1, min_count=1)
+            flows["cogs_ttm"] = flows["cogs_ttm"].fillna(parts_sum)
+        elif flows is not None and ("cogs_g_ttm" in flows.columns or "cogs_s_ttm" in flows.columns):
+            flows["cogs_ttm"] = flows[[c for c in ("cogs_g_ttm", "cogs_s_ttm") if c in flows.columns]].sum(axis=1, min_count=1)
+        if flows is not None:
+            flows = flows.drop(columns=[c for c in ("cogs_g_ttm", "cogs_s_ttm") if c in flows.columns])
         if flows is None and inst is None:
             continue
         df = flows if inst is None else (inst if flows is None else flows.merge(inst, on=["cik", "period_end", "filed"], how="outer"))

@@ -31,6 +31,20 @@ def _z(s: pd.Series) -> pd.Series:
     return (s - s.mean()) / (s.std() or np.nan)
 
 
+def _rank_z(s: pd.Series) -> pd.Series:
+    """Rank -> inverse-normal score (van der Waerden). Bounded, no pile-up at a winsor cap, and every
+    family gets the same scale, so a heavy-tailed family (momentum) cannot outvote a compressed one
+    (low vol). S24 variant `rankz`, pre-registered 2026-09-22 after the audit showed 26 names at the
+    momentum cap and low vol's z never above 1.03."""
+    from scipy.stats import norm
+    s = s.replace([np.inf, -np.inf], np.nan)
+    if s.notna().sum() < 20:
+        return s * np.nan
+    r = s.rank(method="average")
+    n = s.notna().sum()
+    return pd.Series(norm.ppf((r - 0.5) / n), index=s.index)
+
+
 def latest_before(fund: pd.DataFrame, day: pd.Timestamp, max_age_days: int = 200) -> pd.DataFrame:
     """Most recent fundamentals row per ticker filed on or before `day`, not stale."""
     f = fund[(fund["filed"] <= day) & (fund["filed"] >= day - pd.Timedelta(days=max_age_days))]
@@ -49,13 +63,17 @@ def _z_by_group(out: pd.DataFrame, groups: pd.Series, min_n: int = 15) -> pd.Dat
 
 
 def factor_scores(market: Market, fund: pd.DataFrame, day: pd.Timestamp, universe: pd.Index,
-                  groups: pd.Series | None = None, issuance: bool = False, drop_momentum: bool = False) -> pd.DataFrame:
+                  groups: pd.Series | None = None, issuance: bool = False, drop_momentum: bool = False,
+                  norm: str = "winsor_z", shares_override: pd.Series | None = None) -> pd.DataFrame:
     """v1 when called with defaults. S24 options: `groups` = sector-neutral z-scores; `issuance` adds
     net share issuance (lower is better) to the quality family; `drop_momentum` = momentum-crash
     filter (composite is the mean of the other three families that day)."""
     f = latest_before(fund, day).reindex(universe)
     raw_px = market.close.loc[day].reindex(universe)
-    mcap = raw_px * f["shares"]
+    shares = f["shares"]
+    if shares_override is not None:                      # names whose XBRL share count is missing/per-class (V, BRK.B)
+        shares = shares.fillna(shares_override.reindex(universe))
+    mcap = raw_px * shares
     # Ratios need sane denominators. Negative or near-zero equity turns ROE and B/M into
     # nonsense (a loss over negative equity is a large positive "ROE" — S16's quality book
     # was 60-80% such names), and tiny asset bases explode accruals and GP/A.
@@ -82,7 +100,8 @@ def factor_scores(market: Market, fund: pd.DataFrame, day: pd.Timestamp, univers
     out["mom"] = (hist.iloc[-22] / hist.iloc[-253] - 1).reindex(universe) if len(hist) > 253 else np.nan
     rets = np.log(hist.iloc[-253:] / hist.iloc[-253:].shift(1))
     out["lowvol"] = -rets.std().reindex(universe)
-    z = _z_by_group(out, groups) if groups is not None else out.apply(_z)
+    zfun = _rank_z if norm == "rank" else _z
+    z = _z_by_group(out, groups) if groups is not None else out.apply(zfun)
     qcols = ["gpa", "roe", "accruals", "asset_growth"] + (["issuance"] if issuance else [])
     fam = pd.DataFrame({"value": z[["bm", "ey"]].mean(axis=1),
                         "quality": z[qcols].mean(axis=1),

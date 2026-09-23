@@ -63,7 +63,8 @@ class Report:
 
 
 def audit_fundamentals(store, rep: Report):
-    f = store.con.execute("SELECT * FROM fundamentals_pit").df()
+    from agent.books.data import fundamentals
+    f = fundamentals(store)                                   # what the books actually see: sanity + shares_override applied
     latest = f.sort_values("filed").drop_duplicates("ticker", keep="last")
     n = len(latest)
     for col in ("rev_ttm", "ni_ttm", "cfo_ttm", "assets", "equity", "shares", "gp_ttm", "cogs_ttm"):

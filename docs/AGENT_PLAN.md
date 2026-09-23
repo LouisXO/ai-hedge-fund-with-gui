@@ -508,6 +508,13 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - **仍未修、已知**:毛利/成本只覆盖一半公司(金融、公用事业没有这个概念,质量族对它们用 ROE/应计/资产增速三项);V、BRK.B 等按类别报股数的公司被排除;银行没有季度 Revenues 标签(收入不进因子,无影响);动量 z 分在 99% 截尾处堆了 26 只(设计问题,S24 已记)。
 - 纪律:数据修正不是规则变更,v1 继续跑;但从今天起所有对外引用的回测数字以基本面 v2 为准,家族账本已重算。
 
+### S29(2026-09-22)— 审计收尾;排名归一化变体揭示长线 alpha 的真正来源
+- 补的三项:① 成本标签加 `CostOfGoodsSold`/`CostOfServices`(拆报的按期相加),重拉 3,460 家,毛利可得从 50% → 51%(剩下的多是金融/公用事业/航空/能源,用总成本口径没有毛利概念);② 股数:XBRL 里 ≤1000 的股数置空(FOX=1、HOOD=0、EL=−7.3 亿这类噪声,159 家),标普里 9 家按类别报股数的(V、BRK.B、STZ、ERIE、FOX、HOOD、CVNA、EL、DDOG)用 yfinance 当前股数做覆盖表 `shares_override`(非时点,已注明);③ 预注册变体 `rankz`:每个指标按排名换算正态分位(van der Waerden),四族同尺度、无截尾堆积。
+- 回测(基本面 v2 + 股数修正,2017–2026):**base alpha2 +8.1%(t 1.46)**,CAGR 19.4%;momcrash +9.7%(1.66);**rankz +0.5%(t 0.14)**,CAGR 8.4%,β 0.66,换手 3.9;rankz_momcrash +0.7%(0.21)。
+- **结论:v1 的 alpha 来自截尾 z 分的伪影。** 动量的 z 能到 4.77 而低波最高 1.03、质量 1.93,"四族等权平均"实际上是"动量顶格 + 其他随意"。把尺子统一以后,这本书就是一个普通的四因子混合,跑不赢 SPY。结合 S24 的行业中性结果,v1 的本质 = **极端 12 个月动量 + 行业押注**,价值/质量/低波是装饰。
+- 处置:v1 继续按原规则跑到复盘日(它是一个已经上线的预注册记录,中途改规则没有意义),但对它的描述从今天起改为"动量集中书"。rankz 不采用。Holm 预算 +2(→ 40)。**下一步的正确问题不是再调构建,而是:一个显式的"前 1% 12 个月动量"书是否比 v1 更好、更便宜、更可解释——那是一个新的预注册。**
+- 审计脚本改为读 `agent.books.data.fundamentals()`(与书看到的数据一致)。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
