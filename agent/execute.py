@@ -300,6 +300,7 @@ def main() -> int:
     ap.add_argument("--book", choices=list(BOOKS), default=None)
     ap.add_argument("--date", default=None, help="bar date to plan from (must be the last session)")
     ap.add_argument("--optradar-db", default=ledger.OPTRADAR_DB)
+    ap.add_argument("--out-dir", default=OUT_DIR, help="where exec_<date>.json goes (the selftest points this at a temp dir)")
     args = ap.parse_args()
 
     broker = broker_mod.from_env()
@@ -389,8 +390,8 @@ def main() -> int:
                "reconcile": msgs, "targets": targets_dbg, "books": nav,
                "orders": [{k: (str(v) if isinstance(v, (dt.date, pd.Timestamp)) else v) for k, v in o.items()} for o in sent],
                "skipped_duplicates": skipped, "generated_at": dt.datetime.now().isoformat(timespec="seconds")}
-    os.makedirs(OUT_DIR, exist_ok=True)
-    with open(os.path.join(OUT_DIR, f"exec_{day.date()}.json"), "w") as f:
+    os.makedirs(args.out_dir, exist_ok=True)
+    with open(os.path.join(args.out_dir, f"exec_{day.date()}.json"), "w") as f:
         json.dump(summary, f, indent=1, default=str)
     tag = "SUBMITTED" if args.submit else "DRY RUN"
     print(f"[{tag}] bar {day.date()} (last session {last_session}{', STALE — nothing planned' if stale else ''}) tif={tif} "

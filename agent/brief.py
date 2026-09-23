@@ -92,6 +92,23 @@ def _long_rows(d: dict, live_db) -> str:
             "回测(2017–2026,基本面 v2 数据)alpha2 +8.9%/年(t 1.57),多重检验校正后不显著,影子记录中。</p>")
 
 
+def _eval_progress(live_db) -> str:
+    """Distance to the pre-registered evaluation point per book (agent/config.yaml): no verdict before it."""
+    try:
+        import yaml
+        cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")))["evaluate_at"]
+        closed = dict(live_db.execute("SELECT book, count(*) FROM agent_lots WHERE status = 'closed' GROUP BY book").fetchall())
+        started = dict(live_db.execute("SELECT book, started FROM agent_books").fetchall())
+    except Exception:
+        return ""
+    parts = []
+    for book, e in cfg.items():
+        if not isinstance(e, dict):
+            continue
+        parts.append(f"{book} 平仓 {closed.get(book, 0)}/{e['n_closed_lots']}(或 {e['or_date']},开始 {started.get(book, '—')})")
+    return "评估点(预注册,之前不做判决):" + " · ".join(parts) if parts else ""
+
+
 def _paper_rows(live_db) -> str:
     """Alpaca paper account (agent/execute.py): per-book equity, fills of the last session, model-vs-paper gap."""
     try:
@@ -117,8 +134,10 @@ def _paper_rows(live_db) -> str:
     table = (f"<table><tr><th>书</th><th>标的</th><th>方向</th><th>股数</th><th>成交价</th><th>模型价(开盘)</th><th>偏差</th><th>原因</th></tr>{rows}</table>"
              if rows else "<p class='muted'>上一交易日无成交</p>")
     cost = f",平均执行成本 {gap[0]:+.2f}%/边({gap[1]} 笔)" if gap and gap[1] else ""
+    ev = _eval_progress(live_db)
     return (f"<h3>Alpaca 模拟盘({nav[0][4]})</h3><p>{head} · 挂单 {pend}{cost}</p>{table}"
-            "<p class='muted'>收盘后打分,次日开盘竞价成交(买:限价开盘单,卖:市价开盘单)。偏差 = 模拟成交价 vs 回测假设的开盘价。</p>")
+            "<p class='muted'>收盘后打分,次日开盘竞价成交(市价开盘单)。偏差 = 模拟成交价 vs 回测假设的开盘价。</p>"
+            + (f"<p class='muted'>{ev}</p>" if ev else ""))
 
 
 def narrator_input(d: dict, live: dict) -> dict:

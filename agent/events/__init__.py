@@ -1,3 +1,4 @@
+from agent.events.buyback import Buyback8K
 from agent.events.insider import InsiderBuys
 from agent.events.insider_v2 import InsiderV2
 from agent.events.move_news import MoveNews
@@ -8,4 +9,5 @@ LINES = {InsiderBuys.spec.name: InsiderBuys(), Schedule13D.spec.name: Schedule13
          PeadSmall.spec.name: PeadSmall(), "pead_small_sue1": PeadSmall(sue_min=1.0),
          "move_nonews_down": MoveNews("nonews_down"), "move_news_up": MoveNews("news_up"),
          "move_nonews_up": MoveNews("nonews_up"), "move_news_down": MoveNews("news_down"),
+         "buyback_clean": Buyback8K("clean"), "buyback_all": Buyback8K("all"),
          **{f"insider_{v}": InsiderV2(v) for v in ("opp", "officer", "ceo", "contrarian", "opp_ceo")}}

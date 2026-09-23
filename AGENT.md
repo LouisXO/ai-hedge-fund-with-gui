@@ -41,7 +41,7 @@
 |---|---|---|
 | 周一到周五 06:00 | `com.louis.agent.form4` | EDGAR 每日索引 → `insider_tx` |
 | 周一到周五 08:41 | `com.louis.optradar` | 期权雷达 + 早报(含 ⑨ agent 节)+ Mac 通知 + 私有站重建 |
-| 周一到周五 12:45 | `com.louis.agent.chain` | moomoo 期权链归档 |
+| 周一到周五 12:45 | `com.louis.agent.chain` | moomoo 期权链归档。**2026-09-23 决定停用**(Alpaca 期权日线已替代;只攒到 12 名 3 天)。停用命令见 §6;plist 源文件留在 `agent/launchd/` |
 | 周一到周五 13:15 | `com.louis.agent.news` | AV 新闻情绪 |
 | 周一到周五 16:10 | `com.louis.agent.execute` | `agent/bin/execute.sh`:实时 Form 4(EFTS)→ 13D → Alpaca 新闻 → **`agent.execute --submit`**(仅 `AGENT_EXEC=on`)→ `agent.watch` 关注名单 → moomoo 账户快照 → 私有站 |
 | 周六 09:30 | `com.louis.optradar.weekly` | 周报 |
@@ -62,6 +62,8 @@
 - 唯一 Holm 显著的信号是**负面**的:S25 "大涨日 + 新闻"后续跑输。S32 看跌期权流也是负面因子。这两个列入待预注册的负面过滤器。
 - 模拟器成交按开盘后第一个卖一,不是开盘印,小盘股偏贵约 0.6%。`agent_orders.model_px` 记当天开盘价,差值就是要测的东西。S27 工具在 ≥ 20 次竞价成交后跑。
 - 模拟盘保真缺口:whole shares 让 $2k 槽位在高价股上欠配;EDGAR 每日索引 16:40 ET 后才出,所以实时线用 EFTS。
+- **评估点已预注册**(`agent/config.yaml`,2026-09-23):长线 100 笔平仓或 2027-06-30,内部人 200 笔平仓或 2027-06-30,先到为准。之前不对任何一本书下判决;早报模拟盘一节显示进度。
+- 否定过的线(不要再提议):13D 举牌(S21)、小盘 PEAD(S22)、大动 ± 新闻四格(S25)、8-K 回购公告(S34)、异常期权流做多(S32)。负面信号做入场否决的结果见 S33。
 
 ## 5. 目录地图
 
@@ -78,8 +80,9 @@ agent/
   books/                engine、factors、fundamentals、data、long_v2、live、momentum_book、industry
   events/               事件线框架:insider、insider_v2、sch13d、pead、move_news
   sources/              alpaca_bars/news/options、sec_xbrl/sic/13d/daily_form4、retail_heat
-  s2x_*.py              预注册实验脚本(S21 13D、S24 长线变体、S26 期权门、S27 执行成本、S30 动量书、S31 入场时机、S32 期权流)
-  tests/                pytest,40 个通过
+  s2x_*.py / s3x_*.py   预注册实验脚本(S21 13D、S24 长线变体、S26 期权门、S27 执行成本、S30 动量书、S31 入场时机、S32 期权流、S33 负面否决、S34 回购线)
+  config.yaml           预注册的评估点(evaluate_at)
+  tests/                pytest 40 个;`tests/selftest_agent.sh` 隔离全链路冒烟(复制账本、dry run、早报),不碰真实账本和 out/
 hedge_fund/validation/  family_log(Holm 账本)、stats(NW t、bootstrap、置换)
 site-data/validation/   每个实验的 .md/.json 报告 + family_log.md/.jsonl
 docs/AGENT_PLAN.md      计划 + §9 执行记录(S1–S32)+ §10 待办
@@ -89,8 +92,12 @@ docs/notes/<TICKER>.md  个股分析结论(NEOV、RKLB、IONQ…),下次问到�
 ## 6. 常用命令
 
 ```bash
-# 测试
+# 测试(单测 + 隔离冒烟;冒烟要 Alpaca 模拟盘 key 可读,约 1 分钟)
 PYTHONPATH=. ~/.hedgefund-venv/bin/python -m pytest -q agent/tests
+./agent/tests/selftest_agent.sh
+# 停用 / 恢复期权链归档任务(用户自己在终端跑;agent 无权改 launchd)
+launchctl bootout gui/$(id -u)/com.louis.agent.chain && mv ~/Library/LaunchAgents/com.louis.agent.chain.plist{,.disabled}
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.louis.agent.chain.plist   # 恢复(先把 .disabled 改回来)
 # 模拟盘 dry run / 真发(只在 AGENT_EXEC=on 时发)
 PYTHONPATH=. ~/.hedgefund-venv/bin/python -W ignore -m agent.execute [--submit]
 # 关注名单

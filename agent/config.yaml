@@ -1,0 +1,14 @@
+# Pre-registered evaluation points for the paper books (docs/AGENT_PLAN.md §5.6; written 2026-09-23,
+# two sessions into the paper record, before any book had a closed lot).
+#
+# Rule: no verdict on a book — keep, change, retire — before its evaluation point, whichever comes
+# first. Until then the brief shows progress only (closed lots / target, days / target). A change to
+# these numbers is a new pre-registration and must be dated here.
+evaluate_at:
+  long:
+    n_closed_lots: 100        # ~ three full turns of the 30-slot book at a 38-session median hold
+    or_date: 2027-06-30
+  insider:
+    n_closed_lots: 200        # the backtest's per-trade sd is ~8%; 200 trades give a 1.1% standard error on the mean
+    or_date: 2027-06-30
+  metric: "alpha2 (SPY + size) of the paper NAV vs the same-window backtest; execution gap = mean fill vs model open"
