@@ -48,6 +48,13 @@ def esc(x) -> str:
     return html.escape("" if x is None else str(x))
 
 
+def news_link(h) -> str:
+    if isinstance(h, str):
+        return esc(h[:80])
+    t = esc(h.get("zh") or h.get("en", ""))
+    return f"<a href='{esc(h['url'])}' target='_blank' rel='noopener'>{t} ↗</a>" if h.get("url") else t
+
+
 def pct(x, nd=2) -> str:
     if x is None or (isinstance(x, float) and np.isnan(x)):
         return "—"
@@ -124,21 +131,26 @@ def range_pos(px: float, ctx: dict) -> float | None:
     return (px - ctx["low"]) / (ctx["high"] - ctx["low"]) * 100
 
 
-def headlines(symbols: list[str], day: dt.date) -> dict[str, list[str]]:
+def headlines(symbols: list[str], day: dt.date) -> dict[str, list[dict]]:
     out: dict[str, list[str]] = {}
     if not symbols:
         return out
     try:
         n = duckdb.connect(str(NEWS_DB), read_only=True)
-        rows = n.execute(f"""SELECT s.symbol, i.headline FROM news_symbols s JOIN news_items i USING (id)
+        rows = n.execute(f"""SELECT s.symbol, i.headline, i.url FROM news_symbols s JOIN news_items i USING (id)
                              WHERE s.symbol IN ({','.join('?' * len(symbols))}) AND i.n_symbols <= 3
                                AND i.created_at >= ? AND i.created_at < ? ORDER BY i.created_at DESC""",
                        list(symbols) + [pd.Timestamp(day) - pd.Timedelta(hours=8), pd.Timestamp(day) + pd.Timedelta(hours=24)]).fetchall()
         n.close()
-        for s, h in rows:
+        for s, h, u in rows:
             out.setdefault(s, [])
             if len(out[s]) < 3:
-                out[s].append(h)
+                out[s].append({"en": h, "url": u})
+        from agent.translate import translate
+        zh = translate([h["en"] for v in out.values() for h in v])
+        for v in out.values():
+            for h in v:
+                h["zh"] = zh.get(h["en"], h["en"])
     except Exception:
         pass
     return out
@@ -477,7 +489,7 @@ def render_html(rep: dict) -> str:
     movers = [p for p in pp if p["day_ret"] is not None]
     show = movers[:4] + movers[-4:] if len(movers) > 8 else movers
     prows = "".join(f"<tr><td>{esc(p['book'])}</td><td><b>{esc(p['ticker'])}</b></td><td>{pct(p['day_ret'])}</td><td>{pct(p['abn'])}</td><td>{pct(p['since_entry'])}</td>"
-                    f"<td>{esc(p['entry_day'])}</td><td class='muted'>{tags(p['tags'])} {'<br>'.join(esc(h[:70]) for h in p['news'][:2])}</td></tr>" for p in show)
+                    f"<td>{esc(p['entry_day'])}</td><td class='muted'>{tags(p['tags'])} {'<br>'.join(news_link(h) for h in p['news'][:2])}</td></tr>" for p in show)
     paper_pos = (f"<p class='muted'>{len(pp)} 个持仓;下面是当日涨跌最大的 {len(show)} 个。</p><table><tr><th>书</th><th>标的</th><th>当日</th><th>超额</th><th>入场以来</th><th>入场日</th><th>标记 / 新闻</th></tr>{prows}</table>"
                  if pp else "<p class='muted'>无持仓</p>")
 

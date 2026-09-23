@@ -80,6 +80,12 @@ def check(name: str, cfg: dict, store: PanelStore, state: dict, ua: str) -> dict
     st = state.setdefault(name, {})
     filings, newest = sec_filings(cfg["cik"], ua, st.get("last_acc"), cfg.get("forms", []))
     st["last_acc"] = newest
+    today = dt.date.today().isoformat()
+    if st.get("today") != today:                         # filings announced today stay on today's page across reruns
+        st["today"], st["today_filings"] = today, []
+    known = {f["url"] for f in st["today_filings"]}
+    st["today_filings"] += [f for f in filings if f["url"] not in known]
+    filings = st["today_filings"]
     for f in filings:
         alerts.append(f"申报 {f['form']} {f['date']} {f['url']}")
     # insiders / 13D
@@ -92,7 +98,7 @@ def check(name: str, cfg: dict, store: PanelStore, state: dict, ua: str) -> dict
     headlines = []
     try:
         n = duckdb.connect(str(NEWS_DB), read_only=True)
-        headlines = [h for (h,) in n.execute("""SELECT i.headline FROM news_symbols s JOIN news_items i USING (id)
+        headlines = [{"en": h, "url": u, "at": str(t)[:16]} for h, u, t in n.execute("""SELECT i.headline, i.url, i.created_at FROM news_symbols s JOIN news_items i USING (id)
                                                 WHERE s.symbol = ? AND i.n_symbols <= 3 AND i.created_at >= now() - INTERVAL 1 DAY
                                                 ORDER BY i.created_at DESC LIMIT 5""", [name]).fetchall()]
         n.close()
@@ -122,6 +128,14 @@ def main() -> int:
                 r["alerts"].append(f"散户热度 {a['mentions_24h_ago']} → {a['mentions']} 提及/24h")
     except Exception as exc:
         print(f"retail heat skipped: {exc}")
+    try:                                                  # display-only Chinese headlines (agent/translate.py, cached)
+        from agent.translate import translate
+        zh = translate([h["en"] for r in results for h in r["headlines"]])
+        for r in results:
+            for h in r["headlines"]:
+                h["zh"] = zh.get(h["en"], h["en"])
+    except Exception as exc:
+        print(f"translation skipped: {exc}")
     os.makedirs(AGENT_DIR, exist_ok=True)
     with open(STATE, "w") as f:
         json.dump(state, f)

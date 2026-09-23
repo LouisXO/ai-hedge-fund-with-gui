@@ -168,18 +168,14 @@ def watch_html() -> str:
     if not os.path.exists(path):
         return ""
     w = json.load(open(path))
-    rows = []
-    for r in w.get("names", []):
-        try:
-            import sys as _s; _s.path.insert(0, "/Users/louis/optradar/bin"); import site_theme as _t
-            al = "<br>".join(_t.alert_html(a) for a in r["alerts"])
-        except Exception:
-            al = "<br>".join(f"⚠ {a}" for a in r["alerts"])
-        al = al or "<span class='muted'>无事件</span>"
-        hl = "<br>".join(f"· {h[:70]}" for h in r["headlines"][:3])
-        rows.append(f"<tr><td><b>{r['ticker']}</b><br><span class='muted'>{r['note'][:60]}</span></td><td>{r['last']}</td><td>{al}</td>"
-                    f"<td class='muted'>{hl}</td><td class='muted'>{r.get('retail', '')}</td></tr>")
-    return (f"<h3>关注名单({w['date']})</h3><table><tr><th>标的</th><th>收盘</th><th>事件</th><th>新闻</th><th>散户热度</th></tr>{''.join(rows)}</table>") if rows else ""
+    try:
+        import sys as _s
+        _s.path.insert(0, "/Users/louis/optradar/bin")
+        import site_theme as _t
+        body = _t.watch_cards(w)
+    except Exception:
+        body = ""
+    return f"<h3>关注名单({w['date']})</h3>{body}" if body else ""
 
 
 def html(d: dict, live: dict) -> str:
