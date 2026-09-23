@@ -20,4 +20,5 @@ else
 fi
 $PY -W ignore -m agent.watch >> "$LOG" 2>&1 || echo "watchlist failed (non-fatal)" >> "$LOG"
 /Users/louis/.moomoo/venv/bin/python -W ignore /Users/louis/optradar/bin/account_snapshot.py --quiet >> "$LOG" 2>&1 || echo "account snapshot failed (non-fatal)" >> "$LOG"
+$PY -W ignore -m agent.review >> "$LOG" 2>&1 || echo "review failed (non-fatal)" >> "$LOG"      # 今日复盘:模拟盘 + 实盘每笔交易 + 规则检查 + 通知
 /Users/louis/.moomoo/venv/bin/python /Users/louis/optradar/bin/private_index.py >> "$LOG" 2>&1 || echo "private index failed (non-fatal)" >> "$LOG"

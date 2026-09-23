@@ -43,7 +43,7 @@
 | 周一到周五 08:41 | `com.louis.optradar` | 期权雷达 + 早报(含 ⑨ agent 节)+ Mac 通知 + 私有站重建 |
 | 周一到周五 12:45 | `com.louis.agent.chain` | moomoo 期权链归档。**2026-09-23 决定停用**(Alpaca 期权日线已替代;只攒到 12 名 3 天)。停用命令见 §6;plist 源文件留在 `agent/launchd/` |
 | 周一到周五 13:15 | `com.louis.agent.news` | AV 新闻情绪 |
-| 周一到周五 16:10 | `com.louis.agent.execute` | `agent/bin/execute.sh`:实时 Form 4(EFTS)→ 13D → Alpaca 新闻 → **`agent.execute --submit`**(仅 `AGENT_EXEC=on`)→ `agent.watch` 关注名单 → moomoo 账户快照 → 私有站 |
+| 周一到周五 16:10 | `com.louis.agent.execute` | `agent/bin/execute.sh`:实时 Form 4(EFTS)→ 13D → Alpaca 新闻 → **`agent.execute --submit`**(仅 `AGENT_EXEC=on`)→ `agent.watch` 关注名单 → moomoo 账户快照 → **`agent.review` 今日复盘**(模拟盘 + 实盘每笔交易、规则检查、30 日教训计数、通知)→ 私有站 |
 | 周六 09:30 | `com.louis.optradar.weekly` | 周报 |
 | 周日 03:00 | `com.louis.agent.fundamentals` | XBRL 基本面周更 + 七层数据审计(`agent/audit.py`) |
 
@@ -75,6 +75,8 @@ agent/
   bin/execute.sh        16:10 任务
   daily.py / brief.py   早报 ⑨ 节(模拟盘、关注名单、叙述)
   watch.py + watchlist.yaml   关注名单:申报/内部人/13D/新闻/价位/散户热度 → 通知
+  review.py             今日复盘(收盘后):模拟盘订单逐笔(成交/偏差/首日)、持仓异动、实盘成交逐笔(区间位置、期权结构、系统怎么看、FIFO 平仓收益)、
+                        规则检查(S12/S25/S26/S31/S33 来源)→ out/agent/review_<date>.html + lessons.jsonl(30 日同错计数)。无 LLM,只做对照,永不下单
   narrator.py           密封叙述者(数字校验,模板回退,缓存)
   audit.py              七层数据审计(周日跑)
   books/                engine、factors、fundamentals、data、long_v2、live、momentum_book、industry
