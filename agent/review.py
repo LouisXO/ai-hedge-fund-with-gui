@@ -20,6 +20,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 
 import duckdb
 import numpy as np
@@ -38,19 +39,8 @@ LESSONS = os.path.join(OUT_DIR, "lessons.jsonl")
 OPT_CODE = re.compile(r"^US\.([A-Z.]+?)(\d{6})([CP])(\d+)$")
 BIG_SIGMA, BIG_ABS, SD_WIN, VETO_WIN = 3.0, 5.0, 60, 5
 
-CSS = """
-:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--tx:#e6e8ec;--dim:#9aa3b2;--bull:#3fb950;--bear:#f85149;--warn:#d29922;--acc:#58a6ff}
-*{box-sizing:border-box}body{margin:0 auto;background:var(--bg);color:var(--tx);max-width:980px;padding:26px 18px 70px;font:14px/1.55 -apple-system,BlinkMacSystemFont,'PingFang SC','Segoe UI',sans-serif}
-h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:30px 0 10px;display:flex;align-items:center;gap:8px}
-h2::before{content:"";width:3px;height:16px;background:var(--acc);border-radius:2px}h3{font-size:14px;margin:18px 0 6px;color:var(--dim)}
-a{color:var(--acc);text-decoration:none}.muted{color:var(--dim);font-size:12px}
-table{border-collapse:collapse;width:100%;font-size:13px;margin:6px 0}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--dim);font-weight:500;font-size:12px}.pos{color:var(--bull)}.neg{color:var(--bear)}.warn{color:var(--warn)}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
-.card .k{color:var(--dim);font-size:12px}.card .v{font-size:20px;font-weight:600}.card .s{font-size:12px;color:var(--dim)}
-.flag{display:inline-block;border:1px solid var(--warn);color:var(--warn);border-radius:6px;padding:0 6px;font-size:12px;margin:1px 2px 1px 0}
-.ok{border-color:var(--bull);color:var(--bull)}ul{margin:4px 0;padding-left:20px}
-"""
+sys.path.insert(0, "/Users/louis/optradar/bin")
+import site_theme  # noqa: E402
 
 
 # ------------------------------------------------------------------ helpers ----
@@ -481,7 +471,7 @@ def render_html(rep: dict) -> str:
                      f"<td>{esc(o['type'])}{(' ' + str(o['limit'])) if o['limit'] else ''}</td><td>{esc(o['status'])}</td>"
                      f"<td>{(f'{int(o['filled_qty'])} @ {o['fill_px']:.2f}') if o['filled_qty'] else '—'}</td><td>{(f'{o['model_px']:.2f}') if o['model_px'] else '—'}</td>"
                      f"<td>{pct(o['gap_pct'])}</td><td>{pct(o['day1_pct'])}</td><td class='muted'>{esc(o['reason'])} {tags(o['tags'])}</td></tr>" for o in po)
-    paper_orders = (f"<table><tr><th>书</th><th>标的</th><th>方向</th><th>单型</th><th>状态</th><th>成交</th><th>模型价(开盘)</th><th>对开盘偏差<br><span class='muted'>模拟器逐单撮合</span></th><th>首日</th><th>原因 / 标记</th></tr>{porows}</table>"
+    paper_orders = (f"<div class='tbl'><table><tr><th>书</th><th>标的</th><th>方向</th><th>单型</th><th>状态</th><th>成交</th><th>模型价(开盘)</th><th>对开盘偏差<br><span class='muted'>模拟器逐单撮合</span></th><th>首日</th><th>原因 / 标记</th></tr>{porows}</table>"
                     if po else "<p class='muted'>今日无订单</p>")
     pp = rep["paper"]["positions"]
     movers = [p for p in pp if p["day_ret"] is not None]
@@ -516,9 +506,8 @@ def render_html(rep: dict) -> str:
                     f"{(' · 30 日内第 ' + str(rep['lessons_30d'].get(f['rule'], 1)) + ' 次') if not f.get('info') else ''}{'</span>' if f.get('info') else ''}</li>" for f in flags)
     lessons = "".join(f"<tr><td>{esc(RULE_NAMES.get(k, k))}</td><td>{v}</td></tr>" for k, v in sorted(rep["lessons_30d"].items(), key=lambda kv: -kv[1]))
     summary = "".join(f"<li>{esc(s)}</li>" for s in rep["summary"])
-    return f"""<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>复盘 {d}</title><style>{CSS}</style></head><body>
-<h1>今日复盘 · {d}</h1><p class='muted'>生成 {esc(rep['generated_at'])} · 收盘后自动生成,只在内网 · <a href='/'>返回首页</a></p>
+    return site_theme.head(f"复盘 {d}") + site_theme.nav("review", date=d, when=rep["generated_at"][5:16].replace("T", " ")) + f"""
+<h1>今日复盘 · {d}</h1><p class='muted'>收盘后自动生成,只在内网</p>
 {cards}
 <h2>一句话</h2><ul>{summary}</ul>
 <h2>规则检查</h2>{('<ul>' + frows + '</ul>') if frows else "<p class='muted'>没有触发任何规则</p>"}
@@ -528,7 +517,7 @@ def render_html(rep: dict) -> str:
 <h2>实盘:持仓</h2>{real_pos}
 <h2>30 日教训计数</h2>{('<table><tr><th>规则</th><th>次数</th></tr>' + lessons + '</table>') if lessons else "<p class='muted'>30 日内没有触发过规则</p>"}
 <p class='muted'>规则来源:S12/S13(价差)、S25(大动后跑输)、S26(期权买方无验证入场)、S31(内部人开盘入场)、S33(否决检验)。实盘部分只是对照,永远不下单。</p>
-</body></html>"""
+""" + site_theme.FOOT
 
 
 # ------------------------------------------------------------------ main ----

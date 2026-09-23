@@ -34,6 +34,7 @@
 | DuckDB 锁 | 读写连接独占文件。**同一时刻只能有一个进程写某个库**;分析脚本用 `read_only=True`。两个 session 同时跑回测会互相卡死 |
 | 输出 | `~/optradar/out/agent/`:`exec_<date>.json/.html`、`watch_<date>.json`、`execute.log`;早报 `~/optradar/out/<date>.html` |
 | Python 3.10 陷阱 | optradar 侧 f-string 里不能嵌套同种引号 |
+| 页面样式 | 一份主题 `~/optradar/bin/theme.css` + `bin/site_theme.py`(head/nav/FOOT),所有私有页面(首页、早报、复盘、执行记录、仪表盘)内联同一份;改样式只改这两个文件。图表用 Chart.js 4.4.1(cdnjs),系列色固定:蓝=长线、橙=内部人、青=实盘、灰虚线=SPY |
 
 ## 3. 定时任务(launchd,本机时间 PT)
 
@@ -43,7 +44,7 @@
 | 周一到周五 08:41 | `com.louis.optradar` | 期权雷达 + 早报(含 ⑨ agent 节)+ Mac 通知 + 私有站重建 |
 | 周一到周五 12:45 | `com.louis.agent.chain` | moomoo 期权链归档。**2026-09-23 决定停用**(Alpaca 期权日线已替代;只攒到 12 名 3 天)。停用命令见 §6;plist 源文件留在 `agent/launchd/` |
 | 周一到周五 13:15 | `com.louis.agent.news` | AV 新闻情绪 |
-| 周一到周五 13:25 | `com.louis.agent.postclose` | `agent/bin/postclose.sh`(收盘后 25 分钟):`agent.execute --sync-only`(当日 bars、成交同步、对账、记净值,不下单)→ moomoo 账户快照 → `agent.watch` → **`agent.review` 今日复盘**(模拟盘 + 实盘每笔交易、规则检查、30 日教训计数、通知)→ 私有站 |
+| 周一到周五 13:25 | `com.louis.agent.postclose` | `agent/bin/postclose.sh`(收盘后 25 分钟):`agent.execute --sync-only`(当日 bars、成交同步、对账、记净值,不下单)→ moomoo 账户快照 → `agent.watch` → **`agent.review` 今日复盘**(模拟盘 + 实盘每笔交易、规则检查、30 日教训计数、通知)→ `agent.dashboard` → 私有站 |
 | 周一到周五 16:10 | `com.louis.agent.execute` | `agent/bin/execute.sh`:实时 Form 4(EFTS)→ 13D → Alpaca 新闻 → **`agent.execute --submit`**(仅 `AGENT_EXEC=on`)→ `agent.watch`(晚间申报)→ 私有站。留在 16:10 是因为 OPG 窗口 19:00 ET 才开,且当天 Form 4 多在 16:00–18:00 ET 提交 |
 | 周六 09:30 | `com.louis.optradar.weekly` | 周报 |
 | 周日 03:00 | `com.louis.agent.fundamentals` | XBRL 基本面周更 + 七层数据审计(`agent/audit.py`) |
@@ -76,6 +77,7 @@ agent/
   bin/execute.sh        16:10 任务
   daily.py / brief.py   早报 ⑨ 节(模拟盘、关注名单、叙述)
   watch.py + watchlist.yaml   关注名单:申报/内部人/13D/新闻/价位/散户热度 → 通知
+  dashboard.py          仪表盘 out/dashboard.html(Chart.js,可悬停):模拟盘净值 vs SPY、每笔成交偏差、当日持仓、实盘月度、回测按年、教训计数;数据 out/dashboard_data.json
   review.py             今日复盘(收盘后):模拟盘订单逐笔(成交/偏差/首日)、持仓异动、实盘成交逐笔(区间位置、期权结构、系统怎么看、FIFO 平仓收益)、
                         规则检查(S12/S25/S26/S31/S33 来源)→ out/agent/review_<date>.html + lessons.jsonl(30 日同错计数)。无 LLM,只做对照,永不下单
   narrator.py           密封叙述者(数字校验,模板回退,缓存)

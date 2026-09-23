@@ -19,4 +19,5 @@ else
   $PY -W ignore -m agent.execute >> "$LOG" 2>&1 || echo "execute (dry) failed" >> "$LOG"
 fi
 $PY -W ignore -m agent.watch >> "$LOG" 2>&1 || echo "watchlist failed (non-fatal)" >> "$LOG"
+$PY -W ignore -m agent.dashboard >> "$LOG" 2>&1 || echo "dashboard failed (non-fatal)" >> "$LOG"
 /Users/louis/.moomoo/venv/bin/python /Users/louis/optradar/bin/private_index.py >> "$LOG" 2>&1 || echo "private index failed (non-fatal)" >> "$LOG"
