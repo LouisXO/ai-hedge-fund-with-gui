@@ -1,0 +1,299 @@
+{
+ "n_events": 21463,
+ "params": {
+  "ratio": 3.0,
+  "share": 0.7,
+  "start": "2024-02-01",
+  "end": "2026-08-31"
+ },
+ "stats": {
+  "bullish_same_day": {
+   "label": "bullish same day (not tradable)",
+   "horizon": 1,
+   "n_events": 9440,
+   "n_dates": 641,
+   "mean_abn_pct": 0.38418631859866587,
+   "median_abn_pct": 0.3899914969536844,
+   "mean_raw_pct": 0.461081576289575,
+   "t_nw": 6.722834120453296,
+   "boot_ci95": [
+    0.26410818524869534,
+    0.5010288942695595
+   ],
+   "hit_rate": 0.6552262090483619,
+   "share_years_positive": 1.0,
+   "first_half": 0.30623086306033354,
+   "second_half": 0.4618989222505859
+  },
+  "bullish_h1": {
+   "label": "bullish h1",
+   "horizon": 1,
+   "n_events": 9438,
+   "n_dates": 641,
+   "mean_abn_pct": 0.04487905626969201,
+   "median_abn_pct": 0.010206092081185836,
+   "mean_raw_pct": 0.04487905626969201,
+   "t_nw": 1.2183280977225033,
+   "boot_ci95": [
+    -0.024677303781419135,
+    0.12036486495123959
+   ],
+   "hit_rate": 0.5023400936037441,
+   "share_years_positive": 0.6666666666666666,
+   "first_half": 0.004047822932861658,
+   "second_half": 0.08558308950266931
+  },
+  "bullish_h5": {
+   "label": "bullish h5",
+   "horizon": 5,
+   "n_events": 9433,
+   "n_dates": 641,
+   "mean_abn_pct": 0.09956318565457233,
+   "median_abn_pct": -0.03765515910467521,
+   "mean_raw_pct": 0.40556497276947867,
+   "t_nw": 1.034378719698704,
+   "boot_ci95": [
+    -0.12665182424773777,
+    0.33716384583229736
+   ],
+   "hit_rate": 0.49297971918876754,
+   "share_years_positive": 1.0,
+   "first_half": 0.09504680935747073,
+   "second_half": 0.10406549224358325
+  },
+  "bullish_h10": {
+   "label": "bullish h10",
+   "horizon": 10,
+   "n_events": 9427,
+   "n_dates": 641,
+   "mean_abn_pct": 0.027095040572890257,
+   "median_abn_pct": -0.04986254770067733,
+   "mean_raw_pct": 0.6983876923527743,
+   "t_nw": 0.1760393675751486,
+   "boot_ci95": [
+    -0.4008407258435441,
+    0.46729242737918364
+   ],
+   "hit_rate": 0.49297971918876754,
+   "share_years_positive": 0.6666666666666666,
+   "first_half": 0.12197114146203006,
+   "second_half": -0.0674854961390248
+  },
+  "bullish_h20": {
+   "label": "bullish h20",
+   "horizon": 20,
+   "n_events": 9399,
+   "n_dates": 636,
+   "mean_abn_pct": -0.1598838640693473,
+   "median_abn_pct": -0.13234990074381758,
+   "mean_raw_pct": 1.2426912409467652,
+   "t_nw": -0.6571745680033096,
+   "boot_ci95": [
+    -0.8663289684569282,
+    0.5664901591641233
+   ],
+   "hit_rate": 0.48742138364779874,
+   "share_years_positive": 0.0,
+   "first_half": 0.021278107128790236,
+   "second_half": -0.34104583526748483
+  },
+  "bearish_same_day": {
+   "label": "bearish same day (not tradable)",
+   "horizon": 1,
+   "n_events": 5358,
+   "n_dates": 632,
+   "mean_abn_pct": -0.47410345657978703,
+   "median_abn_pct": -0.40614749871065725,
+   "mean_raw_pct": -0.39788553156160034,
+   "t_nw": -8.07312850741553,
+   "boot_ci95": [
+    -0.5880708069514354,
+    -0.3559489560295417
+   ],
+   "hit_rate": 0.36075949367088606,
+   "share_years_positive": 0.0,
+   "first_half": -0.44933840119291907,
+   "second_half": -0.498868511966655
+  },
+  "bearish_h1": {
+   "label": "bearish h1",
+   "horizon": 1,
+   "n_events": 5357,
+   "n_dates": 632,
+   "mean_abn_pct": -0.04855573925207998,
+   "median_abn_pct": -0.025513505324575858,
+   "mean_raw_pct": -0.04855573925207998,
+   "t_nw": -1.0344773384597172,
+   "boot_ci95": [
+    -0.1418798837003061,
+    0.03866932757388291
+   ],
+   "hit_rate": 0.495253164556962,
+   "share_years_positive": 0.0,
+   "first_half": -0.055410868255328156,
+   "second_half": -0.04170061024883181
+  },
+  "bearish_h5": {
+   "label": "bearish h5",
+   "horizon": 5,
+   "n_events": 5353,
+   "n_dates": 632,
+   "mean_abn_pct": -0.16294795115284474,
+   "median_abn_pct": -0.0381094106497058,
+   "mean_raw_pct": 0.14738720856552645,
+   "t_nw": -1.5025776285461994,
+   "boot_ci95": [
+    -0.42682550970965716,
+    0.08755734490131997
+   ],
+   "hit_rate": 0.48417721518987344,
+   "share_years_positive": 0.0,
+   "first_half": -0.07618594458218143,
+   "second_half": -0.24970995772350804
+  },
+  "bearish_h10": {
+   "label": "bearish h10",
+   "horizon": 10,
+   "n_events": 5351,
+   "n_dates": 632,
+   "mean_abn_pct": -0.40998054091709796,
+   "median_abn_pct": -0.38390177928634106,
+   "mean_raw_pct": 0.26976596462672797,
+   "t_nw": -2.2843544437630703,
+   "boot_ci95": [
+    -0.841384244791973,
+    0.01129629790259144
+   ],
+   "hit_rate": 0.44462025316455694,
+   "share_years_positive": 0.0,
+   "first_half": -0.21921905642330344,
+   "second_half": -0.6007420254108925
+  },
+  "bearish_h20": {
+   "label": "bearish h20",
+   "horizon": 20,
+   "n_events": 5327,
+   "n_dates": 628,
+   "mean_abn_pct": -0.6234743533119214,
+   "median_abn_pct": -0.8591021042176277,
+   "mean_raw_pct": 0.7838177388416376,
+   "t_nw": -2.1357460856621096,
+   "boot_ci95": [
+    -1.3474075093725149,
+    0.1365992250028222
+   ],
+   "hit_rate": 0.40923566878980894,
+   "share_years_positive": 0.0,
+   "first_half": -0.5064817754406318,
+   "second_half": -0.740466931183211
+  },
+  "mixed_same_day": {
+   "label": "mixed same day (not tradable)",
+   "horizon": 1,
+   "n_events": 6665,
+   "n_dates": 621,
+   "mean_abn_pct": -0.29180683347254616,
+   "median_abn_pct": -0.16752634235992123,
+   "mean_raw_pct": -0.2181082583699666,
+   "t_nw": -2.904280703830713,
+   "boot_ci95": [
+    -0.4891706833696036,
+    -0.1069293804310356
+   ],
+   "hit_rate": 0.45410628019323673,
+   "share_years_positive": 0.0,
+   "first_half": -0.3165098944091981,
+   "second_half": -0.26718320359999925
+  },
+  "mixed_h1": {
+   "label": "mixed h1",
+   "horizon": 1,
+   "n_events": 6664,
+   "n_dates": 621,
+   "mean_abn_pct": 0.028616940577747635,
+   "median_abn_pct": 0.021614956977913935,
+   "mean_raw_pct": 0.028616940577747635,
+   "t_nw": 0.5965348382169496,
+   "boot_ci95": [
+    -0.06690008137241635,
+    0.11944864795253429
+   ],
+   "hit_rate": 0.5056360708534622,
+   "share_years_positive": 0.6666666666666666,
+   "first_half": 0.04534695143384718,
+   "second_half": 0.01194072396877382
+  },
+  "mixed_h5": {
+   "label": "mixed h5",
+   "horizon": 5,
+   "n_events": 6662,
+   "n_dates": 621,
+   "mean_abn_pct": 0.06794654491667912,
+   "median_abn_pct": -0.020712131462055305,
+   "mean_raw_pct": 0.3768133254362931,
+   "t_nw": 0.682027061453466,
+   "boot_ci95": [
+    -0.17827144080471707,
+    0.30445533311647355
+   ],
+   "hit_rate": 0.499194847020934,
+   "share_years_positive": 0.6666666666666666,
+   "first_half": 0.16317811301893484,
+   "second_half": -0.026978812355665835
+  },
+  "mixed_h10": {
+   "label": "mixed h10",
+   "horizon": 10,
+   "n_events": 6659,
+   "n_dates": 621,
+   "mean_abn_pct": -0.08825900183474919,
+   "median_abn_pct": -0.016256756720888443,
+   "mean_raw_pct": 0.6029722564736174,
+   "t_nw": -0.6315135490868641,
+   "boot_ci95": [
+    -0.4275253606299239,
+    0.2326077305285978
+   ],
+   "hit_rate": 0.4943639291465378,
+   "share_years_positive": 0.6666666666666666,
+   "first_half": 0.08928282623599945,
+   "second_half": -0.2652299558602544
+  },
+  "mixed_h20": {
+   "label": "mixed h20",
+   "horizon": 20,
+   "n_events": 6644,
+   "n_dates": 617,
+   "mean_abn_pct": -0.1562432596582067,
+   "median_abn_pct": -0.1392587384827686,
+   "mean_raw_pct": 1.2386107858235482,
+   "t_nw": -0.7325270664847545,
+   "boot_ci95": [
+    -0.6674485232096677,
+    0.3559287651502741
+   ],
+   "hit_rate": 0.4862236628849271,
+   "share_years_positive": 0.3333333333333333,
+   "first_half": 0.05457823994722099,
+   "second_half": -0.3663824890383741
+  },
+  "bullish_big_h5": {
+   "label": "bullish >= 6x h5",
+   "horizon": 5,
+   "n_events": 3644,
+   "n_dates": 614,
+   "mean_abn_pct": -0.011611522627931081,
+   "median_abn_pct": -0.26847746875993994,
+   "mean_raw_pct": 0.30134465928127924,
+   "t_nw": -0.09350797024479401,
+   "boot_ci95": [
+    -0.27010165391796903,
+    0.2643407504728082
+   ],
+   "hit_rate": 0.46742671009771986,
+   "share_years_positive": 0.3333333333333333,
+   "first_half": 0.04539489241663755,
+   "second_half": -0.06861793767249971
+  }
+ }
+}
