@@ -18,3 +18,4 @@ print('fundamentals_pit', len(df), 'rows', df['ticker'].nunique(), 'names')
 " >> "$LOG" 2>&1 || echo "fundamentals rebuild failed" >> "$LOG"
 $PY -W ignore -m agent.sources.av_listing refresh >> "$LOG" 2>&1 || true
 echo "=== done $(date) ===" >> "$LOG"
+$PY -W ignore -m agent.audit >> "$LOG" 2>&1 || echo "audit reported failures" >> "$LOG"

@@ -37,7 +37,8 @@ TAGS = {
                 "SalesRevenueNet", "GrossProfit", "CostOfRevenue", "CostOfGoodsAndServicesSold",
                 "OperatingIncomeLoss", "NetCashProvidedByUsedInOperatingActivities", "Assets",
                 "StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
-                "LongTermDebtNoncurrent", "LongTermDebt", "CommonStockSharesOutstanding"],
+                "LongTermDebtNoncurrent", "LongTermDebt", "CommonStockSharesOutstanding",
+                "WeightedAverageNumberOfDilutedSharesOutstanding", "WeightedAverageNumberOfSharesOutstandingBasic"],
     "dei": ["EntityCommonStockSharesOutstanding"],
 }
 DDL = [

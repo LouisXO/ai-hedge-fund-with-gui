@@ -31,6 +31,7 @@ FLOW_TAGS = {
     "opinc": ["OperatingIncomeLoss"],
     "cfo": ["NetCashProvidedByUsedInOperatingActivities"],
 }
+SHARES_FLOW_TAGS = ["WeightedAverageNumberOfDilutedSharesOutstanding", "WeightedAverageNumberOfSharesOutstandingBasic"]
 INSTANT_TAGS = {
     "assets": ["Assets"],
     "equity": ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
@@ -40,12 +41,17 @@ INSTANT_TAGS = {
 
 
 def _first_available(df: pd.DataFrame, tags: list[str]) -> pd.DataFrame:
-    """Rows for the first tag (in preference order) that the company reports."""
-    for t in tags:
-        sub = df[df["tag"] == t]
-        if not sub.empty:
-            return sub
-    return df.iloc[0:0]
+    """Rows from all listed tags, one per period: the earliest tag in preference order that has it.
+
+    Was: the first tag the company ever reported. That froze META's revenue at 2018 (it used
+    `Revenues` until then, `RevenueFromContract...` after) and did the same for every company
+    that changed tags — found 2026-09-22 when scoring META by hand."""
+    sub = df[df["tag"].isin(tags)].copy()
+    if sub.empty:
+        return sub
+    sub["_pref"] = sub["tag"].map({t: i for i, t in enumerate(tags)})
+    sub = sub.sort_values(["_pref", "filed"])
+    return sub.drop_duplicates(["cik", "period_start", "period_end", "filed"], keep="first").drop(columns="_pref")
 
 
 def quarterly_flows(facts: pd.DataFrame, name: str, tags: list[str]) -> pd.DataFrame:
@@ -88,9 +94,17 @@ def build(store: PanelStore) -> pd.DataFrame:
     """One row per (cik, filed): TTM flows + latest instants known at that filing."""
     facts = store.con.execute("SELECT cik, tag, period_start, period_end, is_instant, val, form, filed "
                               "FROM xbrl_facts WHERE unit IN ('USD','shares')").df()
-    tick = store.con.execute("""SELECT CAST(cik AS INT) AS cik, ticker FROM issuer_seen
-                                WHERE ticker IN (SELECT DISTINCT ticker FROM bars)
-                                QUALIFY row_number() OVER (PARTITION BY cik ORDER BY quarter DESC) = 1""").df()
+    # cik -> ticker is point-in-time: 388 tickers have belonged to more than one company (SPACs,
+    # renames, recycled symbols), so a filing is mapped to the ticker its CIK carried in that quarter
+    # (issuer_seen), falling back to the CIK's latest ticker. Found by the 2026-09-22 audit.
+    tick_pit = store.con.execute("""SELECT CAST(cik AS INT) AS cik, quarter, ticker, n_filings FROM issuer_seen
+                                    WHERE ticker IN (SELECT DISTINCT ticker FROM bars)""").df()
+    # Form 4 filers mistype symbols; per (ticker, quarter) the CIK with the most filings owns the symbol
+    winner = tick_pit.sort_values("n_filings", ascending=False).drop_duplicates(["ticker", "quarter"])[["ticker", "quarter", "cik"]]
+    winner = winner.rename(columns={"cik": "winner_cik"})
+    tick_pit = tick_pit[["cik", "quarter", "ticker"]]
+    tick = (tick_pit.sort_values("quarter").drop_duplicates("cik", keep="last")[["cik", "ticker"]]
+            .rename(columns={"ticker": "ticker_latest"}))
     parts = []
     for cik, g in facts.groupby("cik"):
         flows = None
@@ -112,6 +126,13 @@ def build(store: PanelStore) -> pd.DataFrame:
                 continue
             li["filed"] = pd.to_datetime(li["filed"])
             inst = li if inst is None else inst.merge(li, on=["cik", "period_end", "filed"], how="outer")
+        # dual-class companies (META, V, MA, BRK.B, F, ...) report shares outstanding per class, which
+        # companyfacts leaves out; the quarterly weighted-average diluted count is undimensioned
+        sw = quarterly_flows(g, "shares_w", SHARES_FLOW_TAGS)
+        if not sw.empty:
+            sw["filed"] = pd.to_datetime(sw["filed"])
+            sw = sw[["cik", "period_end", "filed", "shares_w"]]
+            inst = sw if inst is None else inst.merge(sw, on=["cik", "period_end", "filed"], how="outer")
         if flows is None and inst is None:
             continue
         df = flows if inst is None else (inst if flows is None else flows.merge(inst, on=["cik", "period_end", "filed"], how="outer"))
@@ -121,8 +142,19 @@ def build(store: PanelStore) -> pd.DataFrame:
         for c in df.columns:
             if c not in ("cik", "period_end", "filed"):
                 df[c] = df[c].ffill()
+        if "shares_w" in df.columns:
+            df["shares"] = df["shares"].fillna(df["shares_w"]) if "shares" in df.columns else df["shares_w"]
+            df = df.drop(columns="shares_w")
         parts.append(df.drop_duplicates("filed", keep="last"))
-    out = pd.concat(parts, ignore_index=True).merge(tick, on="cik", how="inner")
+    out = pd.concat(parts, ignore_index=True)
+    out["quarter"] = out["filed"].dt.year.astype(str) + "q" + out["filed"].dt.quarter.astype(str)
+    out = out.merge(tick_pit, on=["cik", "quarter"], how="left").merge(tick, on="cik", how="inner")
+    out["ticker"] = out["ticker"].fillna(out["ticker_latest"])
+    out = out.merge(winner, on=["ticker", "quarter"], how="left")
+    out = out[out["winner_cik"].isna() | (out["winner_cik"] == out["cik"])]      # a losing CIK does not get the symbol
+    out = out.drop(columns=["quarter", "ticker_latest", "winner_cik"])
+    # if two CIKs still land on the same ticker on the same filing date, keep the larger balance sheet
+    out = out.sort_values(["ticker", "filed", "assets"]).drop_duplicates(["ticker", "filed"], keep="last")
     return out
 
 

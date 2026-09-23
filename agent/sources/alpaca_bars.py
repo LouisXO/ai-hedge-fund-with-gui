@@ -100,6 +100,7 @@ def backfill(store: PanelStore, start: str, end: str, limit: int | None = None,
                               on="trade_date", how="left")
             else:
                 df["adj_close"] = df["c"]
+            df.loc[df["adj_close"] <= 0, "adj_close"] = None            # Alpaca sometimes returns 0 (audit 2026-09-22)
             frames.append(pd.DataFrame({"ticker": sym, "trade_date": df["trade_date"], "open": df["o"],
                                         "high": df["h"], "low": df["l"], "close": df["c"],
                                         "adj_close": df["adj_close"], "volume": df["v"],

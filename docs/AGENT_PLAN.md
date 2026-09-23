@@ -501,6 +501,13 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - **结论**:和 Balder 的 27,829 个跨式一致——期权买方没有一个可靠的"进场时机"。S2/S3 的"便宜门 +3 个百分点"是代理 IV 的产物。**期权书不接模拟盘,预留的 $1 万不动;影子门继续记录但降级为"未验证"。** 如果以后再碰期权,方向是卖方(波动率风险溢价是这份数据里唯一稳定为正的东西),那是另一个预注册。
 - 同日:多重检验账本 `hedge_fund/validation/family_log.py`(38 个书级变体,只有 S25 的负面信号 Holm 显著;momcrash 0.34,base 0.81);执行层端到端测试 `agent/tests/test_execute_e2e.py`;叙述者 `agent/narrator.py`(密封、只转述数字、校验、缓存)进早报 ⑨;S27 实测成本重跑工具 `agent/s27_exec_cost.py`(等竞价单成交)。40 个测试全过。
 
+### S28(2026-09-22)— 数据审计:三个静默错误,长线 alpha 从 +12.6% 降到 +8.9%
+- 起因:用户要求手算 META,发现它没有股数、收入停在 2018 年。随后写了 `agent/audit.py`(基本面、价格、指数、内部人、股票池、因子、账本七层,每层用独立参照或内部一致性校验,PASS/WARN/FAIL),以后每次数据源变动和每次回测前都要跑;已加进周日的基本面任务。
+- **修掉的三个错误**(都在 `agent/books/fundamentals.py`):① 收入/成本标签"按公司取第一个报过的标签"改成"按期取偏好顺序里第一个有的标签"——换过标签的公司(META 2018 年 Revenues → RevenueFromContract)收入一直读旧标签;② 双层股权公司(META、MA、F、CMCSA 等 943 家缺股数)按类别披露股数,汇总接口不收,改用加权平均稀释股数做后备(修好 477 家;V、BRK.B 这类连加权股数都按类别报的仍缺,被市值门槛排除而不是错算);③ **代码复用**:388 个代码先后属于不止一家公司(SPAC、改名),CIK→代码映射原来取"该 CIK 最新的代码",不同公司的报表混在同一代码下;改成按季度的时点映射,并按当季 Form 4 申报数决定代码归属(过滤申报人打错的代码)。另:Alpaca 有 710 行 adj_close=0,已置空并在加载器加了防护。
+- **对结果的影响**(同一规则、同一窗口,只换数据):长线 base alpha2 **+12.6%(t 2.25)→ +8.9%(t 1.57)**,CAGR 24.7% → 20.2%,MaxDD −49% → −55%,2026 年 +53% → +37%;momcrash +14.7%(2.58)→ +11.0%(1.86)。三分之一的"alpha"是坏数据——主要是混入的壳公司和错误的估值比率把一些不该进的名字排进了前 30。旧数字保留在 `s24_long_v2_2026-09-22_fund_v1.*`。今天的前 60 名单在新数据下重合 56/60、前 30 重合 27/30,30 只持仓没有一只要卖。
+- **仍未修、已知**:毛利/成本只覆盖一半公司(金融、公用事业没有这个概念,质量族对它们用 ROE/应计/资产增速三项);V、BRK.B 等按类别报股数的公司被排除;银行没有季度 Revenues 标签(收入不进因子,无影响);动量 z 分在 99% 截尾处堆了 26 只(设计问题,S24 已记)。
+- 纪律:数据修正不是规则变更,v1 继续跑;但从今天起所有对外引用的回测数字以基本面 v2 为准,家族账本已重算。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf

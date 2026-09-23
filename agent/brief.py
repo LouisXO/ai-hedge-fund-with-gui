@@ -89,7 +89,7 @@ def _long_rows(d: dict, live_db) -> str:
     return (f"<h3>长线综合因子书(月度,{as_of})</h3><table><tr><th>标的</th><th>排名</th><th>综合分</th>"
             f"<th>价值/质量/动量/低波 z</th></tr>{body}</table>"
             "<p class='muted'>价值+质量+动量+低波等权 z 分,每日评分:进前 30 买入、跌出前 60 卖出,持有期由信号决定。"
-            "回测(2017–2026)alpha2 +12.6%/年(t 2.25),13 个变体校正后未达显著,影子记录中。</p>")
+            "回测(2017–2026,基本面 v2 数据)alpha2 +8.9%/年(t 1.57),多重检验校正后不显著,影子记录中。</p>")
 
 
 def _paper_rows(live_db) -> str:

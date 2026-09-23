@@ -7,10 +7,9 @@ Two-sided p from the Newey-West t; Holm step-down over the whole family. Variant
 | move_news_up_h2 | s25_move_news_up_2026-09-22.json | -5.55 | -55.0% | 0.000 | 0.000 | ✓ | ✓ |
 | move_news_up_h5 | s25_move_news_up_2026-09-22.json | -4.65 | -53.0% | 0.000 | 0.000 | ✓ | ✓ |
 | move_news_up_h10 | s25_move_news_up_2026-09-22.json | -4.49 | -55.8% | 0.000 | 0.000 | ✓ | ✓ |
-| momcrash | s24_long_v2_2026-09-22.json | 2.58 | +14.7% | 0.010 | 0.342 |  |  |
-| move_nonews_down_h2 | s25_move_nonews_down_2026-09-22.json | -2.45 | -27.0% | 0.014 | 0.489 |  |  |
-| base | books_2026-09-20_spycash_daily.json | 2.25 | +12.6% | 0.024 | 0.806 |  |  |
-| stop20 | s24_long_v2_2026-09-22.json | 2.17 | +11.5% | 0.030 | 0.967 |  |  |
+| move_nonews_down_h2 | s25_move_nonews_down_2026-09-22.json | -2.45 | -27.0% | 0.014 | 0.503 |  |  |
+| base | books_2026-09-20_spycash_daily.json | 2.25 | +12.6% | 0.024 | 0.830 |  |  |
+| stop20 | s24_long_v2_2026-09-22.json | 2.17 | +11.5% | 0.030 | 0.997 |  |  |
 | invvol | s24_long_v2_2026-09-22.json | 2.04 | +9.1% | 0.041 | 1.000 |  |  |
 | issuance | s24_long_v2_2026-09-22.json | 2.03 | +11.3% | 0.042 | 1.000 |  |  |
 | long_composite_n30 | books_2026-09-20_spycash.json | 1.94 | +10.5% | 0.052 | 1.000 |  |  |
@@ -18,6 +17,7 @@ Two-sided p from the Newey-West t; Holm step-down over the whole family. Variant
 | move_nonews_down_h5 | s25_move_nonews_down_2026-09-22.json | -1.90 | -21.6% | 0.058 | 1.000 |  |  |
 | long_composite_daily_n50 | books_2026-09-22_spycash_n50_daily.json | 1.89 | +8.9% | 0.059 | 1.000 |  |  |
 | n50 | s24_long_v2_2026-09-22.json | 1.89 | +8.9% | 0.059 | 1.000 |  |  |
+| momcrash | s24_long_v2_2026-09-22.json | 1.86 | +11.0% | 0.062 | 1.000 |  |  |
 | insider_opp_h5 | s23_insider_opp_2026-09-22.json | 1.75 | +7.6% | 0.080 | 1.000 |  |  |
 | long_composite_n50 | books_2026-09-22_spycash_n50_daily.json | 1.73 | +7.9% | 0.084 | 1.000 |  |  |
 | insider_officer_h5 | s23_insider_officer_2026-09-22.json | 1.68 | +5.7% | 0.093 | 1.000 |  |  |
