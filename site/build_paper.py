@@ -87,6 +87,20 @@ def collect() -> dict:
         j = json.load(open(files[-1]))["books"]
         bt = {"years": sorted(j["long_base"]["by_year"]),
               "long": j["long_base"], "insider": j["insider_base"]}
+    picks = []
+    try:
+        import re as _re
+        con = ledger.connect(read_only=True)
+        rows = con.execute("""SELECT ticker, rank, value, gate_reason, as_of FROM agent_picks WHERE signal_name = 'composite_long'
+                              AND as_of = (SELECT max(as_of) FROM agent_picks WHERE signal_name = 'composite_long') ORDER BY rank""").fetchall()
+        con.close()
+        for t, rk, v, g, asof in rows:
+            fam = {k: (None if x == "nan" else float(x)) for k, x in _re.findall(r"(v|q|m|lv)([+-](?:[0-9.]+|nan))", g or "")}
+            fam = {k: (None if x is None or x != x else x) for k, x in fam.items()}
+            picks.append({"ticker": t, "rank": rk, "composite": v, "value": fam.get("v"), "quality": fam.get("q"),
+                          "momentum": fam.get("m"), "lowvol": fam.get("lv"), "as_of": str(asof)})
+    except Exception:
+        picks = []
     try:
         import yaml
         ev = yaml.safe_load(open(os.path.join(ROOT, "agent", "config.yaml")))["evaluate_at"]
@@ -94,7 +108,7 @@ def collect() -> dict:
         ev = {}
     return {"nav": d, "alloc": alloc, "latest": {b: {"equity": v[2], "cash": v[3], "n": v[4]} for b, v in latest.items()},
             "holdings": holdings, "closed": closed, "fills": fills, "bt": bt, "eval": ev,
-            "as_of": d["days"][-1] if d["days"] else None, "since": d["days"][0] if d["days"] else None}
+            "as_of": d["days"][-1] if d["days"] else None, "since": d["days"][0] if d["days"] else None, "picks": picks}
 
 
 CSS_EXTRA = """
@@ -144,6 +158,18 @@ function draw(l) {
     options: {maintainAspectRatio: false, interaction: {mode: 'index', intersect: false}, plugins: {legend: {position: 'top', align: 'end'},
       tooltip: {callbacks: {label: c => ` ${c.dataset.label}  ${pct(c.parsed.y)}`}}},
       scales: {x: {grid: {display: false}}, y: {grid, ticks: {callback: v => v + '%'}}}}}));
+  if (D.picks && D.picks.length && document.getElementById('c_fam')) {
+    const P = D.picks, fams = [['value', L('价值', 'Value'), '--s3'], ['quality', L('质量', 'Quality'), '--s4'], ['momentum', L('动量', 'Momentum'), '--s5'], ['lowvol', L('低波动', 'Low volatility'), '--s7']];
+    charts.push(new Chart(document.getElementById('c_fam'), {type: 'bar',
+      data: {labels: P.map(p => p.rank + '  ' + p.ticker), datasets: fams.map(([k, lab, col]) => ({label: lab, data: P.map(p => p[k] == null ? 0 : p[k] / 4),
+        backgroundColor: C(col), borderColor: C('--surface'), borderWidth: 1, borderSkipped: false, maxBarThickness: 14}))},
+      options: {indexAxis: 'y', maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+        plugins: {legend: {position: 'top', align: 'end'}, tooltip: {callbacks: {
+          title: i => P[i[0].dataIndex].ticker + ' · ' + L('综合 ', 'composite ') + P[i[0].dataIndex].composite.toFixed(2),
+          label: c => ` ${c.dataset.label}  z ${P[c.dataIndex][fams[c.datasetIndex][0]] == null ? '—' : P[c.dataIndex][fams[c.datasetIndex][0]].toFixed(2)}  → ${c.parsed.x >= 0 ? '+' : ''}${c.parsed.x.toFixed(2)}`}}},
+        scales: {x: {stacked: true, grid, title: {display: true, text: L('对综合分的贡献', 'contribution to composite')}},
+                 y: {stacked: true, grid: {display: false}, ticks: {font: {family: C('--mono'), size: 11}, autoSkip: false}}}}}));
+  }
 }
 const pref = lang() || ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en');
 document.querySelectorAll('.lang button').forEach(b => b.addEventListener('click', () => setLang(b.dataset.l)));
@@ -151,9 +177,88 @@ setLang(pref);
 """
 
 
+FAMILIES = [("value", "价值", "Value", "--s3"), ("quality", "质量", "Quality", "--s4"), ("momentum", "动量", "Momentum", "--s5"), ("lowvol", "低波动", "Low volatility", "--s7")]
+
+
+def long_sections(d: dict) -> tuple[str, str]:
+    """The short card in 'The two books' and the long, detailed explanation with today's scores."""
+    card = (f"<div class='card'><div class='k'>{T('长线综合因子 · $60,000 · 30 仓', 'Long composite · $60,000 · 30 slots')}</div>"
+            f"<p>{T('每天给全市场打分,四个经典因子等权合成,排名进前 30 买入、跌出前 60 卖出。怎么打分见下面「长线书怎么选股」。',
+                    'Scores the whole market daily on four classic factors, equal weight; buys the top 30 and sells below 60. The full method is under “How the long book picks stocks” below.')}</p>"
+            f"<p><a href='#long-method'>{T('看详细方法 ↓', 'Read the method ↓')}</a></p></div>")
+    steps = [
+        (T("1 · 股票池", "1 · Universe"),
+         T("当天在交易的美股,过去 20 个交易日平均成交额至少 500 万美元。成交太少的股票进出成本太高,不进池。",
+           "US stocks listed that day with at least $5M average daily dollar volume over the last 20 sessions. Thinner names cost too much to trade and are left out.")),
+        (T("2 · 基本面过滤", "2 · Fundamentals filter"),
+         T("只用打分当天之前已经向 SEC 申报的财报(时点正确,不偷看未来),而且最近一份申报必须在 200 天以内。再排除三类会让比率失真的公司:市值低于 1 亿美元、总资产低于 1,000 万美元、股东权益不到总资产的 5%(权益接近零或为负时,ROE 和账面市值比都没有意义)。",
+           "Only filings already public with the SEC on the scoring day are used (point in time, no look-ahead), and the latest must be under 200 days old. Three kinds of company are removed because their ratios break: market cap under $100M, total assets under $10M, and equity under 5% of assets (near-zero or negative equity makes ROE and book-to-market meaningless).")),
+        (T("3 · 八个原始指标,分成四族", "3 · Eight raw measures in four families"), None),
+        (T("4 · 标准化", "4 · Standardize"),
+         T("每个指标当天在全池里先截掉最高和最低 1%,再减均值、除以标准差,变成 z 分。一个族的分数是族内指标的平均。",
+           "Each measure is clipped at the day's 1st and 99th percentiles, then turned into a z-score across the universe. A family's score is the mean of its measures.")),
+        (T("5 · 合成", "5 · Combine"),
+         T("综合分 = 四个族分数的简单平均,不按历史收益拟合权重。至少要有三个族有分数才参与排名。",
+           "Composite = the plain average of the four family scores. No weights are fitted to past returns. A stock needs scores in at least three families to be ranked.")),
+        (T("6 · 交易", "6 · Trade"),
+         T("每天收盘后按综合分排名。排名进前 30 且有空槽位就买入,每个槽位 = 书净值 ÷ 30;已持有的股票只要还在前 60 就继续拿,掉出前 60 才卖。前 30 和前 60 之间的缓冲区是为了减少来回换手。订单在次日开盘成交;空着的槽位留现金,不分给其他股票。没有止损(回测里止损降低了收益)。",
+           "After each close the market is ranked by composite. A name in the top 30 is bought if a slot is free; each slot is book equity ÷ 30. A held name is kept while it stays in the top 60 and sold when it drops out; the gap between 30 and 60 cuts churn. Orders fill at the next open. Empty slots stay in cash. There is no stop-loss (stops lowered returns in the backtest).")),
+    ]
+    fam_rows = [
+        (T("价值", "Value"), T("账面市值比", "Book-to-market"), T("股东权益 ÷ 市值", "equity ÷ market cap"), T("越高越好", "higher is better"), T("买得便宜", "cheap relative to net assets")),
+        ("", T("盈利收益率", "Earnings yield"), T("近 12 个月净利润 ÷ 市值", "trailing-12-month net income ÷ market cap"), T("越高越好", "higher is better"), T("每一块钱市值对应的利润", "profit per dollar of price")),
+        (T("质量", "Quality"), T("毛利 ÷ 总资产", "Gross profit ÷ assets"), T("近 12 个月毛利 ÷ 总资产", "TTM gross profit ÷ total assets"), T("越高越好", "higher is better"), T("资产赚钱的效率(Novy-Marx)", "how productive the assets are (Novy-Marx)")),
+        ("", "ROE", T("近 12 个月净利润 ÷ 股东权益", "TTM net income ÷ equity"), T("越高越好", "higher is better"), T("股东的钱的回报", "return on shareholders’ money")),
+        ("", T("应计项", "Accruals"), T("(净利润 − 经营现金流)÷ 总资产", "(net income − operating cash flow) ÷ assets"), T("越低越好", "lower is better"), T("利润里现金越多、会计估计越少越可信", "earnings backed by cash are more reliable")),
+        ("", T("资产增长", "Asset growth"), T("总资产一年增长率", "one-year growth in total assets"), T("越低越好", "lower is better"), T("扩张太快的公司之后往往跑输", "fast-expanding firms tend to lag later")),
+        (T("动量", "Momentum"), T("12-1 月动量", "12-1 month momentum"), T("过去 12 个月涨幅,跳过最近 1 个月", "return over the past 12 months, skipping the latest month"), T("越高越好", "higher is better"), T("强者恒强;跳过最近一个月是为了避开短期反转", "winners keep winning; the last month is skipped to avoid short-term reversal")),
+        (T("低波动", "Low volatility"), T("252 日波动率", "252-day volatility"), T("过去一年日收益的标准差", "standard deviation of daily returns over a year"), T("越低越好", "lower is better"), T("低波动股票的风险调整后收益更高", "calmer stocks earn more per unit of risk")),
+    ]
+    frows = "".join(f"<tr><td class='l'><b>{a}</b></td><td class='l'>{b}</td><td class='l'>{c}</td><td class='l'>{d_}</td><td class='l muted'>{e_}</td></tr>" for a, b, c, d_, e_ in fam_rows)
+    fam_table = ("<div class='tbl'><table><tr><th class='l'>" + T("族", "Family") + "</th><th class='l'>" + T("指标", "Measure") + "</th><th class='l'>"
+                 + T("怎么算", "Formula") + "</th><th class='l'>" + T("方向", "Direction") + "</th><th class='l'>" + T("为什么", "Why") + f"</th></tr>{frows}</table></div>")
+    step_html = ""
+    for title, body in steps:
+        step_html += f"<h3>{title}</h3>" + (fam_table if body is None else f"<p class='lede'>{body}</p>")
+
+    picks = d.get("picks") or []
+    live = ""
+    if picks:
+        def z(v):
+            return "—" if v is None else f"<span class='{'pos' if v > 0 else 'neg' if v < 0 else ''}'>{v:+.2f}</span>"
+        held = {h["ticker"] for h in d["holdings"] if h["book"] == "long"}
+        prow = "".join(f"<tr><td>{p['rank']}</td><td><b>{e(p['ticker'])}</b>{' <span class=pill>' + T('持有', 'held') + '</span>' if p['ticker'] in held else ''}</td>"
+                       f"<td>{z(p['value'])}</td><td>{z(p['quality'])}</td><td>{z(p['momentum'])}</td><td>{z(p['lowvol'])}</td><td><b>{p['composite']:+.2f}</b></td></tr>"
+                       for p in picks[:30])
+        top = picks[:30]
+        mom_cap = sum(1 for p in top if (p["momentum"] or 0) >= 3)
+        deep_val = sum(1 for p in top if (p["value"] or 0) >= 1.5)
+        live = (f"<h3>{T('今天的打分', 'Today’s scores')} · {picks[0]['as_of']}</h3>"
+                f"<p class='st'>{T('前 30 名每只股票的四个族分数(z 分)和综合分。图里每一段是一个族对综合分的贡献(族分数 ÷ 4),悬停看数值。',
+                                   'The top 30 with their four family z-scores and the composite. Each bar segment is one family’s contribution to the composite (family score ÷ 4); hover for values.')}</p>"
+                f"<div class='chart tall'><div class='cv' style='height:{max(360, 18 * len(top) + 60)}px'><canvas id='c_fam'></canvas></div></div>"
+                "<details><summary>" + T("数据表", "Table") + "</summary><div class='tbl'><table><tr><th>" + T("排名", "Rank") + "</th><th>" + T("代码", "Ticker") + "</th><th>"
+                + T("价值", "Value") + "</th><th>" + T("质量", "Quality") + "</th><th>" + T("动量", "Momentum") + "</th><th>" + T("低波动", "Low vol") + "</th><th>"
+                + T("综合", "Composite") + f"</th></tr>{prow}</table></div></details>"
+                f"<h3>{T('这本书实际买到了什么', 'What the book actually ends up owning')}</h3>"
+                f"<p class='lede'>{T(f'四个族等权,但实际持仓往往分成两群。一群是动量极强的股票:动量 z 分能到 4 以上,而其他族很少超过 2,所以一只股票只要涨得足够多,就能靠动量一项排进前 30(今天前 30 里有 {mom_cap} 只动量分 ≥ 3)。另一群是深度价值股,常见的是商业发展公司(BDC)和抵押贷款 REIT,账面市值比和盈利收益率都很高(今天有 {deep_val} 只价值分 ≥ 1.5)。基本面过滤的作用是把动量尾部里没有盈利、没有资产的公司挡在外面。回测检验过:把这两群拆开、改成排名标准化、或只做纯动量,效果都更差(S29、S30),所以规则保持原样。',
+                                  f'The four families are equal-weighted, but the holdings usually split into two groups. One is extreme momentum: momentum z-scores can exceed 4 while the other families rarely pass 2, so a stock that has risen enough can reach the top 30 on momentum alone ({mom_cap} of today’s top 30 have a momentum score of 3 or more). The other is deep value, often business development companies and mortgage REITs with high book-to-market and earnings yield ({deep_val} today have a value score of 1.5 or more). The fundamentals filter keeps unprofitable, asset-light names out of the momentum tail. Rank-based scaling, splitting the two groups, and a pure-momentum book were all tested and did worse (S29, S30), so the rule stays as it is.')}</p>")
+    extra = (f"<h3>{T('已知的弱点', 'Known weaknesses')}</h3><ul class='plain'>"
+             f"<li>{T('回测 alpha 在多重检验校正后不显著(t 1.46),这正是要用模拟盘攒证据的原因。', 'The backtested alpha is not significant after multiple-testing correction (t 1.46), which is why the paper record exists.')}</li>"
+             f"<li>{T('行业不做中性化,会集中在某几个行业;测试过行业中性版本,alpha 几乎归零(S24)。', 'It is not sector-neutral and can concentrate in a few industries; a sector-neutral version was tested and lost almost all its alpha (S24).')}</li>"
+             f"<li>{T('动量在熊市反弹时会大幅回撤。一个预注册的影子版本(SPY 比两年高点低 20% 以上时停用动量)每天并排记录,不交易,评估点之后再决定。', 'Momentum crashes in bear-market rebounds. A pre-registered shadow version that drops momentum when SPY is more than 20% below its two-year high is recorded daily beside it, untraded, to be judged at the evaluation point.')}</li>"
+             f"<li>{T('模拟盘成交价是模拟器给的,小盘股的真实开盘冲击测不出来。', 'Paper fills come from a simulator; the real opening-auction impact on small caps is not measured.')}</li></ul>")
+    detail = (f"<h2 id='long-method'>{T('长线书怎么选股', 'How the long book picks stocks')}</h2>"
+              f"<p class='lede'>{T('完全是规则,没有人工判断,也没有机器学习拟合。四个因子都是学术文献里存在了几十年的经典定义,参数在上线前写死。',
+                                   'It is entirely rule-based: no discretion and no machine-learned weights. All four factors use textbook definitions that have been in the academic literature for decades, and every parameter was fixed before launch.')}</p>"
+              + step_html + live + extra)
+    return card, detail
+
+
 def page(d: dict) -> str:
     n, lt, bt = d["nav"], d["latest"], d["bt"]
     theme = open(THEME).read()
+    long_card, long_detail = long_sections(d)
     cards = []
     for b, (zh, en) in BOOKS.items():
         if b in lt:
@@ -214,7 +319,7 @@ def page(d: dict) -> str:
             k, dte = x["n_closed_lots"], x["or_date"]
             ev_items += f"<li>{T(BOOKS[b][0], BOOKS[b][1])}: {T(f'{k} 笔平仓或 {dte},先到为准', f'{k} closed trades or {dte}, whichever comes first')}</li>"
 
-    nav_js = json.dumps({"nav": n, "bt": json.loads(bt_js) if bt_js != "null" else None})
+    nav_js = json.dumps({"nav": n, "bt": json.loads(bt_js) if bt_js != "null" else None, "picks": (d.get("picks") or [])[:30]})
     ht = ("<tr><th class='l'>" + T("书", "Book") + "</th><th>" + T("代码", "Ticker") + "</th><th>" + T("入场日", "Entered") + "</th><th>"
           + T("入场价", "Entry") + "</th><th>" + T("最新", "Last") + "</th><th>" + T("收益", "Return") + "</th><th>" + T("权重", "Weight") + "</th><th>"
           + T("计划出场", "Planned exit") + "</th></tr>")
@@ -242,12 +347,12 @@ def page(d: dict) -> str:
 
 <h2>{T('两本书的规则', 'The two books')}</h2>
 <div class='grid2'>
-<div class='card'><div class='k'>{T('长线综合因子 · $60,000 · 30 仓', 'Long composite · $60,000 · 30 slots')}</div>
-<p>{T('每天给全市场打分:动量、价值、质量、低波动四个因子等权合成,先过基本面过滤(近 200 天有申报、市值超过 1 亿美元、权益超过资产 5%)。排名进前 30 买入,跌出前 60 卖出,等权。',
-      'Every day the whole market is scored on four equal-weighted factor families (momentum, value, quality, low volatility) after a fundamentals filter (a filing in the last 200 days, market cap above $100M, equity above 5% of assets). Names enter in the top 30 and leave when they fall out of the top 60, equal weight.')}</p></div>
+{long_card}
 <div class='card'><div class='k'>{T('内部人短线 · $30,000 · 20 仓', 'Insider short-term · $30,000 · 20 slots')}</div>
 <p>{T('公司高管或董事在公开市场用自己的钱买入本公司股票(SEC Form 4)后,次日开盘买入,持有 5 个交易日卖出。回测里一半的超额收益出现在入场第一天,所以只用开盘市价单。',
       'When an officer or director buys their own company’s stock in the open market (SEC Form 4), the book buys at the next open and sells five sessions later. Half of the backtested edge arrives on the first day, so entries are market-on-open only.')}</p></div></div>
+
+{long_detail}
 
 <h2>{T('当前持仓', 'Holdings')} · {len(d['holdings'])}</h2>
 <div class='tbl'><table>{ht}{''.join(hrows) or '<tr><td colspan=8>—</td></tr>'}</table></div>
