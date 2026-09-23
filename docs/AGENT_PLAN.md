@@ -23,7 +23,7 @@
 |---|---|
 | LLM 角色 | 不出方向信号;只做早报叙述,以及(后置、可选)文本→结构化字段 |
 | 数据源 | 主用 moomoo;验证/回填用 yfinance 免费日线;AV 留免费档;内部人用 SEC EDGAR;有必要再付费 |
-| 大师 | 退役,不进决策路径;周一/四继续生成只供公开站 |
+| 大师 | 退役,不进决策路径;2026-09-23 停跑并删除(S35),公开站存档在 /masters/ |
 | 纸面账本 | 新 `source='agent'` 期权仓 + 股票级信号表 |
 | 铁律 | 只读、永不下单;仓位不上公开站;LLM 调用全部密封 |
 
@@ -547,6 +547,12 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - 做成书:clean_h5 alpha2 +0.3%(t 0.10),clean_h20 +2.0%(0.61),clean_h40 +0.9%(0.28),all_h20 +3.9%(1.24);同窗内部人线 +8.4%(1.93)。
 - 结论:公告日的 +2–3% 在申报前后就走完了(我们在申报后一天的开盘才进),剩下的第一天 0.12% 小于半个价差。文献里的长期漂移(Ikenberry 1995)是按月到年计的,不是短线事件线能吃的。**不做线**,Holm +4。数据保留,回购公告可以作为长线书的一个候选因子(净回购 = 稀释因子的反面,S24 的 issuance 变体已否定过一次)。
 - 顺带:S26 之后第一条"用自己的 EFTS 加载器几分钟就测完"的线;框架的边际成本已经很低,该省的是 Holm 预算,不是代码。
+
+### S35(2026-09-23)— 仓库清理:上游代码和大师信号删除;公开站首页改为模拟盘
+- 大师信号(5 个 LLM persona)退役:9/13–15 已证伪(5 日方向命中 55% < 永远猜多数 70%;五人误差完全相关),9/18 起不进决策路径,只为公开站周一/四跑。今天停跑、删代码,公开站旧页面移到 `/masters/` 存档,顶部中英文标注"已停止"。早报不再有大师栏,周报删掉大师一节。
+- 上游 virattt/ai-hedge-fund 模块删除:`hedge_fund/{backtesting,brokers,fund,pipeline,portfolio,risk,strategies,signals,tui,event_study,llm,data}`、`run.py`、`models.py`、pyproject/poetry.lock、ROADMAP/VISION。依据:从 `agent/` 和 `site/` 出发的传递导入闭包只用到 `hedge_fund/{features/panel,factors,rv, validation/stats,tearsheet,family_log, paths}` 和 `integrations/claude_code_llm`。`LLMCallError` 内联进 claude_code_llm;moomoo_client 需要的 pydantic 记录保留为 `integrations/moomoo_models.py`。`masters/build_event_db.py` 和 `event_stats.py`(events.db 与 ④ 波动率定价基准)移到 `earnings/`。依赖改为 `requirements.txt`(钉版本)。
+- 验证:`pytest agent/tests hedge_fund` 50 个通过;`agent` 下每个模块都能导入;`earnings/build_event_db.py --help` 正常;隔离冒烟测试照常。恢复点:tag `pre-cleanup-2026-09-23`(已推送)。
+- 公开站:首页 = 模拟盘(`site/build_paper.py`,中英文切换),真实账户不上站的规则不变。
 
 ## 10. 待办(滚动;每个 session 结束时更新)
 

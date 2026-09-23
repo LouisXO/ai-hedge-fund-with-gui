@@ -11,7 +11,7 @@
 2. **moomoo 永远只读,永远不下单。** 它只提供行情、期权链、真实账户快照。
 3. **真实账户(moomoo)的任何数字、持仓、成交永远不上公开站**,只进私有站 https://optradar.tail5b470b.ts.net(Tailscale 内)。**例外(用户 2026-09-23 决定):Alpaca 模拟盘可以公开**,在 hedge-fund.louisleng.com/paper.html(`site/build_paper.py`,中英文切换,每天 08:41 随公开站发布)。该脚本不读任何 `acct_*` 表,改它时保持这一点。
 4. **密钥只在 `~/.hedge-fund/.env`(chmod 600)**:`SEC_USER_AGENT`、`ALPACA_KEY_ID`/`ALPACA_SECRET`(paper)、`AGENT_EXEC`。Alpha Vantage 的 key 只在 `~/optradar/.env`,不复制。任何 key 不进仓库、不进日志、不进对话。
-5. **LLM 不出方向信号。** 只做早报叙述(`agent/narrator.py`,密封、只能复述输入里的数字)。决策路径上没有 LLM。
+5. **LLM 不出方向信号。** 只做早报叙述(`agent/narrator.py`,密封、只能复述输入里的数字)和新闻标题翻译(`agent/translate.py`)。决策路径上没有 LLM。大师信号(5 个 persona)2026-09-23 退役并删除;上游 virattt 代码同日删除,tag `pre-cleanup-2026-09-23` 可恢复。依赖清单是 `requirements.txt`(没有 pyproject)。
 6. **先预注册再看结果。** 每个实验先写阈值和读法,报告进 `site-data/validation/`,结论进 `docs/AGENT_PLAN.md` §9,Holm 家族账本自动累计(`hedge_fund/validation/family_log.py`)。不达标就写"不采用",不调参数再跑。
 7. **账本对不上不准用交易去"修"。** 批次和券商持仓不一致就冻结该票,先解释。
 8. **Reddit 官方 API 已关闭自助申请(2025-11),不再尝试;Discord 抓取违反其条款,不做。** 散户热度用 ApeWisdom + Stocktwits(`agent/sources/retail_heat.py`)。
@@ -88,7 +88,10 @@ agent/
   s2x_*.py / s3x_*.py   预注册实验脚本(S21 13D、S24 长线变体、S26 期权门、S27 执行成本、S30 动量书、S31 入场时机、S32 期权流、S33 负面否决、S34 回购线)
   config.yaml           预注册的评估点(evaluate_at)
   tests/                pytest 40 个;`tests/selftest_agent.sh` 隔离全链路冒烟(复制账本、dry run、早报),不碰真实账本和 out/
-hedge_fund/validation/  family_log(Holm 账本)、stats(NW t、bootstrap、置换)
+hedge_fund/             共享库:features/(panel、factors、rv)、validation/(stats、tearsheet、family_log Holm 账本)、paths.py
+integrations/           claude_code_llm.py(密封 LLM,只做叙述和翻译)、moomoo_client.py + moomoo_models.py(只读)
+earnings/               build_event_db.py(每周一刷新 site-data/events.db)、event_stats.py(optradar ④ 波动率定价的基准)
+site/                   公开站:build_paper.py(首页 = 模拟盘,中英文)、build_site.py(大师信号存档 /masters/,已停止)、publish.sh
 site-data/validation/   每个实验的 .md/.json 报告 + family_log.md/.jsonl
 docs/AGENT_PLAN.md      计划 + §9 执行记录(S1–S32)+ §10 待办
 docs/notes/<TICKER>.md  个股分析结论(NEOV、RKLB、IONQ…),下次问到先读
@@ -98,7 +101,7 @@ docs/notes/<TICKER>.md  个股分析结论(NEOV、RKLB、IONQ…),下次问到�
 
 ```bash
 # 测试(单测 + 隔离冒烟;冒烟要 Alpaca 模拟盘 key 可读,约 1 分钟)
-PYTHONPATH=. ~/.hedgefund-venv/bin/python -m pytest -q agent/tests
+PYTHONPATH=. ~/.hedgefund-venv/bin/python -m pytest -q agent/tests hedge_fund
 ./agent/tests/selftest_agent.sh
 # 停用 / 恢复期权链归档任务(用户自己在终端跑;agent 无权改 launchd)
 launchctl bootout gui/$(id -u)/com.louis.agent.chain && mv ~/Library/LaunchAgents/com.louis.agent.chain.plist{,.disabled}

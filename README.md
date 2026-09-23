@@ -1,104 +1,39 @@
-# AI Hedge Fund
+# hedge-fund
 
-This is a proof of concept for an AI-powered hedge fund. The goal of this project is to explore the use of AI to make trading decisions. This project is for **educational** purposes only and is not intended for real trading or investment.
+A rule-based stock research and paper-trading system. Every signal is pre-registered and tested
+before it can trade; two books that passed trade a $100k Alpaca **paper** account; the public
+record is at https://hedge-fund.louisleng.com.
 
-> **🚧 The project is evolving.** We're rebuilding it into a persistent, always-on AI hedge fund — a *fund* as a first-class entity you can backtest, paper-trade, and (opt-in) run live, with the investor agents reimagined as pluggable, backtestable "alpha models." Read the **[Vision →](VISION.md)** and the **[Roadmap →](ROADMAP.md)**.
+No LLM makes a directional call. LLMs are used only for display text (the morning-brief
+narrator and headline translation), through a sealed single-turn call.
 
-Note: the system does not actually make any trades.
+## Layout
 
-[![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
+| Path | What it is |
+|---|---|
+| `agent/` | The system: data loaders (`sources/`), event lines (`events/`), the two books (`books/`), the paper executor (`execute.py`), daily review, dashboard, watchlist, and every pre-registered experiment (`sNN_*.py`) |
+| `hedge_fund/` | Shared library: the DuckDB point-in-time panel (`features/panel.py`), factor scores, realized volatility, validation statistics and the Holm family ledger |
+| `integrations/` | The sealed Claude Code LLM client and the read-only moomoo data client |
+| `earnings/` | The earnings event database and its statistics, used by optradar's volatility pricing |
+| `site/` | The public static site: paper portfolio (home page) and the retired master-signal archive |
+| `site-data/` | Validation reports, the family ledger, earnings event data, the master-signal archive |
+| `docs/AGENT_PLAN.md` | The plan, the execution log (§9, one entry per experiment) and the rolling to-do (§10) |
+| `AGENT.md` | Rules, paths, schedules and rituals every working session starts from |
 
-## Disclaimer
-
-This project is for **educational and research purposes only**.
-
-- Not intended for real trading or investment
-- No investment advice or guarantees provided
-- Creator assumes no liability for financial losses
-- Consult a financial advisor for investment decisions
-- Past performance does not indicate future results
-
-By using this software, you agree to use it solely for learning purposes.
-
-## How to Install
-
-```bash
-pipx install aihf
-```
-
-(or `uv tool install aihf`, or `pip install aihf` into an environment of your choice)
-
-Then run it from anywhere:
+## Setup
 
 ```bash
-aihf
+python3.13 -m venv ~/.hedgefund-venv
+~/.hedgefund-venv/bin/python -m pip install -r requirements.txt
+PYTHONPATH=. ~/.hedgefund-venv/bin/python -m pytest -q agent/tests hedge_fund
 ```
 
-### API keys
+Secrets live in `~/.hedge-fund/.env`, never in the repository.
 
-The app asks for keys the first time it needs them and saves them to `~/.hedge-fund/.env` — nothing to configure up front. It needs:
+## History
 
-- A [Financial Datasets](https://financialdatasets.ai) API key, for prices, fundamentals, and earnings.
-- One model API key for the investor agents. Supported providers: Anthropic, OpenAI, DeepSeek, Google, xAI, Kimi, TypeSafe (Jev).
-
-Keys exported in your shell always win over the saved file.
-
-## How to Run
-
-### Interactive app
-
-```bash
-aihf
-```
-
-With no arguments, this launches the interactive terminal app. Build a fund — pick stocks, strategies, rebalance cadence — or backtest a saved fund and watch its equity curve draw against its benchmark. Funds you build are saved as mandate files in `~/.hedge-fund/mandates/`.
-
-### Non-interactive
-
-Run one fund cycle from a mandate file. The full cycle record prints to stdout as JSON; a short human summary goes to stderr:
-
-```bash
-aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT
-```
-
-Run the same mandate with Jev after configuring `TYPESAFE_API_KEY`:
-
-```bash
-aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --model jev-1.13.0
-```
-
-Backtest the mandate over history at its rebalance cadence:
-
-```bash
-aihf ~/.hedge-fund/mandates/example.yaml --tickers AAPL,MSFT --backtest
-```
-
-A mandate is the desk — strategies, staff, risk, capital, cadence — and never names tickers; `--tickers` says what to point it at for this run.
-
-## Development
-
-```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
-cd ai-hedge-fund
-poetry install
-poetry run aihf
-poetry run pytest hedge_fund
-```
-
-## How to Contribute
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-**Important**: Please keep your pull requests small and focused. This will make it easier to review and merge.
-
-## Feature Requests
-
-If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make sure it is tagged with `enhancement`.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+This repository started as a fork of [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund)
+(MIT, see `LICENSE`). Its LLM investor personas were tested here and retired on 2026-09-23: 55%
+directional accuracy at five days against 70% for always guessing the majority direction. The
+upstream modules were removed the same day; tag `pre-cleanup-2026-09-23` has the last state
+that contained them.

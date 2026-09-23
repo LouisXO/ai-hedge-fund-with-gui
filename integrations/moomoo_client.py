@@ -1,4 +1,4 @@
-"""MoomooDataClient — satisfies aihf's hedge_fund.data.protocol.DataClient using
+"""MoomooDataClient — moomoo OpenD fundamentals, earnings and prices (read-only), used by earnings/build_event_db.py.
 a local moomoo OpenD (read-only market data). No inheritance: duck-typed.
 
 P1 scope (方案 A): built on the FAST, reliable endpoints — history kline,
@@ -23,7 +23,7 @@ import time
 import moomoo as mm
 from moomoo import RET_OK, OpenQuoteContext, KLType, AuType
 
-from hedge_fund.data.models import (
+from integrations.moomoo_models import (
     CompanyFacts, CompanyNews, Earnings, EarningsData, EarningsRecord,
     FinancialMetrics, InsiderTrade, Price,
 )

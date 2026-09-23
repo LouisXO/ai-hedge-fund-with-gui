@@ -1,5 +1,1 @@
-"""v2 validation framework.
-
-Combinatorial Purged Cross-Validation (CPCV),
-Probability of Backtest Overfitting (PBO).
-"""
+"""Statistics for the pre-registered tests: Newey-West t, bootstraps (stats.py), tear sheets, the Holm family ledger."""

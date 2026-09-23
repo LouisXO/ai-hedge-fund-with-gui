@@ -1,5 +1,5 @@
 """ClaudeCodeLLM — routes aihf's LLMClient protocol through the local Claude Code
-CLI (subscription auth). Satisfies hedge_fund.llm.LLMClient by duck typing:
+CLI (subscription auth):
 `model` attr + `complete(system, user) -> str`. No ANTHROPIC_API_KEY needed.
 
 Sealed. A plain `claude -p --append-system-prompt` call is a full coding
@@ -21,10 +21,7 @@ LLMCallError carrying a diagnostic record that LLMAgent persists in the cache.
 Model aliases ("opus") drift when Claude Code repoints them, so cache keys use
 the resolved model id, probed once per process per alias.
 
-Usage with aihf:
-    from hedge_fund.signals.buffett import BuffettAgent
-    agent = BuffettAgent(llm=ClaudeCodeLLM(model="opus"))
-For the master personas prefer integrations.masters_llm.MastersLLM.
+Used by agent/narrator.py and agent/translate.py (display text only, never a signal).
 """
 import hashlib
 import json
@@ -34,7 +31,15 @@ import subprocess
 import threading
 import time
 
-from hedge_fund.llm import LLMCallError
+
+
+class LLMCallError(RuntimeError):
+    """Provider failure with optional, credential-free diagnostic context."""
+
+    def __init__(self, message: str, diagnostic_record: dict | None = None) -> None:
+        super().__init__(message)
+        self.diagnostic_record = diagnostic_record
+
 from hedge_fund.paths import CACHE_DIR
 
 CLAUDE_BIN = os.path.expanduser("~/.claude/local/claude")

@@ -17,3 +17,9 @@
   for = "/*.html"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
+
+# 2026-09-23: the home page became the paper portfolio; the retired master-signal pages moved to /masters/
+[[redirects]]
+  from = "/2026-*"
+  to = "/masters/2026-:splat"
+  status = 301

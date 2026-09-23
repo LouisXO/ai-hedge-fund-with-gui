@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Public paper-portfolio page: site/public/paper.html (bilingual, zh / en toggle).
+"""Public home page = the paper portfolio: site/public/index.html (+ paper.html), bilingual zh / en.
 
 What goes public (decided 2026-09-23 by the user): the Alpaca PAPER account only — simulated
 money, $100k — its two books, NAV vs SPY, holdings, closed trades, fills vs the model open,
@@ -227,8 +227,8 @@ def page(d: dict) -> str:
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>{theme}{CSS_EXTRA}</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script></head><body>
-<nav class='nav'><span class='brand'>AI Hedge Fund</span><a href='index.html'>{T('大师信号', 'Master signals')}</a>
-<a href='paper.html' class='on'>{T('模拟盘', 'Paper portfolio')}</a><span class='sp'></span>
+<nav class='nav'><span class='brand'>AI Hedge Fund</span><a href='index.html' class='on'>{T('模拟盘', 'Paper portfolio')}</a>
+<a href='masters/index.html'>{T('大师信号(已停止)', 'Master signals (retired)')}</a><span class='sp'></span>
 <span class='lang' role='group' aria-label='Language'><button type='button' data-l='zh'>中文</button><button type='button' data-l='en'>EN</button></span></nav>
 <h1>{T('模拟盘', 'Paper portfolio')}</h1>
 <p class='lede'>{T('两本规则驱动的股票书在 Alpaca 模拟账户上实时交易,虚拟资金 $100,000。每天收盘后打分,次日开盘下单,没有人工干预,也没有 LLM 做方向判断。这是回测之后的前瞻记录。',
@@ -272,8 +272,10 @@ def page(d: dict) -> str:
 def main() -> int:
     d = collect()
     os.makedirs(OUT, exist_ok=True)
-    with open(os.path.join(OUT, "paper.html"), "w") as f:
-        f.write(page(d))
+    html_ = page(d)
+    for name in ("index.html", "paper.html"):            # the home page; paper.html kept for links already shared
+        with open(os.path.join(OUT, name), "w") as f:
+            f.write(html_)
     print(f"paper.html: {len(d['nav']['days'])} days, {len(d['holdings'])} holdings, {len(d['closed'])} closed")
     return 0
 

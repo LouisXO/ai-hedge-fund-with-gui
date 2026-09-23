@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""公开层静态站生成器 — 只输出观点与市场事实。
+"""大师信号存档页(2026-09-23 停止更新)— site/public/masters/。公开站首页是模拟盘(build_paper.py)。
 
 铁律:不写入任何持仓、金额、盈亏或具体期权结构(那些只进私有层)。
 输入: site-data/masters/<date>.json (大师信号)
@@ -18,7 +18,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MASTERS = os.path.join(ROOT, "site-data", "masters")
 RADAR = "/Users/louis/optradar/out"
-OUT = os.path.join(ROOT, "site", "public")
+OUT = os.path.join(ROOT, "site", "public", "masters")   # archive; the public home page is the paper portfolio (build_paper.py)
 
 PERSONA_CN = {"buffett": "Buffett", "munger": "Munger", "graham": "Graham",
               "lynch": "Lynch", "druckenmiller": "Druckenmiller"}
@@ -235,8 +235,13 @@ def render(date: str, masters: dict | None, anomalies: list,
          "<meta name='robots' content='noindex'>",
          f"<title>AI 对冲基金 · 大师信号 {date}</title>",
          f"<style>{CSS}</style></head><body><div class='wrap'>",
-         "<header><h1>AI 对冲基金 · 大师信号</h1>",
-         "<p style='margin:4px 0 8px'><a href='paper.html'>→ 模拟盘 / Paper portfolio</a></p>",
+         "<header><p style='margin:0 0 10px'><a href='../index.html'>← 模拟盘 / Paper portfolio</a></p>",
+         "<div style='border:1px solid #d29922;background:rgba(210,153,34,.10);border-radius:8px;padding:10px 14px;margin:0 0 16px;font-size:13px;line-height:1.6'>"
+         "<b>已停止 · Discontinued 2026-09-23.</b> 这组 LLM 大师信号经检验没有预测力:5 日方向命中 55%,低于“永远猜多数方向”的 70%;"
+         "五位大师的误差几乎完全相关,等于一个人。页面只作存档。<br>"
+         "These LLM persona signals had no predictive value: 55% directional hits at 5 days versus 70% for always guessing the majority direction, "
+         "and the five personas' errors were almost perfectly correlated. Kept as an archive only.</div>",
+         "<h1>AI 对冲基金 · 大师信号(存档)</h1>",
          f"<div class='sub'>{date} · 5 位投资大师 persona 独立评估 · "
          "数据 moomoo OpenD,判断由 Claude 生成</div></header>"]
 
