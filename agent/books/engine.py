@@ -117,8 +117,8 @@ def simulate(market: Market, targets: dict[pd.Timestamp, list[str]], start: str,
                     continue
                 px = market.adj_open.at[day, t] if t in market.adj_open.columns else np.nan
                 want = equity * day_sizes[t] if t in day_sizes else slot
-                if pd.isna(px) or px <= 0 or cash < want * 0.5:
-                    continue
+                if want <= 0 or pd.isna(px) or px <= 0 or cash < want * 0.5:
+                    continue                                   # size 0 = keep if held, never enter (crash regime)
                 cost = (fixed_cost_pct if fixed_cost_pct is not None else exec_frac * market.spread_pct(t, day)) / 100
                 spend = min(want, cash)
                 shares = spend / (px * (1 + cost))

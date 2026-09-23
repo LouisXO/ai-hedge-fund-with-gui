@@ -515,6 +515,12 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - 处置:v1 继续按原规则跑到复盘日(它是一个已经上线的预注册记录,中途改规则没有意义),但对它的描述从今天起改为"动量集中书"。rankz 不采用。Holm 预算 +2(→ 40)。**下一步的正确问题不是再调构建,而是:一个显式的"前 1% 12 个月动量"书是否比 v1 更好、更便宜、更可解释——那是一个新的预注册。**
 - 审计脚本改为读 `agent.books.data.fundamentals()`(与书看到的数据一致)。
 
+### S30(2026-09-22)— 显式动量书:**比 v1 差**;S29 的"价值/质量是装饰"说过头了
+- 预注册三个变体(`agent/books/momentum_book.py`):`mom_top`(12-1 动量,ADV ≥ $5M、价 ≥ $2、不要基本面,30/60 槽位规则)、`mom_top_momcrash`(崩盘期不进新仓)、`mom_top_lowvol`(动量前 60 内按低波排序进场)。报告 `site-data/validation/s30_momentum_book_2026-09-22.md`。
+- 2017–2026:v1 alpha2 +8.1%(t 1.46)、CAGR 19.4%;**mom_top +6.7%(t 0.67)、CAGR 13.5%(跑输 SPY 15.3%)**,β 1.27/规模 1.22,胜率 43%,2022 年 +1.7%(v1 +12.4%);momcrash 版 +7.8%(0.78);lowvol 版 +7.0%(0.86)但换手 28.7。2026 至今:v1 +32.6%(MaxDD −16.5%),mom_top +11.8%(MaxDD −31%,β 2.63,7 月 −17%)。
+- **修正 S29 的结论**:纯动量复现不了 v1。rankz 把 alpha 归零、纯动量也比 v1 差,两件事同时成立,说明 v1 的边际在**交互**里:基本面层作为**过滤器**(必须有 200 天内的申报、市值 > $1 亿、权益 > 5% 资产)把动量尾部里的垃圾挡掉,再加上名单另一半的深度价值票(BDC/mREIT)提供了 2022 那种年份的收益。价值/质量不是装饰,是过滤器和第二条腿;但"四族等权 z 平均"这个形式确实不是它起作用的方式。
+- 处置:三个变体都不采用,Holm 预算 +3(→ 43)。v1 继续跑;它的准确描述是"通过基本面过滤的动量尾部 + 深度价值,两个簇"。下一个值得预注册的是把这两个簇显式化(两本半仓的书),但**不在今天做**——今天已经是第 30 个 session,数据刚修完,应该让记录攒一段时间再动。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
