@@ -138,8 +138,10 @@ def main() -> int:
             print("   -", a)
     if fired and not args.no_notify:
         msg = "; ".join(f"{t}: {a[:60]}" for t, a in fired[:4])
-        subprocess.run(["terminal-notifier", "-title", "关注名单", "-message", msg, "-open", "https://optradar.tail5b470b.ts.net/",
-                        "-group", "watch"], capture_output=True)
+        tn = "/opt/homebrew/bin/terminal-notifier"                    # absolute: launchd's PATH lacks /opt/homebrew/bin
+        if os.path.exists(tn):
+            subprocess.run([tn, "-title", "关注名单", "-message", msg, "-open", "https://optradar.tail5b470b.ts.net/",
+                            "-group", "watch"], capture_output=True)
     return 0
 
 
