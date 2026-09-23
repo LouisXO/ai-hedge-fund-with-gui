@@ -54,12 +54,13 @@ def collect() -> list[dict]:
             key = ALIASES.get(name, name)
             if key in CONTROLS:
                 key = "insider_v1_5d"
-            if key in seen:
+            row = {"variant": key, "report": os.path.basename(f), "t": float(t),
+                   "alpha2_ann_pct": m.get("alpha2_ann_pct"), "cagr_pct": m.get("cagr_pct"), "n_trades": m.get("n_trades")}
+            if key in seen:                                   # same variant re-run on newer data: the later report wins
+                rows[[r["variant"] for r in rows].index(key)] = row
                 continue
             seen.add(key)
-            rows.append({"variant": key, "report": os.path.basename(f), "t": float(t),
-                         "alpha2_ann_pct": m.get("alpha2_ann_pct"), "cagr_pct": m.get("cagr_pct"),
-                         "n_trades": m.get("n_trades")})
+            rows.append(row)
     return rows
 
 
