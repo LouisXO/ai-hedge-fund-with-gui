@@ -40,6 +40,8 @@ def _p_two_sided(t: float) -> float:
 def collect() -> list[dict]:
     rows, seen = [], set()
     for f in sorted(glob.glob(os.path.join(REPORTS, "*.json"))):
+        if "_fund_v1" in f:                                   # archived pre-audit numbers (S28), kept for the record only
+            continue
         try:
             d = json.load(open(f))
         except Exception:
