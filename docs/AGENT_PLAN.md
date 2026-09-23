@@ -533,6 +533,25 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - **看涨流**:当天 +0.38%(t 6.7,不可交易——流和涨是同一天);次日开盘起 h1 +0.04%、h5 +0.10%(t 1.0)、h20 −0.16%。≥ 6 倍的更大异常 h5 −0.01%。**没有可做多的东西。** 看跌流:h10 −0.41%(t −2.3)、h20 −0.62%(t −2.1),三年同号——又一个负面因子。
 - 局限:只有月度到期、近平值的合约,警报服务盯的远虚值周度"彩票单"不在里面;要覆盖它们要把加载器扩到周度和 ±30%,数据量约 5 倍。在看到近平值流没有边际之前,不值得扩。处置:不做线,Holm +2(→ 45);看跌流和 S25 的"大涨后"一起列入待预注册的负面过滤器。
 
+## 10. 待办(滚动;每个 session 结束时更新)
+
+更新:2026-09-23
+
+**等待中(不需要动手,只要盯)**
+- 模拟盘攒记录:两本书自 9/21 起在跑;S27 执行成本工具在 ≥ 20 次竞价成交后跑一次。
+- NEOV 年报 ≤ 9/28、RKLB 价位、IONQ 发股:关注名单 + `docs/notes/<TICKER>.md`。
+- v2 长线规则(行业上限 20%、两簇显式化为两本半仓的书):**先攒一个月模拟盘记录再预注册**,不要提前。
+
+**已讨论、未开始(需要用户说开始)**
+- 负面过滤器预注册:S25 "大涨 + 新闻" 和 S32 看跌期权流,作为两本书的入场否决条件。
+- 8-K 回购公告事件线。
+- IONQ 加入关注名单(CIK 0001824920,below 35 / above 50)。
+- 期权加载器扩到周度和 ±30%(只有在近平值流有边际时才值得,目前没有)。
+
+**明确不做**
+- Reddit API(自助申请已关闭)、Discord 抓取(违反条款)、Unusual Whales / X API(付费)。
+- 期权书接模拟盘:S26 便宜度门没过,没有验证过的入场。
+
 ## 参考
 - 期权收益:Coval & Shumway (2001) https://onlinelibrary.wiley.com/doi/10.1111/0022-1082.00352 · Goyal & Saretto (2009) https://personal.utdallas.edu/~axs125732/CrossOptionsJFE.pdf · Cao & Han (2013) https://www-2.rotman.utoronto.ca/facbios/file/Han_JFE_published.pdf
 - 期权隐含信号:Cremers & Weinbaum https://papers.ssrn.com/sol3/papers.cfm?abstract_id=968237 · Xing, Zhang & Zhao https://www.ruf.rice.edu/~yxing/option-skew-FINAL.pdf
