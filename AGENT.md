@@ -27,7 +27,7 @@
 
 | 项 | 值 |
 |---|---|
-| 主机 | 工作用 M4 Max,tailnet 节点 `optradar`;`bin/install_power.sh` 已装(AC 上不睡,08:30 / 16:05 定时唤醒) |
+| 主机 | 工作用 M4 Max,tailnet 节点 `optradar`;`bin/install_power.sh` 已装(AC 上不睡,08:30 / 13:20 / 16:05 定时唤醒) |
 | Python | `~/.hedgefund-venv/bin/python`(hedge-fund,3.13)· `~/.moomoo/venv/bin/python`(optradar + moomoo,3.10) |
 | 跑法 | `cd ~/hedge-fund && PYTHONPATH=. ~/.hedgefund-venv/bin/python -W ignore -m agent.<模块>` |
 | 数据库 | `~/.hedge-fund/agent/panel.db`(bars、fundamentals、insider_tx、sch13d)· `news.db`(Alpaca 新闻,1.9M 条)· `options.db`(Alpaca 期权日线,561 名)· `retail.db`(散户热度)· `~/optradar/optradar.db`(账本:`agent_books/agent_orders/agent_lots/agent_book_nav`、`acct_*` 真实账户快照、`paper_ledger`) |
@@ -43,7 +43,8 @@
 | 周一到周五 08:41 | `com.louis.optradar` | 期权雷达 + 早报(含 ⑨ agent 节)+ Mac 通知 + 私有站重建 |
 | 周一到周五 12:45 | `com.louis.agent.chain` | moomoo 期权链归档。**2026-09-23 决定停用**(Alpaca 期权日线已替代;只攒到 12 名 3 天)。停用命令见 §6;plist 源文件留在 `agent/launchd/` |
 | 周一到周五 13:15 | `com.louis.agent.news` | AV 新闻情绪 |
-| 周一到周五 16:10 | `com.louis.agent.execute` | `agent/bin/execute.sh`:实时 Form 4(EFTS)→ 13D → Alpaca 新闻 → **`agent.execute --submit`**(仅 `AGENT_EXEC=on`)→ `agent.watch` 关注名单 → moomoo 账户快照 → **`agent.review` 今日复盘**(模拟盘 + 实盘每笔交易、规则检查、30 日教训计数、通知)→ 私有站 |
+| 周一到周五 13:25 | `com.louis.agent.postclose` | `agent/bin/postclose.sh`(收盘后 25 分钟):`agent.execute --sync-only`(当日 bars、成交同步、对账、记净值,不下单)→ moomoo 账户快照 → `agent.watch` → **`agent.review` 今日复盘**(模拟盘 + 实盘每笔交易、规则检查、30 日教训计数、通知)→ 私有站 |
+| 周一到周五 16:10 | `com.louis.agent.execute` | `agent/bin/execute.sh`:实时 Form 4(EFTS)→ 13D → Alpaca 新闻 → **`agent.execute --submit`**(仅 `AGENT_EXEC=on`)→ `agent.watch`(晚间申报)→ 私有站。留在 16:10 是因为 OPG 窗口 19:00 ET 才开,且当天 Form 4 多在 16:00–18:00 ET 提交 |
 | 周六 09:30 | `com.louis.optradar.weekly` | 周报 |
 | 周日 03:00 | `com.louis.agent.fundamentals` | XBRL 基本面周更 + 七层数据审计(`agent/audit.py`) |
 

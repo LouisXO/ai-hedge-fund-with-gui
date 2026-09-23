@@ -301,6 +301,7 @@ def main() -> int:
     ap.add_argument("--date", default=None, help="bar date to plan from (must be the last session)")
     ap.add_argument("--optradar-db", default=ledger.OPTRADAR_DB)
     ap.add_argument("--out-dir", default=OUT_DIR, help="where exec_<date>.json goes (the selftest points this at a temp dir)")
+    ap.add_argument("--sync-only", action="store_true", help="after-close bookkeeping only: bars, fills, reconcile, mark; plan nothing")
     args = ap.parse_args()
 
     broker = broker_mod.from_env()
@@ -340,7 +341,7 @@ def main() -> int:
             ref_close = {t: float(v) for t, v in close_row.dropna().items()}
             plans: list[dict] = []
             targets_dbg: dict = {}
-            if not stale:
+            if not stale and not args.sync_only:
                 for book, cfg in BOOKS.items():
                     if args.book and book != args.book:
                         continue
@@ -385,15 +386,15 @@ def main() -> int:
         con.close()
 
     summary = {"as_of": str(day.date()), "last_session": str(last_session), "stale_bars": stale, "tif": tif,
-               "mode": "submit" if args.submit else "dry_run", "account_equity": float(acct["equity"]),
+               "mode": "sync" if args.sync_only else "submit" if args.submit else "dry_run", "account_equity": float(acct["equity"]),
                "account_cash": float(acct["cash"]), "sync": sync, "model_px_filled": n_model,
                "reconcile": msgs, "targets": targets_dbg, "books": nav,
                "orders": [{k: (str(v) if isinstance(v, (dt.date, pd.Timestamp)) else v) for k, v in o.items()} for o in sent],
                "skipped_duplicates": skipped, "generated_at": dt.datetime.now().isoformat(timespec="seconds")}
     os.makedirs(args.out_dir, exist_ok=True)
-    with open(os.path.join(args.out_dir, f"exec_{day.date()}.json"), "w") as f:
+    with open(os.path.join(args.out_dir, f"{'sync' if args.sync_only else 'exec'}_{day.date()}.json"), "w") as f:
         json.dump(summary, f, indent=1, default=str)
-    tag = "SUBMITTED" if args.submit else "DRY RUN"
+    tag = "SYNC" if args.sync_only else "SUBMITTED" if args.submit else "DRY RUN"
     print(f"[{tag}] bar {day.date()} (last session {last_session}{', STALE — nothing planned' if stale else ''}) tif={tif} "
           f"· account ${float(acct['equity']):,.0f} · fills synced {sync['filled']}+{sync['closed']} · "
           f"reconcile {'ok' if not msgs else msgs}")
