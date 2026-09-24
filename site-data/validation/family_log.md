@@ -1,4 +1,4 @@
-# Family-wise ledger — 54 book-level variants
+# Family-wise ledger — 64 book-level variants
 
 Two-sided p from the Newey-West t; Holm step-down over the whole family. Variants with a negative t are the rejected event lines (the sign is informative, the test is symmetric).
 
@@ -7,7 +7,7 @@ Two-sided p from the Newey-West t; Holm step-down over the whole family. Variant
 | move_news_up_h2 | s25_move_news_up_2026-09-22.json | -5.55 | -55.0% | 0.000 | 0.000 | ✓ | ✓ |
 | move_news_up_h5 | s25_move_news_up_2026-09-22.json | -4.65 | -53.0% | 0.000 | 0.000 | ✓ | ✓ |
 | move_news_up_h10 | s25_move_news_up_2026-09-22.json | -4.49 | -55.8% | 0.000 | 0.000 | ✓ | ✓ |
-| move_nonews_down_h2 | s25_move_nonews_down_2026-09-22.json | -2.45 | -27.0% | 0.014 | 0.733 |  |  |
+| move_nonews_down_h2 | s25_move_nonews_down_2026-09-22.json | -2.45 | -27.0% | 0.014 | 0.877 |  |  |
 | stop20 | s24_long_v2_2026-09-22.json | 2.17 | +11.5% | 0.030 | 1.000 |  |  |
 | invvol | s24_long_v2_2026-09-22.json | 2.04 | +9.1% | 0.041 | 1.000 |  |  |
 | issuance | s24_long_v2_2026-09-22.json | 2.03 | +11.3% | 0.042 | 1.000 |  |  |
@@ -41,16 +41,24 @@ Two-sided p from the Newey-West t; Holm step-down over the whole family. Variant
 | insider_opp_ceo_h10 | s23_insider_opp_ceo_2026-09-22.json | 0.95 | +3.7% | 0.343 | 1.000 |  |  |
 | insider_contrarian_h10 | s23_insider_contrarian_2026-09-22.json | 0.94 | +8.5% | 0.348 | 1.000 |  |  |
 | long_composite_n100 | books_2026-09-20_spycash_n100.json | 0.90 | +3.6% | 0.366 | 1.000 |  |  |
+| lc_mom | s37_largecap_2026-09-24.json | 0.87 | +6.4% | 0.384 | 1.000 |  |  |
+| lc_ew | s37_largecap_2026-09-24.json | -0.82 | -0.9% | 0.412 | 1.000 |  |  |
+| lc_qlv | s37_largecap_2026-09-24.json | 0.81 | +2.1% | 0.416 | 1.000 |  |  |
 | pead_small_h40 | s22_pead_small_2026-09-22.json | -0.81 | -2.4% | 0.418 | 1.000 |  |  |
 | insider_opp_h10 | s23_insider_opp_2026-09-22.json | 0.78 | +3.7% | 0.436 | 1.000 |  |  |
 | long_value_n30 | books_2026-09-20_spycash.json | 0.77 | +4.0% | 0.443 | 1.000 |  |  |
 | insider_opp_ceo_h5 | s23_insider_opp_ceo_2026-09-22.json | 0.75 | +2.5% | 0.455 | 1.000 |  |  |
+| lc_qv | s37_largecap_2026-09-24.json | 0.73 | +2.8% | 0.468 | 1.000 |  |  |
 | pead_small_h10 | s22_pead_small_2026-09-22.json | -0.67 | -1.6% | 0.502 | 1.000 |  |  |
 | combo | s24_long_v2_2026-09-22.json | 0.63 | +1.9% | 0.528 | 1.000 |  |  |
 | buyback_clean_h20 | s34_buyback_clean_2026-09-23.json | 0.61 | +2.0% | 0.539 | 1.000 |  |  |
 | sch13d_h5 | s21_13d_2026-09-22.json | -0.46 | -4.2% | 0.646 | 1.000 |  |  |
+| lc_value | s37_largecap_2026-09-24.json | 0.41 | +1.7% | 0.681 | 1.000 |  |  |
+| lc_secneutral | s37_largecap_2026-09-24.json | 0.34 | +0.9% | 0.734 | 1.000 |  |  |
 | secneutral | s24_long_v2_2026-09-22.json | 0.30 | +1.2% | 0.764 | 1.000 |  |  |
+| lc_composite50 | s37_largecap_2026-09-24.json | -0.30 | -0.9% | 0.766 | 1.000 |  |  |
 | buyback_clean_h40 | s34_buyback_clean_2026-09-23.json | 0.28 | +0.9% | 0.778 | 1.000 |  |  |
+| lc_composite | s37_largecap_2026-09-24.json | 0.23 | +0.8% | 0.817 | 1.000 |  |  |
 | sch13d_h10 | s21_13d_2026-09-22.json | -0.22 | -2.4% | 0.824 | 1.000 |  |  |
 | rankz_momcrash | s24_long_v2_2026-09-22.json | 0.21 | +0.7% | 0.835 | 1.000 |  |  |
 | rankz | s24_long_v2_2026-09-22.json | 0.14 | +0.5% | 0.890 | 1.000 |  |  |
@@ -58,3 +66,5 @@ Two-sided p from the Newey-West t; Holm step-down over the whole family. Variant
 | buyback_clean_h5 | s34_buyback_clean_2026-09-23.json | 0.10 | +0.3% | 0.923 | 1.000 |  |  |
 | long_quality_n30 | books_2026-09-20_spycash.json | 0.07 | +0.2% | 0.946 | 1.000 |  |  |
 | insider_contrarian_h5 | s23_insider_contrarian_2026-09-22.json | -0.05 | -0.2% | 0.958 | 1.000 |  |  |
+| lc_rankz | s37_largecap_2026-09-24.json | 0.03 | +0.1% | 0.975 | 1.000 |  |  |
+| lc_payout | s37_largecap_2026-09-24.json | 0.00 | +0.0% | 0.999 | 1.000 |  |  |
