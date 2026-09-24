@@ -130,3 +130,11 @@ def test_insider_day_entry_is_market():
     cfg = {"max_positions": 20, "entry_cap_pct": None}
     o = plan_book("insider", cfg, [], ["N"], set(), AS_OF, NEXT, {"N": 10.0}, {"N": 0.4}, cash_usd=28_000.0, blocked=set(), tif="day")
     assert o and o[0]["order_type"] == "market" and o[0]["tif"] == "day" and o[0]["limit_price"] is None
+
+
+def test_unfilled_insider_orders_are_retried_once_filled_ones_block():
+    from agent.execute import blocking_orders
+    rows = [("A", "filled", 10), ("B", "expired", 0), ("C", "accepted", 0), ("D", "expired", 0), ("D", "canceled", 0)]
+    skip, retry = blocking_orders(rows)
+    assert skip == {"A", "C", "D"}          # filled, still working, and two misses
+    assert retry == {"B"}                    # one miss: retry once

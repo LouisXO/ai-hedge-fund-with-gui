@@ -281,20 +281,43 @@ def long_targets(store: PanelStore, market, day: pd.Timestamp, con) -> tuple[lis
     return ranked, keep, True
 
 
-def insider_targets(store: PanelStore, day: pd.Timestamp, con, window: int = 2) -> list[str]:
-    """The last two days' qualifying filings, minus anything this book already ordered in the last 5 sessions.
+def blocking_orders(rows: list[tuple]) -> tuple[set[str], set[str]]:
+    """From recent insider buy orders [(ticker, status, filled_qty)], which tickers to skip and which to retry.
+
+    Skip a ticker if any of its orders filled (we own it or owned it) or is still working.
+    An order that ended unfilled (expired / canceled / rejected) does not block: the name is
+    retried once — but a ticker with two unfilled orders is skipped, so a bad name is not chased.
+    (2026-09-24: the old rule skipped anything ever ordered, so 12 simulator no-fills were never retried.)
+    """
+    filled_or_open, unfilled = set(), {}
+    for t, status, fq in rows:
+        if (fq or 0) > 0 or status not in FINAL_STATES:
+            filled_or_open.add(t)
+        else:
+            unfilled[t] = unfilled.get(t, 0) + 1
+    skip = filled_or_open | {t for t, n in unfilled.items() if n >= 2}
+    retry = {t for t in unfilled if t not in skip}
+    return skip, retry
+
+
+def insider_targets(store: PanelStore, day: pd.Timestamp, con, window: int = 2) -> tuple[list[str], set[str]]:
+    """The last two days' qualifying filings, minus names this book bought or is buying in the last 8 days.
 
     Two days, not one: the 06:00 Form 4 job loads EDGAR's index for the previous day, so a
-    filing made on D reaches the panel on D+1 and would be missed by a one-day window.
+    filing made on D reaches the panel on D+1 and would be missed by a one-day window. The
+    same filing therefore shows up two evenings in a row; `blocking_orders` keeps that from
+    buying twice while still retrying an entry the broker left unfilled. Returns (tickers, retries).
     """
     df = signals_insider.candidates(store, day, window)
     if df.empty:
-        return []
+        return [], set()
     df = df[df["eligible"]]
-    recent = {r[0] for r in con.execute("""SELECT DISTINCT ticker FROM agent_orders
-                                            WHERE book = 'insider' AND side = 'buy' AND as_of >= ?""",
-                                         [(day - pd.Timedelta(days=8)).date()]).fetchall()}
-    return [t for t in df.sort_values("buy_usd", ascending=False)["ticker"] if t not in recent]
+    rows = con.execute("""SELECT ticker, status, filled_qty FROM agent_orders
+                          WHERE book = 'insider' AND side = 'buy' AND dry_run = FALSE AND as_of >= ?""",
+                       [(day - pd.Timedelta(days=8)).date()]).fetchall()
+    skip, retry = blocking_orders(rows)
+    names = [t for t in df.sort_values("buy_usd", ascending=False)["ticker"] if t not in skip]
+    return names, {t for t in names if t in retry}
 
 
 # ---------------------------------------------------------------- main -----------------
@@ -354,11 +377,17 @@ def main() -> int:
                     others = {l["ticker"] for l in lots_all if l["book"] != book}
                     if book == "long":
                         ranked, keep, scored = long_targets(store, market, day, con)
+                        retries = set()
                     else:
-                        ranked, keep, scored = insider_targets(store, day, con), set(), True
+                        (ranked, retries), keep, scored = insider_targets(store, day, con), set(), True
                     spreads = {t: market.spread_pct(t, day) for t in ranked}
-                    plans += plan_book(book, cfg, lots, ranked, keep, day.date(), next_session, ref_close, spreads,
-                                       books[book]["cash_usd"], blocked | others, scored, tif)
+                    book_plans = plan_book(book, cfg, lots, ranked, keep, day.date(), next_session, ref_close, spreads,
+                                           books[book]["cash_usd"], blocked | others, scored, tif)
+                    if book == "insider":
+                        for o in book_plans:              # a retry of an entry the broker left unfilled: tagged, evaluated separately
+                            if o["side"] == "buy" and o["ticker"] in retries:
+                                o["reason"] = "entry_retry"
+                    plans += book_plans
                     targets_dbg[book] = {"n_ranked": len(ranked), "n_keep": len(keep), "scored": scored,
                                          "top": ranked[:10]}
             nav = mark_books(con, day.date(), ref_close, float(acct["equity"]))
