@@ -406,7 +406,7 @@ def main() -> int:
     for b in nav:
         print(f"  {b['book']:8s} equity ${b['equity_usd']:,.0f}  cash ${b['cash_usd']:,.0f}  positions {b['n_positions']}")
     for o in sent:
-        lp = f"limit {o['limit_price']}" if o["limit_price"] else "MOO"
+        lp = f"limit {o['limit_price']}" if o["limit_price"] else ("MOO" if o["tif"] == "opg" else "MKT day")
         print(f"  {o['book']:8s} {o['side']:4s} {o['ticker']:6s} x{o['qty']:<5d} {lp:<14s} ref {o['ref_close']:.2f}  {o['reason']}  [{o['status']}]")
     if skipped:
         print(f"  skipped {len(skipped)} already-submitted ids")
