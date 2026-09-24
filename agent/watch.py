@@ -16,6 +16,7 @@ import datetime as dt
 import json
 import os
 import subprocess
+import time
 import urllib.request
 
 import duckdb
@@ -128,6 +129,27 @@ def main() -> int:
                 r["alerts"].append(f"散户热度 {a['mentions_24h_ago']} → {a['mentions']} 提及/24h")
     except Exception as exc:
         print(f"retail heat skipped: {exc}")
+    try:                                                  # display only: analyst consensus + unusual options (moomoo, read-only)
+        import moomoo as mm
+        q = mm.OpenQuoteContext(host="127.0.0.1", port=11111)
+        try:
+            for r in results:
+                code = f"US.{r['ticker']}"
+                c = q.get_research_analyst_consensus(code)
+                if c[0] == 0 and isinstance(c[1], dict) and c[1].get("total"):
+                    d = c[1]
+                    up = (d["average"] / r["last"] - 1) * 100 if r.get("last") else None
+                    r["consensus"] = (f"{d['total']} 家分析师,平均目标 {d['average']:.2f}" + (f"({up:+.0f}%)" if up is not None else "")
+                                      + f",区间 {d['lowest']:.2f}–{d['highest']:.2f};买入 {d['buy']:.0f}% / 持有 {d['hold']:.0f}% / 卖出 {d['sell']:.0f}%")
+                u = q.get_derivative_unusual(code)
+                if u[0] == 0 and isinstance(u[1], dict) and u[1].get("content"):
+                    lines = [l.strip() for l in u[1]["content"].splitlines() if l.strip() and "：" not in l[:8] and not l.strip().startswith("[")]
+                    r["options_unusual"] = lines[:3]
+                time.sleep(0.6)
+        finally:
+            q.close()
+    except Exception as exc:
+        print(f"consensus / unusual options skipped: {exc}")
     try:                                                  # display-only Chinese headlines (agent/translate.py, cached)
         from agent.translate import translate
         zh = translate([h["en"] for r in results for h in r["headlines"]])
