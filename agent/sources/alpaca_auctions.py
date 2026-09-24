@@ -1,9 +1,11 @@
 """Opening / closing auction prints from Alpaca's historical auctions endpoint → ~/.hedge-fund/agent/auctions.db.
 
 `/v2/stocks/auctions` (feed=sip) is free for data older than 15 minutes (verified 2026-09-24).
-Each day has opening prints `o` and closing prints `c`; condition "Q" is the primary exchange's
-official opening cross (the "O" prints are other venues' opening trades), "M" the official
-closing cross. We keep the official cross price and size per (ticker, day), which answers two
+Each day has opening prints `o` and closing prints `c`. The primary listing exchange's cross is the
+print with condition "O" (opening) / "6" (closing); "Q" / "M" are per-venue official open / close
+markers and can be a 1-share print on another venue (2026-09-24: MU's NYSE Arca "Q" was 1 share
+while the Nasdaq cross was 151,103), so they are not used. We keep the cross price and size per
+(ticker, day), which answers two
 execution questions the paper simulator cannot:
   - what a real market-on-open order would have paid (the cross price), and
   - how large our order is relative to the auction (participation = our $ / cross $).
@@ -58,8 +60,8 @@ def fetch(symbols: list[str], start: dt.date, end: dt.date, headers: dict) -> li
                 raise
         for sym, days in (d.get("auctions") or {}).items():
             for day in days:
-                op = [x for x in day.get("o", []) if x.get("c") == "Q"]
-                cl = [x for x in day.get("c", []) if x.get("c") == "M"]
+                op = sorted((x for x in (day.get("o") or []) if x.get("c") == "O"), key=lambda x: -(x.get("s") or 0))   # the primary cross print
+                cl = sorted((x for x in (day.get("c") or []) if x.get("c") == "6"), key=lambda x: -(x.get("s") or 0))
                 rows.append({"ticker": sym, "day": day["d"],
                              "open_px": op[0]["p"] if op else None, "open_size": op[0].get("s") if op else None,
                              "close_px": cl[0]["p"] if cl else None, "close_size": cl[0].get("s") if cl else None})

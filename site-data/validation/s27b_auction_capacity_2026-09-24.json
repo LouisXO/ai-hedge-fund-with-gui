@@ -1,0 +1,50 @@
+{
+ "start": "2025-09-01",
+ "end": "2026-08-31",
+ "slot_usd": {
+  "long": 2000.0,
+  "insider": 1500.0
+ },
+ "books": {
+  "insider": {
+   "trades": 584,
+   "with_cross": 584,
+   "entry_part_median": 0.5219986112187283,
+   "entry_part_p75": 1.3691855414163596,
+   "entry_part_p90": 3.301808207944003,
+   "share_entry_gt10": 0.02054794520547945,
+   "share_entry_gt25": 0.003424657534246575,
+   "share_entry_gt100": 0.0,
+   "exit_part_median": 1.31424201135803,
+   "share_exit_gt25": 0.03773584905660377,
+   "cross_usd_median": 287359.02,
+   "open_vs_bar_median_abs": 0.0,
+   "open_vs_bar_share_gt_0.5": 0.10102739726027397,
+   "ret_high_part": -21.972906499502685,
+   "n_high_part": 2,
+   "ret_low_part": 0.7450224801036873,
+   "n_low_part": 582,
+   "pass": true
+  },
+  "long": {
+   "trades": 120,
+   "with_cross": 120,
+   "entry_part_median": 0.3822277429075777,
+   "entry_part_p75": 2.3622873730178555,
+   "entry_part_p90": 4.794188429514992,
+   "share_entry_gt10": 0.025,
+   "share_entry_gt25": 0.0,
+   "share_entry_gt100": 0.0,
+   "exit_part_median": 0.4479020831934841,
+   "share_exit_gt25": 0.01694915254237288,
+   "cross_usd_median": 524643.86,
+   "open_vs_bar_median_abs": 0.0,
+   "open_vs_bar_share_gt_0.5": 0.13333333333333333,
+   "ret_high_part": null,
+   "n_high_part": 0,
+   "ret_low_part": 4.821926149187178,
+   "n_low_part": 120,
+   "pass": true
+  }
+ }
+}

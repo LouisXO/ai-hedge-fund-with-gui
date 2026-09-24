@@ -89,7 +89,7 @@ def main() -> int:
         json.dump({"measured": df.to_dict("records") if not df.empty else [], "cost_per_side": per_book, "books": books},
                   f, indent=1, default=str)
     L = [f"# S27 — measured execution cost vs the backtest assumption ({stamp})", "",
-         summary(df).to_markdown(index=False) if not df.empty else "", "",
+         "```\n" + summary(df).to_string(index=False) + "\n```" if not df.empty else "", "",
          "| book | cost model | CAGR | alpha2/yr | alpha2 t | trades |", "|---|---|---|---|---|---|"]
     for k, m in books.items():
         book, label = k.split("_", 1)

@@ -111,7 +111,7 @@ def main() -> int:
     with open(base + ".json", "w") as f:
         json.dump({"start": args.start, "end": args.end, "slot_usd": SLOT, "books": res}, f, indent=1, default=float)
     L = [f"# S27b — opening-auction capacity at paper sizes ({stamp})", "",
-         f"Trades both books made {args.start} → {args.end} in the backtest; official opening cross (Alpaca auctions, condition Q). "
+         f"Trades both books made {args.start} → {args.end} in the backtest; primary-exchange opening cross (Alpaca auctions, the \"O\" print). "
          "Participation = our slot $ / cross $ (long $2,000, insider $1,500).", "",
          "| book | trades | with cross | median cross $ | entry part. median | p75 | p90 | >10% | >25% | >100% | exit part. median | exit >25% | cross vs bar open, median |Δ| | avg ret, part ≤25% | avg ret, part >25% | pass |",
          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
