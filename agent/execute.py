@@ -6,8 +6,8 @@ real paper account:
   backtest                                  here
   ------------------------------------      ------------------------------------------
   targets chosen with data through day D    scored on D's completed bar, after 16:00 ET
-  fills at D+1 open                         OPG orders: limit-on-open buys, market-on-open sells
-                                            (DAY orders queued for the open if run 09:28-19:00 ET)
+  fills at D+1 open                         DAY orders queued overnight, filled in the first minutes
+                                            (paper does not simulate the OPG auction; 2026-09-24)
   cost = 0.5 x quoted spread each side      whatever the opening auction gives; measured, not assumed
   long book: enter rank<=30 into free       same, with the book's own lots as the state
     slots, exit when rank>60
@@ -128,7 +128,12 @@ def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: s
         # In the opening auction there is no spread to cross and the backtest bought at the open print,
         # so an OPG entry is market-on-open (2026-09-23: paper left 5 of 7 limit-on-open orders unfilled
         # although the open printed inside the limit). The cap only applies to the DAY fallback.
-        otype = "market" if tif == "opg" else "limit"
+        # 2026-09-24: on the PAPER account the opening auction is not simulated reliably — every OPG
+        # market order expired unfilled (5/5 on 09-24) and 7/9 OPG limits expired on 09-23, while DAY
+        # orders queued overnight filled 30/30 in the first minutes (09-22). So main() sends DAY
+        # orders. The insider book still buys at market (S31: half its edge is on day one); the long
+        # book keeps the +3% cap as a limit.
+        otype = "market" if (tif == "opg" or book == "insider") else "limit"
         orders.append({"client_order_id": client_id(book, as_of, t, "buy"), "book": book, "as_of": as_of,
                        "ticker": t, "side": "buy", "qty": qty, "order_type": otype, "tif": tif,
                        "limit_price": None if otype == "market" else limit, "ref_close": px, "reason": "entry"})
@@ -336,7 +341,7 @@ def main() -> int:
             lots_all = open_lots(con)
             blocked, msgs = reconcile(lots_all, positions)
             next_session = _sessions_after(calendar, day.date(), 1)
-            tif = "opg" if opg_window(dt.datetime.now(ET)) else "day"
+            tif = "opg" if (os.environ.get("AGENT_TIF") == "opg" and opg_window(dt.datetime.now(ET))) else "day"   # DAY on paper; see plan_book
             close_row = market.close.loc[day]
             ref_close = {t: float(v) for t, v in close_row.dropna().items()}
             plans: list[dict] = []

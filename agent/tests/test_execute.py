@@ -53,7 +53,7 @@ def test_insider_book_exits_on_hold_until_and_caps_entry_at_one_spread():
     assert orders[1]["order_type"] == "market" and orders[1]["limit_price"] is None
     day = plan_book("insider", cfg, lots, ["N"], set(), AS_OF, NEXT, {"H": 20.0, "K": 20.0, "N": 8.0},
                     {"N": 0.4}, cash_usd=28_000.0, blocked=set(), tif="day")
-    assert day[1]["limit_price"] == pytest.approx(round(8.0 * 1.004, 2))   # cents, DAY fallback
+    assert day[1]["order_type"] == "market" and day[1]["limit_price"] is None   # DAY on paper, still market (2026-09-24)
     assert orders[1]["reason"] == "entry" and orders[0]["reason"] == "hold_expired"
 
 
@@ -123,3 +123,10 @@ def test_broker_refuses_anything_but_paper():
         PaperBroker("PKXXXX", "s", base_url="https://api.alpaca.markets")
     b = PaperBroker("PKXXXX", "s")
     assert b.base.startswith("https://paper-api.alpaca.markets")
+
+
+def test_insider_day_entry_is_market():
+    """Paper runs on DAY orders (OPG expired 5/5 on 2026-09-24); the insider book must still buy at market."""
+    cfg = {"max_positions": 20, "entry_cap_pct": None}
+    o = plan_book("insider", cfg, [], ["N"], set(), AS_OF, NEXT, {"N": 10.0}, {"N": 0.4}, cash_usd=28_000.0, blocked=set(), tif="day")
+    assert o and o[0]["order_type"] == "market" and o[0]["tif"] == "day" and o[0]["limit_price"] is None
