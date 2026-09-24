@@ -65,7 +65,8 @@
 - 模拟器成交按开盘后第一个卖一,不是开盘印,小盘股偏贵约 0.6%。`agent_orders.model_px` 记当天开盘价,差值就是要测的东西。S27 工具在 ≥ 20 次竞价成交后跑。
 - 模拟盘保真缺口:whole shares 让 $2k 槽位在高价股上欠配;EDGAR 每日索引 16:40 ET 后才出,所以实时线用 EFTS。
 - **评估点已预注册**(`agent/config.yaml`,2026-09-23):长线 100 笔平仓或 2027-06-30,内部人 200 笔平仓或 2027-06-30,先到为准。之前不对任何一本书下判决;早报模拟盘一节显示进度。
-- 否定过的线(不要再提议):13D 举牌(S21)、小盘 PEAD(S22)、大动 ± 新闻四格(S25)、8-K 回购公告(S34)、异常期权流做多(S32)。负面信号做入场否决的结果见 S33。
+- 否定过的线(不要再提议):13D 举牌(S21)、小盘 PEAD(S22)、大动 ± 新闻四格(S25)、8-K 回购公告(S34)、异常期权流做多(S32)、大盘选股九个规则(S37)、空头持仓否决(S38)。
+- 执行成本(S27/S27b):真实开盘竞价完全吃得下两本书的量(中位 0.4–0.5%);模拟器按开盘后卖一成交,约 +0.6%/边,会把长线 alpha 从 +8.1% 压到 +3.6%。评估模拟盘时必须按同一口径比较。数据源清单见 `docs/DATA_SOURCES.md`。负面信号做入场否决的结果见 S33。
 
 ## 5. 目录地图
 
@@ -84,7 +85,7 @@ agent/
   audit.py              七层数据审计(周日跑)
   books/                engine、factors、fundamentals、data、long_v2、live、momentum_book、industry
   events/               事件线框架:insider、insider_v2、sch13d、pead、move_news
-  sources/              alpaca_bars/news/options、sec_xbrl/sic/13d/daily_form4、retail_heat
+  sources/              alpaca_bars/news/options/auctions、sec_xbrl/sic/13d/daily_form4/8k_buyback、finra_short、retail_heat
   s2x_*.py / s3x_*.py   预注册实验脚本(S21 13D、S24 长线变体、S26 期权门、S27 执行成本、S30 动量书、S31 入场时机、S32 期权流、S33 负面否决、S34 回购线)
   config.yaml           预注册的评估点(evaluate_at)
   tests/                pytest 40 个;`tests/selftest_agent.sh` 隔离全链路冒烟(复制账本、dry run、早报),不碰真实账本和 out/

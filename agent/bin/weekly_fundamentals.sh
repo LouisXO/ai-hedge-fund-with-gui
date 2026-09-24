@@ -17,5 +17,6 @@ with PanelStore() as s:
 print('fundamentals_pit', len(df), 'rows', df['ticker'].nunique(), 'names')
 " >> "$LOG" 2>&1 || echo "fundamentals rebuild failed" >> "$LOG"
 $PY -W ignore -m agent.sources.av_listing refresh >> "$LOG" 2>&1 || true
+$PY -W ignore -m agent.sources.finra_short update >> "$LOG" 2>&1 || echo "finra short interest update failed (non-fatal)" >> "$LOG"   # S38 data, twice-monthly source
 echo "=== done $(date) ===" >> "$LOG"
 $PY -W ignore -m agent.audit >> "$LOG" 2>&1 || echo "audit reported failures" >> "$LOG"
