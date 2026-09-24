@@ -9,7 +9,8 @@
 #   3. agent.watch                 watchlist alerts (runs again at 16:10 for evening filings; deduped)
 #   4. agent.review                today's review page + lessons + notification
 #   5. private_index               front page
-#   6. data archives               SEC forms, Alpha Vantage estimates, moomoo IV / consensus / ratings, Alpaca borrow flags
+#   6. public site publish (hedge-fund.louisleng.com, paper page with today's close)
+#   7. data archives               SEC forms, Alpha Vantage estimates, moomoo IV / consensus / ratings, Alpaca borrow flags
 set -u
 cd /Users/louis/hedge-fund
 PY=/Users/louis/.hedgefund-venv/bin/python
@@ -23,6 +24,8 @@ $PY -W ignore -m agent.review >> "$LOG" 2>&1 || echo "review failed (non-fatal)"
 $PY -W ignore -m agent.dashboard >> "$LOG" 2>&1 || echo "dashboard failed (non-fatal)" >> "$LOG"
 $PY -W ignore site/build_paper.py >> "$LOG" 2>&1 || echo "paper page failed (non-fatal)" >> "$LOG"      # private copy of the public paper page (+ public copy, pushed at 08:41)
 /Users/louis/.moomoo/venv/bin/python /Users/louis/optradar/bin/private_index.py >> "$LOG" 2>&1 || echo "private index failed (non-fatal)" >> "$LOG"
+# --- public site: publish today's close (the 08:41 run publishes too, but then the data is a day old) ---
+PUBLISH=1 zsh /Users/louis/hedge-fund/site/publish.sh "$(date +%F)" >> "$LOG" 2>&1 || echo "public site publish failed (non-fatal)" >> "$LOG"
 # --- data archives (after the review and the site, so they never delay the notification) ---
 $PY -W ignore -m agent.sources.sec_forms update --days 3 >> "$LOG" 2>&1 || echo "sec forms update failed (non-fatal)" >> "$LOG"      # 424B5 / S-3 / 144
 $PY -W ignore -m agent.sources.av_estimates --max 20 >> "$LOG" 2>&1 || echo "av estimates failed (non-fatal)" >> "$LOG"              # 20 names/day, shares the AV quota
