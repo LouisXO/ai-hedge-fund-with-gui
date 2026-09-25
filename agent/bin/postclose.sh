@@ -34,5 +34,5 @@ PUBLISH=1 zsh /Users/louis/hedge-fund/site/publish.sh "$(date +%F)" >> "$LOG" 2>
 $PY -W ignore -m agent.sources.sec_forms update --days 3 >> "$LOG" 2>&1 || echo "sec forms update failed (non-fatal)" >> "$LOG"      # 424B5 / S-3 / 144
 $PY -W ignore -m agent.sources.av_estimates --max 20 >> "$LOG" 2>&1 || echo "av estimates failed (non-fatal)" >> "$LOG"              # 20 names/day, shares the AV quota
 $PY -W ignore -m agent.sources.daily_archive >> "$LOG" 2>&1 || echo "daily archive failed (non-fatal)" >> "$LOG"                  # moomoo IV/consensus/ratings, Alpaca borrow flags
-$PY -W ignore -m agent.sources.alpaca_intraday --table bars30 --universe --start 2019-09-01 >> "$LOG" 2>&1 || echo "intraday bars30 update failed (non-fatal)" >> "$LOG"   # incremental: only the new session
+$PY -W ignore -m agent.sources.alpaca_intraday --table bars30 --universe --start 2024-01-01 >> "$LOG" 2>&1 || echo "intraday bars30 update failed (non-fatal)" >> "$LOG"   # incremental: only the new session
 $PY -W ignore -m agent.sources.alpaca_intraday --table bars5 --options --start 2023-12-01 >> "$LOG" 2>&1 || echo "intraday bars5 update failed (non-fatal)" >> "$LOG"

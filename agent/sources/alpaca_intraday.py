@@ -3,8 +3,9 @@
   bars30   30-minute bars, regular session only (09:30–15:30 ET bar starts), split-adjusted
   bars5    5-minute bars, regular session only, for the option names (S42's realized variance)
 
-Alpaca's intraday bars include pre/after-hours; they are dropped here. Multi-symbol requests,
-paginated; a load_log row per (table, ticker) makes reruns incremental. Rate limit on the free
+Alpaca's intraday bars include pre/after-hours; they are dropped here. One symbol per request (Alpaca caps an intraday page at ~540 bars
+in total, so multi-symbol requests only slow things down), paginated; a load_log row per (table, ticker)
+with [since, through] makes reruns incremental in both directions. Rate limit on the free
 tier is 200 requests/minute, so a full 30-minute history for ~3,000 names (2019 →) takes a few hours.
 
 Usage:
@@ -32,8 +33,8 @@ INTRADAY_DB = AGENT_DIR / "intraday.db"
 URL = "https://data.alpaca.markets/v2/stocks/bars"
 TF = {"bars30": "30Min", "bars5": "5Min"}
 DDL = {t: f"CREATE TABLE IF NOT EXISTS {t} (ticker VARCHAR, ts TIMESTAMP, o DOUBLE, h DOUBLE, l DOUBLE, c DOUBLE, v DOUBLE, n INT, PRIMARY KEY (ticker, ts))" for t in TF}
-DDL_LOG = "CREATE TABLE IF NOT EXISTS load_log (tbl VARCHAR, ticker VARCHAR, through DATE, rows INT, PRIMARY KEY (tbl, ticker))"
-BATCH = 25
+DDL_LOG = "CREATE TABLE IF NOT EXISTS load_log (tbl VARCHAR, ticker VARCHAR, through DATE, rows INT, since DATE, PRIMARY KEY (tbl, ticker))"
+BATCH = 1      # Alpaca caps an intraday page at ~540 bars TOTAL, so multi-symbol requests are slower, not faster (2026-09-25)
 
 
 def _headers() -> dict:
@@ -65,7 +66,7 @@ def fetch(symbols: list[str], timeframe: str, start: dt.date, end: dt.date, head
                 f["ticker"] = sym
                 frames.append(f)
         token = d.get("next_page_token")
-        time.sleep(0.32)
+        time.sleep(0.31)
         if not token:
             break
     if not frames:
@@ -84,36 +85,43 @@ def load(symbols: list[str], table: str, start: dt.date, end: dt.date | None = N
     con = duckdb.connect(str(INTRADAY_DB))
     con.execute(DDL[table])
     con.execute(DDL_LOG)
-    done = dict(con.execute("SELECT ticker, through FROM load_log WHERE tbl = ?", [table]).fetchall())
-    todo = []
+    try:
+        con.execute("ALTER TABLE load_log ADD COLUMN since DATE")
+    except Exception:
+        pass
+    done = {t: (thr, since) for t, thr, since in con.execute("SELECT ticker, through, since FROM load_log WHERE tbl = ?", [table]).fetchall()}
+    jobs = []                                                    # (symbol, start, end) ranges still missing
     for s in symbols:
-        thr = done.get(s)
-        s_start = start if thr is None else max(start, thr + dt.timedelta(days=1))
-        if s_start <= end:
-            todo.append((s, s_start))
-    stats = {"table": table, "requested": len(symbols), "todo": len(todo), "rows": 0, "batches": 0}
+        thr, since = done.get(s, (None, None))
+        if thr is None:
+            jobs.append((s, start, end))
+            continue
+        if since is not None and start < since:                  # earlier history requested than what was loaded
+            jobs.append((s, start, since - dt.timedelta(days=1)))
+        if thr < end:
+            jobs.append((s, thr + dt.timedelta(days=1), end))
+    stats = {"table": table, "requested": len(symbols), "todo": len(jobs), "rows": 0, "names": 0}
     t0 = time.time()
-    # group names that share the same start date so one request covers a batch
-    for s_start in sorted({d for _, d in todo}):
-        names = [s for s, d in todo if d == s_start]
-        for i in range(0, len(names), BATCH):
-            chunk = names[i:i + BATCH]
-            try:
-                df = fetch(chunk, TF[table], s_start, end, headers)
-            except Exception as exc:
-                print(f"  batch failed ({chunk[0]}…): {str(exc)[:80]}")
-                continue
-            if len(df):
-                con.register("_b", df)
-                con.execute(f"INSERT OR REPLACE INTO {table} SELECT * FROM _b")
-                con.unregister("_b")
-            counts = df.groupby("ticker").size().to_dict() if len(df) else {}
-            for s in chunk:
-                con.execute("INSERT OR REPLACE INTO load_log VALUES (?, ?, ?, ?)", [table, s, end, int(counts.get(s, 0))])
-            stats["rows"] += int(len(df))
-            stats["batches"] += 1
-            if not quiet and stats["batches"] % 10 == 0:
-                print(f"  {table}: {stats['batches']} batches, {stats['rows']:,} rows [{time.time() - t0:.0f}s]", flush=True)
+    for s, j_start, j_end in jobs:
+        try:
+            df = fetch([s], TF[table], j_start, j_end, headers)
+        except Exception as exc:
+            print(f"  {s} failed: {str(exc)[:80]}", flush=True)
+            continue
+        if len(df):
+            con.register("_b", df)
+            con.execute(f"INSERT OR REPLACE INTO {table} SELECT * FROM _b")
+            con.unregister("_b")
+        thr, since = done.get(s, (None, None))
+        new_thr = max(thr, j_end) if thr else j_end
+        new_since = min(since, j_start) if since else j_start
+        prev_rows = con.execute("SELECT rows FROM load_log WHERE tbl = ? AND ticker = ?", [table, s]).fetchone()
+        con.execute("INSERT OR REPLACE INTO load_log VALUES (?, ?, ?, ?, ?)", [table, s, new_thr, int((prev_rows[0] if prev_rows else 0) + len(df)), new_since])
+        done[s] = (new_thr, new_since)
+        stats["rows"] += int(len(df))
+        stats["names"] += 1
+        if not quiet and stats["names"] % 25 == 0:
+            print(f"  {table}: {stats['names']}/{len(jobs)} ranges, {stats['rows']:,} rows [{time.time() - t0:.0f}s]", flush=True)
     con.close()
     stats["seconds"] = round(time.time() - t0)
     return stats
