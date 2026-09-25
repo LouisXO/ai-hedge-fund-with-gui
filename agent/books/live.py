@@ -74,3 +74,28 @@ def targets(store: PanelStore, market: Market, day: pd.Timestamp, top_n: int = T
                                                         f"m{row['momentum']:+.2f} lv{row['lowvol']:+.2f}" + (" crash:no-mom" if crash else ""),
                     "expected_net_pct": None, "iv": None, "rv20": None, "rv60": None, "breakeven_pct": None})
     return out
+
+
+SIGNAL_LC_QLV = "largecap_qlv"        # S37: quality + low volatility within market cap >= $10B — shadow only, never traded
+
+
+def largecap_qlv_targets(store: PanelStore, market: Market, day: pd.Timestamp, top_n: int = TOP_N) -> list[dict]:
+    """The S37 large-cap defensive line as a daily ranked list (top 2N), recorded next to v1, not traded."""
+    from agent.s37_largecap import large_universe
+    fund = fundamentals(store)
+    if fund is None:
+        return []
+    u = large_universe(market, fund, day)
+    if len(u) < 50:
+        return []
+    fs = factor_scores(market, fund, day, u)
+    fs = fs[fs["n_families"] >= 3]
+    sc = fs[["quality", "lowvol"]].mean(axis=1).dropna().sort_values(ascending=False)
+    out = []
+    for rank, (t, v) in enumerate(sc.head(KEEP_MULT * top_n).items(), 1):
+        row = fs.loc[t]
+        out.append({"ticker": t, "signal_name": SIGNAL_LC_QLV, "side": "L", "rank": rank, "value": float(v), "instrument": "stock",
+                    "limit_ref": float(market.close.at[day, t]), "spread_pct": market.spread_pct(t, day), "gate_passed": rank <= top_n,
+                    "gate_reason": f"q{row['quality']:+.2f} lv{row['lowvol']:+.2f} mcap${row['mcap'] / 1e9:.0f}B",
+                    "expected_net_pct": None, "iv": None, "rv20": None, "rv60": None, "breakeven_pct": None})
+    return out

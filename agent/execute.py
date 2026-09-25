@@ -55,13 +55,18 @@ from hedge_fund.features.panel import PanelStore
 ET = ZoneInfo("America/New_York")
 OUT_DIR = "/Users/louis/optradar/out/agent"
 
-# Allocation of the $100k paper account. The rest ($10k) is reserved for the option book.
+# Allocation of the $100k paper account. The last $10k was the option reserve until 2026-09-24; the
+# option book never passed its gate (S26), and S37 found no large-cap selection edge, so it holds SPY
+# as the account's large-cap core (bought once, never sold by rule).
 BOOKS = {
     "long":    {"alloc_usd": 60_000.0, "max_positions": TOP_N, "hold_days": None,
                 "entry_cap_pct": 3.0},        # LOO cap: buy at the open unless it gaps > 3% over D's close
     "insider": {"alloc_usd": 30_000.0, "max_positions": INSIDER_SLOTS, "hold_days": HOLD_DAYS,
                 "entry_cap_pct": None},       # cap = one quoted spread (S12/S13: the edge is ~one spread)
+    "core":    {"alloc_usd": 10_000.0, "max_positions": 1, "hold_days": None,
+                "entry_cap_pct": 1.0},        # SPY, passive large-cap exposure (S37)
 }
+CORE_TICKER = "SPY"
 MAX_ORDERS_PER_RUN = 60
 MAX_ORDER_NOTIONAL = 10_000.0
 OPEN_STATES = {"new", "accepted", "pending_new", "accepted_for_bidding", "partially_filled", "held", "submitted"}
@@ -276,6 +281,11 @@ def long_targets(store: PanelStore, market, day: pd.Timestamp, con) -> tuple[lis
             ledger.write_picks(con, [{**r, "as_of": day.date(), "status": "shadow", "ledger_id": None, "run_id": "exec"} for r in v2])
         except Exception as exc:
             print(f"v2 shadow skipped: {exc}")
+        try:                                           # S37 large-cap quality + low-vol, recorded as a shadow line (never traded)
+            lc = long_live.largecap_qlv_targets(store, market, day, TOP_N)
+            ledger.write_picks(con, [{**r, "as_of": day.date(), "status": "shadow", "ledger_id": None, "run_id": "exec"} for r in lc])
+        except Exception as exc:
+            print(f"large-cap shadow skipped: {exc}")
     ranked = [r["ticker"] for r in rows if r["gate_passed"]]
     keep = {r["ticker"] for r in rows}
     return ranked, keep, True
@@ -367,6 +377,9 @@ def main() -> int:
             tif = "opg" if (os.environ.get("AGENT_TIF") == "opg" and opg_window(dt.datetime.now(ET))) else "day"   # DAY on paper; see plan_book
             close_row = market.close.loc[day]
             ref_close = {t: float(v) for t, v in close_row.dropna().items()}
+            spy_close = store.con.execute("SELECT close FROM index_daily WHERE symbol = ? AND trade_date = ?", [CORE_TICKER, day.date()]).fetchone()
+            if spy_close and spy_close[0]:                  # SPY lives in index_daily, not in the stock panel
+                ref_close[CORE_TICKER] = float(spy_close[0])
             plans: list[dict] = []
             targets_dbg: dict = {}
             if not stale and not args.sync_only:
@@ -378,9 +391,11 @@ def main() -> int:
                     if book == "long":
                         ranked, keep, scored = long_targets(store, market, day, con)
                         retries = set()
+                    elif book == "core":
+                        ranked, keep, scored, retries = [CORE_TICKER], {CORE_TICKER}, True, set()
                     else:
                         (ranked, retries), keep, scored = insider_targets(store, day, con), set(), True
-                    spreads = {t: market.spread_pct(t, day) for t in ranked}
+                    spreads = {t: market.spread_pct(t, day) for t in ranked if t in market.close.columns}
                     book_plans = plan_book(book, cfg, lots, ranked, keep, day.date(), next_session, ref_close, spreads,
                                            books[book]["cash_usd"], blocked | others, scored, tif)
                     if book == "insider":
