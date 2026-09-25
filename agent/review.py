@@ -434,6 +434,27 @@ RULE_NAMES = {"paper_unfilled": "模拟盘未成交", "paper_exec_gap": "执行�
               "real_vs_insiders": "实盘逆内部人卖出买入", "real_concentration": "实盘单一持仓 ≥ 40%", "real_add_same_day": "实盘同一合约当日加仓"}
 
 
+def balder_block() -> str:
+    """Trades forwarded from Balder's X posts (agent/balder_log.py), scored 1/5/20 sessions vs SPY. Private site only."""
+    try:
+        b = json.load(open(os.path.join(OUT_DIR, "balder_latest.json")))
+    except Exception:
+        return "<p class='muted'>还没有记录。把 Balder 的帖子以文本分享到 iCloud Drive 的 Balder 文件夹,收盘后自动解析记分。</p>"
+    if not b.get("n"):
+        return "<p class='muted'>还没有记录(把帖子文本放进 iCloud Drive/Balder,每天 13:25 解析)。</p>"
+    score = ""
+    for book, s in b.get("by_book", {}).items():
+        cells = "".join(f"<td>{v['n']}</td><td>{pct(v['mean'])}</td><td>{pct(v['mean_abn'])}</td><td>{'' if v['hit'] is None else format(v['hit'], '.0%')}</td>" for v in (s["h1"], s["h5"], s["h20"]))
+        score += f"<tr><td>{esc(book)}</td>{cells}</tr>"
+    rows = "".join(f"<tr><td>{esc(r['posted'])}</td><td>{esc(r['book'])}</td><td><b>{esc(r['ticker'])}</b></td><td>{esc(r['action'])}</td>"
+                   f"<td>{'' if r.get('price') is None else format(r['price'], '.2f')}</td><td class='muted'>{esc(r.get('strategy') or '')}</td>"
+                   f"<td>{pct(r.get('ret1'))}</td><td>{pct(r.get('ret5'))}</td><td>{pct(r.get('ret20'))}</td><td class='muted'>{esc(r.get('note') or '')}</td></tr>"
+                   for r in b.get("recent", []))
+    return (f"<p class='muted'>来源:Balder 在 X 的订阅帖子,由用户转存;只做记分对照,不进任何信号,不上公开站。开仓从帖子次日开盘起算收益。共 {b['n']} 条。</p>"
+            f"<div class='tbl'><table><tr><th>书</th><th>1日 n</th><th>均值</th><th>超额</th><th>胜率</th><th>5日 n</th><th>均值</th><th>超额</th><th>胜率</th><th>20日 n</th><th>均值</th><th>超额</th><th>胜率</th></tr>{score}</table></div>"
+            f"<div class='tbl'><table><tr><th>日期</th><th>书</th><th>代码</th><th>动作</th><th>价格</th><th>策略</th><th>1日</th><th>5日</th><th>20日</th><th>摘要</th></tr>{rows}</table></div>")
+
+
 def auction_block(rep: dict) -> str:
     """Auction-basis NAV next to the simulator's, and the shadow record of unfilled entries (agent/auction_basis.py)."""
     try:
@@ -548,6 +569,7 @@ def render_html(rep: dict) -> str:
 <h2>一句话</h2><ul>{summary}</ul>
 <h2>规则检查</h2>{('<ul>' + frows + '</ul>') if frows else "<p class='muted'>没有触发任何规则</p>"}
 <h2>模拟盘:今日订单</h2>{paper_orders}
+<h2>Balder 的操作(跟单记分,私有)</h2>{balder_block()}
 <h2>模拟盘:竞价口径与错过的交易</h2>{auction_block(rep)}
 <h2>模拟盘:持仓异动</h2>{paper_pos}
 <h2>实盘:今日成交</h2>{real_deals}{real_rt}
