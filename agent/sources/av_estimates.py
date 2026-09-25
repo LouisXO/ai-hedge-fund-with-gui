@@ -105,9 +105,10 @@ def run(max_calls: int, symbols: list[str] | None = None) -> dict:
             stats["rows"] += len(rows)
         except Exception as exc:
             _spend(1)
-            con.execute("INSERT OR REPLACE INTO av_estimates_log VALUES (?, ?, 0, ?)", [sym, pd.Timestamp.now(), f"error: {str(exc)[:80]}"])
+            msg = str(exc).replace(api_key(), "***")[:80]                 # AV echoes the key in its quota message; never store it
+            con.execute("INSERT OR REPLACE INTO av_estimates_log VALUES (?, ?, 0, ?)", [sym, pd.Timestamp.now(), f"error: {msg}"])
             stats["failed"] += 1
-            if "rate limit" in str(exc).lower() or "premium" in str(exc).lower():
+            if "rate limit" in str(exc).lower() or "premium" in str(exc).lower() or "25 requests" in str(exc):
                 break
         time.sleep(1.2)
     stats["done_total"] = con.execute("SELECT count(*) FROM av_estimates_log WHERE status = 'ok'").fetchone()[0]
