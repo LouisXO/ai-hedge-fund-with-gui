@@ -253,6 +253,8 @@ def paper_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float
             row["tags"].append(f"执行偏差 {row['gap_pct']:+.2f}%")
         if b == "insider" and side == "buy" and otype == "limit":
             row["tags"].append("内部人入场用了限价(S31:应开盘市价)")
+        if reason == "entry_retry":
+            row["tags"].append("重试单(上次没成交,晚一天补买;单独统计)")
         out["orders"].append(row)
 
     for b, t, qty, eday, epx, empx, hu in lots:
@@ -432,6 +434,28 @@ RULE_NAMES = {"paper_unfilled": "模拟盘未成交", "paper_exec_gap": "执行�
               "real_vs_insiders": "实盘逆内部人卖出买入", "real_concentration": "实盘单一持仓 ≥ 40%", "real_add_same_day": "实盘同一合约当日加仓"}
 
 
+def auction_block(rep: dict) -> str:
+    """Auction-basis NAV next to the simulator's, and the shadow record of unfilled entries (agent/auction_basis.py)."""
+    try:
+        a = json.load(open(os.path.join(OUT_DIR, "auction_basis.json")))
+    except Exception:
+        return "<p class='muted'>还没有竞价口径数据(收盘后生成)</p>"
+    rows = "".join(f"<tr><td>{esc(b)}</td><td>{usd(v['equity_sim'])}</td><td>{usd(v['equity_auction'])}</td><td>{v['adj_cum']:+,.0f}</td><td>{v['n_fills']}</td></tr>"
+                   for b, v in a.get("books", {}).items())
+    f = a.get("fills", {})
+    gap = f"成交价平均比开盘竞价价贵 {f['mean_gap_pct']:+.2f}%/边(中位 {f['median_gap_pct']:+.2f}%,{f['with_cross']} 笔)。" if f.get("mean_gap_pct") is not None else ""
+    ms = a.get("missed", [])
+    mrows = "".join(f"<tr><td><b>{esc(m['ticker'])}</b></td><td>{esc(m['entry_day'])}</td><td>{'—' if m['entry_cross'] is None else format(m['entry_cross'], '.2f')}</td>"
+                    f"<td>{esc(m['exit_day'] or '—')}</td><td>{esc(m['status'])}</td><td>{pct(m['ret_pct'] if m['ret_pct'] is not None else m.get('mark_pct'))}</td></tr>" for m in ms)
+    sm = a.get("missed_summary", {})
+    return (f"<p class='muted'>模拟器按开盘后的卖一成交;真实账户的开盘单按开盘竞价价成交(S27b)。竞价口径 = 每笔成交按当天开盘竞价价重新记账。{gap}"
+            "评估点按竞价口径判断,模拟器口径作为保守下限。</p>"
+            f"<div class='tbl'><table><tr><th>书</th><th>模拟器口径</th><th>竞价口径</th><th>差额 $</th><th>成交笔数</th></tr>{rows}</table></div>"
+            + (f"<h3>错过的交易(模拟器没成交,按开盘竞价价虚拟入场,5 天后虚拟卖出;不计入净值)</h3>"
+               f"<p class='muted'>{sm.get('n', 0)} 笔,已结束 {sm.get('closed', 0)} 笔" + (f",平均 {sm['mean_ret_pct']:+.2f}%,超额 {sm['mean_abn_pct']:+.2f}%" if sm.get("mean_ret_pct") is not None else "") + ";未结束的按最新收盘价估值。</p>"
+               f"<div class='tbl'><table><tr><th>股票</th><th>虚拟入场日</th><th>竞价价</th><th>虚拟卖出日</th><th>状态</th><th>收益</th></tr>{mrows}</table></div>" if ms else ""))
+
+
 # ------------------------------------------------------------------ render ----
 def summary_lines(rep: dict) -> list[str]:
     L = []
@@ -524,6 +548,7 @@ def render_html(rep: dict) -> str:
 <h2>一句话</h2><ul>{summary}</ul>
 <h2>规则检查</h2>{('<ul>' + frows + '</ul>') if frows else "<p class='muted'>没有触发任何规则</p>"}
 <h2>模拟盘:今日订单</h2>{paper_orders}
+<h2>模拟盘:竞价口径与错过的交易</h2>{auction_block(rep)}
 <h2>模拟盘:持仓异动</h2>{paper_pos}
 <h2>实盘:今日成交</h2>{real_deals}{real_rt}
 <h2>实盘:持仓</h2>{real_pos}

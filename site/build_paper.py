@@ -28,7 +28,7 @@ VALID = os.path.join(ROOT, "site-data", "validation")
 THEME = "/Users/louis/optradar/bin/theme.css"
 PRIVATE_OUT = "/Users/louis/optradar/out"
 sys.path.insert(0, "/Users/louis/optradar/bin")
-BOOKS = {"long": ("长线综合因子", "Long composite"), "insider": ("内部人短线", "Insider short-term")}
+BOOKS = {"long": ("长线综合因子", "Long composite"), "insider": ("内部人短线", "Insider short-term"), "core": ("SPY 核心仓", "SPY core")}
 
 
 def T(zh: str, en: str) -> str:
@@ -56,6 +56,10 @@ def collect() -> dict:
                                 WHERE status = 'closed' ORDER BY exit_day DESC LIMIT 50""").fetchall()
         fills = con.execute("""SELECT book, ticker, side, CAST(filled_at AS DATE), filled_avg_px, model_px, order_type, tif
                                FROM agent_orders WHERE filled_qty > 0 AND model_px > 0 AND dry_run = FALSE ORDER BY filled_at""").fetchall()
+        try:
+            auc = {(r[0], r[1]): r[2] for r in con.execute("SELECT as_of, book, equity_auction FROM agent_auction_nav").fetchall()}
+        except Exception:
+            auc = {}
     finally:
         con.close()
     days = sorted({r[0] for r in nav})
@@ -73,7 +77,9 @@ def collect() -> dict:
     d = {"days": [x.isoformat() for x in days],
          "long": [round(by[(x, "long")][2] / alloc["long"] * 100, 3) if (x, "long") in by else None for x in days],
          "insider": [round(by[(x, "insider")][2] / alloc["insider"] * 100, 3) if (x, "insider") in by else None for x in days],
-         "total": [round(sum(by[(x, b)][2] for b in alloc if (x, b) in by) / total_alloc * 100, 3) for x in days],
+         "total": [round(sum(by[(x, b)][2] for b in alloc if (x, b) in by) / sum(alloc[b] for b in alloc if (x, b) in by) * 100, 3) for x in days],
+         "total_auction": [round(sum(auc.get((x, b), by[(x, b)][2]) for b in alloc if (x, b) in by)
+                                 / sum(alloc[b] for b in alloc if (x, b) in by) * 100, 3) if auc else None for x in days],
          "spy": [round(spy[x] / spy0 * 100, 3) if x in spy and spy0 else None for x in days]}
     latest = {b: by[(days[-1], b)] for b in alloc if days and (days[-1], b) in by}
     equity = {b: latest[b][2] for b in latest}
@@ -152,7 +158,7 @@ function draw(l) {
   const n = D.nav;
   if (n.days.length) charts.push(new Chart(document.getElementById('c_nav'), {type: 'line', plugins: [cross],
     data: {labels: n.days, datasets: [line(L('长线', 'Long'), n.long, C('--s1')), line(L('内部人', 'Insider'), n.insider, C('--s2')),
-      line(L('合计', 'Total'), n.total, C('--tx'), [2, 3]), line('SPY', n.spy, C('--bench'), [6, 4])]},
+      line(L('合计', 'Total'), n.total, C('--tx'), [2, 3]), line(L('合计(竞价口径)', 'Total (auction prices)'), n.total_auction, C('--s3'), [2, 3]), line('SPY', n.spy, C('--bench'), [6, 4])]},
     options: {maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
       plugins: {legend: {position: 'top', align: 'end'}, tooltip: {callbacks: {label: c => ` ${c.dataset.label}  ${c.parsed.y == null ? '—' : c.parsed.y.toFixed(2)}  (${c.parsed.y == null ? '—' : pct(c.parsed.y - 100)})`}}},
       scales: {x: {grid: {display: false}, ticks: {maxTicksLimit: 8}}, y: {grid, title: {display: true, text: L('指数(起点 = 100)', 'Index (start = 100)')}}}}}));
@@ -279,8 +285,9 @@ def page(d: dict, private: bool = False) -> str:
     if n["days"]:
         tot = n["total"][-1] - 100
         spy = n["spy"][-1] - 100 if n["spy"][-1] is not None else None
-        cards.append(f"<div class='card'><div class='k'>{T('两本合计', 'Both books')}</div><div class='v'>{pc(tot)}</div>"
-                     f"<div class='s'>{T('自', 'since')} {d['since']}</div></div>")
+        ta = n["total_auction"][-1] - 100 if n.get("total_auction") and n["total_auction"][-1] is not None else None
+        cards.append(f"<div class='card'><div class='k'>{T('合计', 'Total')}</div><div class='v'>{pc(tot)}</div>"
+                     f"<div class='s'>{T('自', 'since')} {d['since']}" + (f" · {T('按开盘竞价价计', 'at auction prices')} {pc(ta)}" if ta is not None else "") + "</div></div>")
         cards.append(f"<div class='card'><div class='k'>{T('SPY 同期', 'SPY, same period')}</div><div class='v'>{pc(spy)}</div>"
                      f"<div class='s'>{len(n['days'])} {T('个交易日', 'sessions')}</div></div>")
 

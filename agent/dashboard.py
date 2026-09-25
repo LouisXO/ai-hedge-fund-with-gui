@@ -31,7 +31,7 @@ import site_theme  # noqa: E402
 OUT = "/Users/louis/optradar/out"
 AGENT_OUT = os.path.join(OUT, "agent")
 VALID = "/Users/louis/hedge-fund/site-data/validation"
-BOOK_LABEL = {"long": "长线综合因子", "insider": "内部人短线"}
+BOOK_LABEL = {"long": "长线综合因子", "insider": "内部人短线", "core": "SPY 核心仓"}
 RULE_NAMES = {"paper_unfilled": "模拟盘未成交", "paper_exec_gap": "执行偏差 > 0.5%", "paper_insider_limit": "内部人限价入场",
               "real_overtrading": "实盘当日 ≥ 5 笔", "real_buy_after_jump": "大动后追买", "real_short_dte": "买临期期权", "real_0dte": "买当日到期期权",
               "real_otm_lottery": "买深虚值", "real_buy_high": "买在日高附近", "real_sell_low": "卖在日低附近", "real_vs_insiders": "逆内部人买入",
@@ -50,6 +50,10 @@ def collect() -> dict:
         monthly = con.execute("SELECT month, pnl_usd, ret_pct FROM acct_monthly ORDER BY month").fetchall()
         rnav = con.execute("SELECT date, sum(total_assets), sum(cash) FROM acct_nav GROUP BY 1 ORDER BY 1").fetchall()
         closed = con.execute("SELECT book, count(*) FROM agent_lots WHERE status = 'closed' GROUP BY 1").fetchall()
+        try:
+            auc = {(r[0], r[1]): r[2] for r in con.execute("SELECT as_of, book, equity_auction FROM agent_auction_nav").fetchall()}
+        except Exception:
+            auc = {}
     finally:
         con.close()
     days = sorted({r[0] for r in nav})
@@ -64,7 +68,10 @@ def collect() -> dict:
     d["paper_nav"] = {"days": [x.isoformat() for x in days],
                       "long": [round(by[(x, "long")][2] / alloc.get("long", 1) * 100, 3) if (x, "long") in by else None for x in days],
                       "insider": [round(by[(x, "insider")][2] / alloc.get("insider", 1) * 100, 3) if (x, "insider") in by else None for x in days],
-                      "total": [round(sum(by[(x, b)][2] for b in alloc if (x, b) in by) / base_total * 100, 3) for x in days],
+                      # books present that day only (the SPY core book starts 2026-09-24), so adding a book does not jump the index
+                      "total": [round(sum(by[(x, b)][2] for b in alloc if (x, b) in by) / sum(alloc[b] for b in alloc if (x, b) in by) * 100, 3) for x in days],
+                      "total_auction": [round(sum(auc.get((x, b), by[(x, b)][2]) for b in alloc if (x, b) in by)
+                                              / sum(alloc[b] for b in alloc if (x, b) in by) * 100, 3) if auc else None for x in days],
                       "spy": [round(spy[x] / spy0 * 100, 3) if x in spy and spy0 else None for x in days],
                       "positions": {b: [by[(x, b)][3] if (x, b) in by else None for x in days] for b in alloc}}
     d["paper_latest"] = {b: {"equity": by[(days[-1], b)][2], "since_pct": (by[(days[-1], b)][2] / alloc[b] - 1) * 100, "n": by[(days[-1], b)][3]}
@@ -152,7 +159,8 @@ const D = window.DASH;
 // 1. paper NAV
 if (D.paper_nav.days.length) mk('c_nav', {type: 'line', plugins: [crosshair],
   data: {labels: D.paper_nav.days, datasets: [line('长线', D.paper_nav.long, C('--s1')), line('内部人', D.paper_nav.insider, C('--s2')),
-    line('两本合计', D.paper_nav.total, C('--tx'), [2, 3]), line('SPY', D.paper_nav.spy, C('--bench'), [6, 4])]},
+    line('合计(模拟器口径)', D.paper_nav.total, C('--tx'), [2, 3]), line('合计(竞价口径)', D.paper_nav.total_auction, C('--s3'), [2, 3]),
+    line('SPY', D.paper_nav.spy, C('--bench'), [6, 4])]},
   options: {maintainAspectRatio: false, interaction: {mode: 'index', intersect: false}, plugins: {legend: {position: 'top', align: 'end'},
     tooltip: {callbacks: {label: c => ` ${c.dataset.label}  ${c.parsed.y == null ? '—' : c.parsed.y.toFixed(2)}  (${pct(c.parsed.y - 100)})`}}},
     scales: {x: {grid: {display: false}, ticks: {maxTicksLimit: 8}}, y: {grid, ticks: {callback: v => v.toFixed(0)}, title: {display: true, text: '指数 (起始 = 100)'}}}}});
@@ -208,7 +216,7 @@ def render(d: dict) -> str:
     pl = d.get("paper_latest", {})
     pn = d["paper_nav"]
     cards = ""
-    for b in ("long", "insider"):
+    for b in ("long", "insider", "core"):
         if b in pl:
             x = pl[b]
             cards += (f"<div class='card'><div class='k'>模拟盘 · {BOOK_LABEL[b]}</div><div class='v {'pos' if x['since_pct'] >= 0 else 'neg'}'>{x['since_pct']:+.2f}%</div>"
@@ -246,7 +254,7 @@ def render(d: dict) -> str:
             + f"<h1>仪表盘</h1><p class='muted'>长期走势与对照 · 生成 {d['generated_at'][:16].replace('T', ' ')} · 图可悬停,数据表在每张图下面</p>"
             + f"<div class='cards'>{cards}</div>"
             + "<h2>模拟盘</h2>"
-            + f"<div class='chart tall'><p class='t'>两本书净值 vs SPY</p><p class='st'>自 {d['paper_since'] or '—'} 起,各自起点 = 100;虚线为两本合计和 SPY。评估点之前只看,不判。</p><div class='cv'><canvas id='c_nav'></canvas></div>"
+            + f"<div class='chart tall'><p class='t'>两本书净值 vs SPY</p><p class='st'>自 {d['paper_since'] or '—'} 起,各自起点 = 100;虚线为合计(模拟器口径和按开盘竞价价重记的竞价口径)和 SPY。评估点按竞价口径判,之前只看不判。</p><div class='cv'><canvas id='c_nav'></canvas></div>"
             + _table(["日", "长线", "内部人", "合计", "SPY", "持仓 长/内"], [[x, a, b, c, s, f"{(pn['positions'].get('long') or [None]*len(pn['days']))[i]}/{(pn['positions'].get('insider') or [None]*len(pn['days']))[i]}"]
                                                                           for i, (x, a, b, c, s) in enumerate(zip(pn["days"], pn["long"], pn["insider"], pn["total"], pn["spy"]))]) + "</div>"
             + f"<div class='grid2'><div class='chart'><p class='t'>每笔成交对开盘价的偏差</p><p class='st'>{gap_note or '还没有成交'}</p><div class='cv'><canvas id='c_gap'></canvas></div>"

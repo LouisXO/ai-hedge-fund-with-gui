@@ -41,11 +41,12 @@ def _headers() -> dict:
 
 
 def fetch(symbols: list[str], start: dt.date, end: dt.date, headers: dict) -> list[dict]:
-    """All auction days for `symbols` in [start, end]; end is clipped to yesterday (free plan: no recent SIP)."""
-    end = min(end, dt.date.today() - dt.timedelta(days=1))
+    """All auction days for `symbols` in [start, end]; the end time is clipped to 20 minutes ago (free plan: SIP >= 15 min old)."""
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=20)
+    end_ts = min(dt.datetime.combine(end, dt.time(23, 0), dt.timezone.utc), cutoff)
     rows, token = [], None
     while True:
-        q = {"symbols": ",".join(symbols), "start": f"{start}T00:00:00Z", "end": f"{end}T23:00:00Z", "feed": "sip", "limit": 10000}
+        q = {"symbols": ",".join(symbols), "start": f"{start}T00:00:00Z", "end": end_ts.strftime("%Y-%m-%dT%H:%M:%SZ"), "feed": "sip", "limit": 10000}
         if token:
             q["page_token"] = token
         for attempt in range(4):

@@ -7,6 +7,7 @@
 #                                   model prices, lots vs positions reconciled, books marked
 #   2. account_snapshot            moomoo real account (read-only): NAV, positions, today's deals
 #   3. agent.watch                 watchlist alerts (runs again at 16:10 for evening filings; deduped)
+#   4a. agent.auction_basis        auction-basis NAV + missed-trade shadow (S27b)
 #   4. agent.review                today's review page + lessons + notification
 #   5. private_index               front page
 #   6. public site publish (hedge-fund.louisleng.com, paper page with today's close)
@@ -20,6 +21,7 @@ echo "=== postclose $(date) ===" >> "$LOG"
 $PY -W ignore -m agent.execute --sync-only >> "$LOG" 2>&1 || echo "sync failed" >> "$LOG"
 /Users/louis/.moomoo/venv/bin/python -W ignore /Users/louis/optradar/bin/account_snapshot.py --quiet >> "$LOG" 2>&1 || echo "account snapshot failed (non-fatal)" >> "$LOG"
 $PY -W ignore -m agent.watch >> "$LOG" 2>&1 || echo "watchlist failed (non-fatal)" >> "$LOG"
+$PY -W ignore -m agent.auction_basis >> "$LOG" 2>&1 || echo "auction basis failed (non-fatal)" >> "$LOG"      # fills re-priced at the opening cross; missed-trade shadow
 $PY -W ignore -m agent.review >> "$LOG" 2>&1 || echo "review failed (non-fatal)" >> "$LOG"
 $PY -W ignore -m agent.dashboard >> "$LOG" 2>&1 || echo "dashboard failed (non-fatal)" >> "$LOG"
 $PY -W ignore site/build_paper.py >> "$LOG" 2>&1 || echo "paper page failed (non-fatal)" >> "$LOG"      # private copy of the public paper page (+ public copy, pushed at 08:41)
