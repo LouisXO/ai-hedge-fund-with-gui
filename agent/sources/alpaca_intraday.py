@@ -79,7 +79,19 @@ def fetch(symbols: list[str], timeframe: str, start: dt.date, end: dt.date, head
     return df[["ticker", "ts", "o", "h", "l", "c", "v", "n"]]
 
 
-def load(symbols: list[str], table: str, start: dt.date, end: dt.date | None = None, quiet: bool = False) -> dict:
+def on_ac_power() -> bool:
+    import subprocess
+    try:
+        return "AC Power" in subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return True
+
+
+def load(symbols: list[str], table: str, start: dt.date, end: dt.date | None = None, quiet: bool = False,
+         max_seconds: float | None = None) -> dict:
+    """On battery only the incremental ranges run (a few seconds per name); never-loaded names and earlier
+    history wait for AC power, so a long backfill cannot drain the laptop or die when it sleeps (2026-09-26).
+    max_seconds caps one run; the rest continues on the next run."""
     end = end or dt.date.today()
     headers = _headers()
     con = duckdb.connect(str(INTRADAY_DB))
@@ -100,9 +112,18 @@ def load(symbols: list[str], table: str, start: dt.date, end: dt.date | None = N
             jobs.append((s, start, since - dt.timedelta(days=1)))
         if thr < end:
             jobs.append((s, thr + dt.timedelta(days=1), end))
-    stats = {"table": table, "requested": len(symbols), "todo": len(jobs), "rows": 0, "names": 0}
+    ac = on_ac_power()
+    if not ac:
+        jobs = [j for j in jobs if (j[2] - j[1]).days <= 10]          # incremental only
+    stats = {"table": table, "requested": len(symbols), "todo": len(jobs), "rows": 0, "names": 0, "on_ac": ac}
     t0 = time.time()
     for s, j_start, j_end in jobs:
+        if max_seconds and time.time() - t0 > max_seconds:
+            stats["stopped"] = "time budget"
+            break
+        if stats["names"] % 50 == 49 and ac and not on_ac_power():
+            stats["stopped"] = "unplugged"
+            break
         try:
             df = fetch([s], TF[table], j_start, j_end, headers)
         except Exception as exc:
@@ -150,11 +171,12 @@ def main() -> int:
     ap.add_argument("--options", action="store_true")
     ap.add_argument("--start", required=True)
     ap.add_argument("--end", default=None)
+    ap.add_argument("--max-seconds", type=float, default=None)
     args = ap.parse_args()
     syms = args.symbols.split(",") if args.symbols else universe() if args.universe else option_names() if args.options else []
     if "SPY" not in syms:
         syms = ["SPY"] + syms
-    print(load(syms, args.table, dt.date.fromisoformat(args.start), dt.date.fromisoformat(args.end) if args.end else None))
+    print(load(syms, args.table, dt.date.fromisoformat(args.start), dt.date.fromisoformat(args.end) if args.end else None, max_seconds=args.max_seconds))
     return 0
 
 
