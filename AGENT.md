@@ -46,6 +46,7 @@
 | 周一到周五 13:15 | `com.louis.agent.news` | AV 新闻情绪 |
 | 周一到周五 13:25 | `com.louis.agent.postclose` | `agent/bin/postclose.sh`(收盘后 25 分钟):`agent.execute --sync-only`(当日 bars、成交同步、对账、记净值,不下单)→ moomoo 账户快照 → `agent.watch` → **`agent.review` 今日复盘**(模拟盘 + 实盘每笔交易、规则检查、30 日教训计数、通知)→ `agent.dashboard` → 私有站 |
 | (13:25 任务末尾) | 数据存档 | `sec_forms update`(424B5/S-3/144)、`av_estimates --max 20`(每天 20 家盈利预测,最大市值优先)、`daily_archive`(moomoo IV/HV、目标价共识、券商评级明细;Alpaca 难借券标记)。盘中 K 线 `alpaca_intraday`(30 分钟全池 2019 起、5 分钟期权名 2023-12 起,只存正常交易时段)。时点数据库:`filings.db`、`estimates.db`、`archive.db`、`auctions.db`、`short.db`、`intraday.db` |
+| (13:25 任务最后;周日 03:00) | 备份 + 健康检查 | `agent.backup`:每日档(optradar.db、archive/estimates/retail/auctions/filings、状态文件、out/agent;留 14 份),周日 `--weekly`(panel/options/news/short/intraday;留 2 份)→ iCloud Drive `OptRadarBackup/`。复制时持只读连接、复制后做恢复测试、zstd 压缩;被写入占用的库跳过并在健康页标出。**密钥不备份到云**。恢复:`zstd -d x.db.zst -o x.db`。`agent.health`:每个定时任务结束时写 `out/health.json`(launchd 任务是否加载/按时跑、18 个数据集的新鲜度、OpenD、Alpaca、Claude 登录、电源、磁盘、AV 配额、备份),私有站首页顶部显示,出现新的故障时推送通知 |
 | 周一到周五 16:10 | `com.louis.agent.execute` | `agent/bin/execute.sh`:实时 Form 4(EFTS)→ 13D → Alpaca 新闻 → **`agent.execute --submit`**(仅 `AGENT_EXEC=on`)→ `agent.watch`(晚间申报)→ 私有站。留在 16:10 是因为 OPG 窗口 19:00 ET 才开,且当天 Form 4 多在 16:00–18:00 ET 提交 |
 | 周六 09:30 | `com.louis.optradar.weekly` | 周报 |
 | 周日 03:00 | `com.louis.agent.fundamentals` | XBRL 基本面周更 + 七层数据审计(`agent/audit.py`) |

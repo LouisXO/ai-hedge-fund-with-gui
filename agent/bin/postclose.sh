@@ -27,6 +27,7 @@ $PY -W ignore -m agent.auction_basis >> "$LOG" 2>&1 || echo "auction basis faile
 $PY -W ignore -m agent.review >> "$LOG" 2>&1 || echo "review failed (non-fatal)" >> "$LOG"
 $PY -W ignore -m agent.dashboard >> "$LOG" 2>&1 || echo "dashboard failed (non-fatal)" >> "$LOG"
 $PY -W ignore site/build_paper.py >> "$LOG" 2>&1 || echo "paper page failed (non-fatal)" >> "$LOG"      # private copy of the public paper page (+ public copy, pushed at 08:41)
+$PY -W ignore -m agent.health --no-llm-probe >> "$LOG" 2>&1 || echo "health check failed (non-fatal)" >> "$LOG"                               # out/health.json for the front page; notifies on a new failure
 /Users/louis/.moomoo/venv/bin/python /Users/louis/optradar/bin/private_index.py >> "$LOG" 2>&1 || echo "private index failed (non-fatal)" >> "$LOG"
 # --- public site: publish today's close (the 08:41 run publishes too, but then the data is a day old) ---
 PUBLISH=1 zsh /Users/louis/hedge-fund/site/publish.sh "$(date +%F)" >> "$LOG" 2>&1 || echo "public site publish failed (non-fatal)" >> "$LOG"
@@ -36,3 +37,7 @@ $PY -W ignore -m agent.sources.av_estimates --max 20 >> "$LOG" 2>&1 || echo "av 
 $PY -W ignore -m agent.sources.daily_archive >> "$LOG" 2>&1 || echo "daily archive failed (non-fatal)" >> "$LOG"                  # moomoo IV/consensus/ratings, Alpaca borrow flags
 $PY -W ignore -m agent.sources.alpaca_intraday --table bars30 --universe --start 2024-01-01 --max-seconds 7200 >> "$LOG" 2>&1 || echo "intraday bars30 update failed (non-fatal)" >> "$LOG"   # incremental: only the new session
 $PY -W ignore -m agent.sources.alpaca_intraday --table bars5 --options --start 2023-12-01 --max-seconds 3600 >> "$LOG" 2>&1 || echo "intraday bars5 update failed (non-fatal)" >> "$LOG"
+$PY -W ignore -m agent.backup >> "$LOG" 2>&1 || echo "backup failed (non-fatal)" >> "$LOG"                                    # daily tier to iCloud Drive (14 kept)
+# --- last: health with the Claude login probe and today's backup status, front page again ---
+$PY -W ignore -m agent.health >> "$LOG" 2>&1 || echo "health check failed (non-fatal)" >> "$LOG"                               # out/health.json for the front page; notifies on a new failure
+/Users/louis/.moomoo/venv/bin/python /Users/louis/optradar/bin/private_index.py >> "$LOG" 2>&1 || echo "private index failed (non-fatal)" >> "$LOG"

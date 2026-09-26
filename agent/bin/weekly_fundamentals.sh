@@ -20,3 +20,4 @@ $PY -W ignore -m agent.sources.av_listing refresh >> "$LOG" 2>&1 || true
 $PY -W ignore -m agent.sources.finra_short update >> "$LOG" 2>&1 || echo "finra short interest update failed (non-fatal)" >> "$LOG"   # S38 data, twice-monthly source
 echo "=== done $(date) ===" >> "$LOG"
 $PY -W ignore -m agent.audit >> "$LOG" 2>&1 || echo "audit reported failures" >> "$LOG"
+$PY -W ignore -m agent.backup --weekly >> "$LOG" 2>&1 || echo "weekly backup failed (non-fatal)" >> "$LOG"   # large databases to iCloud Drive (2 kept)
