@@ -286,6 +286,11 @@ def long_targets(store: PanelStore, market, day: pd.Timestamp, con) -> tuple[lis
             ledger.write_picks(con, [{**r, "as_of": day.date(), "status": "shadow", "ledger_id": None, "run_id": "exec"} for r in lc])
         except Exception as exc:
             print(f"large-cap shadow skipped: {exc}")
+        try:                                           # S44 v2 bundle: the two cluster lists, replayed by agent.shadow_v2 (never traded)
+            from agent import shadow_v2
+            shadow_v2.record(con, store, market, day)
+        except Exception as exc:
+            print(f"v2 cluster lists skipped: {exc}")
     ranked = [r["ticker"] for r in rows if r["gate_passed"]]
     keep = {r["ticker"] for r in rows}
     return ranked, keep, True

@@ -237,7 +237,11 @@ def main() -> int:
     now = dt.datetime.now()
     rep = {"generated_at": now.isoformat(timespec="seconds"), "jobs": check_jobs(now), "data": check_data(now.date(), now),
            "system": check_system(not args.no_llm_probe)}
-    allc = rep["jobs"] + rep["data"] + rep["system"]
+    try:                                                  # agent.drift: paper book vs its rules and the backtest's range
+        rep["drift"] = [{k: c[k] for k in ("name", "level", "detail")} for c in json.load(open(os.path.join(OUT, "agent", "drift.json")))["checks"]]
+    except Exception:
+        rep["drift"] = []
+    allc = rep["jobs"] + rep["data"] + rep["system"] + rep["drift"]
     rep["n_bad"] = sum(1 for c in allc if c["level"] == "bad")
     rep["n_warn"] = sum(1 for c in allc if c["level"] == "warn")
     rep["level"] = "bad" if rep["n_bad"] else "warn" if rep["n_warn"] else "ok"
@@ -246,13 +250,13 @@ def main() -> int:
     except Exception:
         prev = {}
     json.dump(rep, open(HEALTH, "w"), ensure_ascii=False, indent=1)
-    for sec in ("jobs", "data", "system"):
+    for sec in ("jobs", "data", "system", "drift"):
         for c in rep[sec]:
             if c["level"] != "ok":
                 print(f"[{c['level']:4s}] {c['name']}: {c['detail']}")
     print(f"health: {rep['level']} ({rep['n_bad']} bad, {rep['n_warn']} warn, {len(allc)} checks)")
     bad_now = sorted(c["name"] for c in allc if c["level"] == "bad")
-    bad_prev = sorted(c["name"] for sec in ("jobs", "data", "system") for c in prev.get(sec, []) if c["level"] == "bad")
+    bad_prev = sorted(c["name"] for sec in ("jobs", "data", "system", "drift") for c in prev.get(sec, []) if c["level"] == "bad")
     if bad_now and bad_now != bad_prev and not args.no_notify:            # notify on change, not every run
         tn = "/opt/homebrew/bin/terminal-notifier"
         if os.path.exists(tn):

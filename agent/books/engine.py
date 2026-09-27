@@ -156,7 +156,7 @@ def simulate(market: Market, targets: dict[pd.Timestamp, list[str]], start: str,
     if market.iwm is not None:
         iwm = market.iwm.reindex(days).ffill()
         res.size_factor = iwm.pct_change() - spy.pct_change()
-    res.metrics = metrics(res, years)
+    res.metrics = metrics(res, years) if len(days) >= 30 else {}      # a few days of shadow record: NAV only
     return res
 
 

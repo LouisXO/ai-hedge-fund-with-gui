@@ -24,6 +24,9 @@ $PY -W ignore -m agent.watch >> "$LOG" 2>&1 || echo "watchlist failed (non-fatal
 $PY -W ignore -m agent.watch_reminders >> "$LOG" 2>&1 || echo "moomoo reminder sync failed (non-fatal)" >> "$LOG"   # watchlist levels -> moomoo app push
 $PY -W ignore -m agent.balder_log >> "$LOG" 2>&1 || echo "balder log failed (non-fatal)" >> "$LOG"          # posts the user dropped into iCloud/Balder, scored
 $PY -W ignore -m agent.auction_basis >> "$LOG" 2>&1 || echo "auction basis failed (non-fatal)" >> "$LOG"      # fills re-priced at the opening cross; missed-trade shadow
+$PY -W ignore -m agent.shadow_v2 >> "$LOG" 2>&1 || echo "shadow v2 failed (non-fatal)" >> "$LOG"            # S44: six shadow lines replayed on the recorded lists
+$PY -W ignore -m agent.drift >> "$LOG" 2>&1 || echo "drift monitor failed (non-fatal)" >> "$LOG"                # paper vs rule replay vs backtest range
+$PY -W ignore -m agent.attribution >> "$LOG" 2>&1 || echo "attribution failed (non-fatal)" >> "$LOG"           # week to date; one row per week in attribution.jsonl
 $PY -W ignore -m agent.review >> "$LOG" 2>&1 || echo "review failed (non-fatal)" >> "$LOG"
 $PY -W ignore -m agent.dashboard >> "$LOG" 2>&1 || echo "dashboard failed (non-fatal)" >> "$LOG"
 $PY -W ignore site/build_paper.py >> "$LOG" 2>&1 || echo "paper page failed (non-fatal)" >> "$LOG"      # private copy of the public paper page (+ public copy, pushed at 08:41)

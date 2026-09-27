@@ -1,4 +1,4 @@
-# Family-wise ledger — 90 book-level variants
+# Family-wise ledger — 96 book-level variants
 
 Two-sided p from the Newey-West t; Holm step-down over the whole family. Variants with a negative t are the rejected event lines (the sign is informative, the test is symmetric).
 
@@ -8,6 +8,7 @@ Two-sided p from the Newey-West t; Holm step-down over the whole family. Variant
 | move_news_up_h5 | s25_move_news_up_2026-09-22.json | -4.65 | -53.0% | 0.000 | 0.000 | ✓ | ✓ |
 | move_news_up_h10 | s25_move_news_up_2026-09-22.json | -4.49 | -55.8% | 0.000 | 0.001 | ✓ | ✓ |
 | move_nonews_down_h2 | s25_move_nonews_down_2026-09-22.json | -2.45 | -27.0% | 0.014 | 1.000 |  |  |
+| v2_bundle | s44_v2_bundle_2026-09-26.json | 2.41 | +8.2% | 0.016 | 1.000 |  |  |
 | long_hi_si20 | s38_short_interest_2026-09-24.json | 2.37 | +17.6% | 0.018 | 1.000 |  |  |
 | insider_shelf20 | s39_dilution_144_2026-09-24.json | 2.29 | +9.6% | 0.022 | 1.000 |  |  |
 | long_hi_dtc10 | s38_short_interest_2026-09-24.json | 2.28 | +17.3% | 0.022 | 1.000 |  |  |
@@ -18,33 +19,38 @@ Two-sided p from the Newey-West t; Holm step-down over the whole family. Variant
 | invvol | s24_long_v2_2026-09-22.json | 2.04 | +9.1% | 0.041 | 1.000 |  |  |
 | issuance | s24_long_v2_2026-09-22.json | 2.03 | +11.3% | 0.042 | 1.000 |  |  |
 | long_composite_n30 | books_2026-09-20_spycash_daily.json | 1.94 | +10.5% | 0.052 | 1.000 |  |  |
+| v2_clusters | s44_v2_bundle_2026-09-26.json | 1.94 | +8.8% | 0.052 | 1.000 |  |  |
 | insider_v1_5d | s34_buyback_clean_2026-09-23.json | 1.93 | +8.4% | 0.053 | 1.000 |  |  |
 | insider_base | s40_price_floor_2026-09-24.json | 1.93 | +8.4% | 0.053 | 1.000 |  |  |
 | insider_base_off5 | s39_dilution_144_2026-09-24.json | 1.93 | +8.4% | 0.053 | 1.000 |  |  |
 | insider_base_shelf20 | s39_dilution_144_2026-09-24.json | 1.93 | +8.4% | 0.053 | 1.000 |  |  |
 | insider_bear5 | s33_negative_filters_2026-09-23.json | 1.93 | +8.4% | 0.054 | 1.000 |  |  |
+| v2_bundle_loose | s44_v2_bundle_2026-09-26.json | 1.93 | +7.3% | 0.054 | 1.000 |  |  |
 | move_nonews_down_h5 | s25_move_nonews_down_2026-09-22.json | -1.90 | -21.6% | 0.058 | 1.000 |  |  |
 | long_composite_daily_n50 | books_2026-09-22_spycash_n50_daily.json | 1.89 | +8.9% | 0.059 | 1.000 |  |  |
 | n50 | s24_long_v2_2026-09-22.json | 1.89 | +8.9% | 0.059 | 1.000 |  |  |
 | insider_jump5 | s33_negative_filters_2026-09-23.json | 1.87 | +7.5% | 0.062 | 1.000 |  |  |
 | insider_both5 | s33_negative_filters_2026-09-23.json | 1.87 | +7.5% | 0.062 | 1.000 |  |  |
+| v2_cap20 | s44_v2_bundle_2026-09-26.json | 1.80 | +9.7% | 0.072 | 1.000 |  |  |
 | insider_opp_h5 | s23_insider_opp_2026-09-22.json | 1.75 | +7.6% | 0.080 | 1.000 |  |  |
+| v2_cap20_loose | s44_v2_bundle_2026-09-26.json | 1.75 | +9.7% | 0.081 | 1.000 |  |  |
 | long_composite_n50 | books_2026-09-22_spycash_n50_daily.json | 1.73 | +7.9% | 0.084 | 1.000 |  |  |
 | insider_officer_h5 | s23_insider_officer_2026-09-22.json | 1.68 | +5.7% | 0.093 | 1.000 |  |  |
 | momcrash | s24_long_v2_2026-09-22.json | 1.66 | +9.7% | 0.096 | 1.000 |  |  |
 | long_jump5 | s33_negative_filters_2026-09-23.json | 1.63 | +9.1% | 0.103 | 1.000 |  |  |
 | long_both5 | s33_negative_filters_2026-09-23.json | 1.62 | +9.0% | 0.105 | 1.000 |  |  |
 | long_floor5 | s40_price_floor_2026-09-24.json | 1.58 | +8.7% | 0.114 | 1.000 |  |  |
-| long_floor2 | s40_price_floor_2026-09-24.json | 1.57 | +8.9% | 0.116 | 1.000 |  |  |
+| long_floor2 | s44_v2_bundle_2026-09-26.json | 1.57 | +8.9% | 0.116 | 1.000 |  |  |
 | long_off5 | s39_dilution_144_2026-09-24.json | 1.52 | +8.5% | 0.128 | 1.000 |  |  |
 | long_shelf20 | s39_dilution_144_2026-09-24.json | 1.52 | +8.4% | 0.129 | 1.000 |  |  |
 | long_f144_5 | s39_dilution_144_2026-09-24.json | 1.49 | +12.0% | 0.136 | 1.000 |  |  |
 | long_floor1 | s40_price_floor_2026-09-24.json | 1.49 | +8.3% | 0.137 | 1.000 |  |  |
-| base | s24_long_v2_2026-09-22.json | 1.46 | +8.1% | 0.144 | 1.000 |  |  |
+| base | s44_v2_bundle_2026-09-26.json | 1.46 | +8.1% | 0.144 | 1.000 |  |  |
 | long_base | s40_price_floor_2026-09-24.json | 1.46 | +8.1% | 0.144 | 1.000 |  |  |
 | long_base_off5 | s39_dilution_144_2026-09-24.json | 1.46 | +8.1% | 0.144 | 1.000 |  |  |
 | long_base_shelf20 | s39_dilution_144_2026-09-24.json | 1.46 | +8.1% | 0.144 | 1.000 |  |  |
 | long_half_spread | s27_exec_cost_2026-09-24.json | 1.46 | +8.1% | 0.144 | 1.000 |  |  |
+| long_jump5_strict | s44_v2_bundle_2026-09-26.json | 1.45 | +8.1% | 0.147 | 1.000 |  |  |
 | long_bear5 | s33_negative_filters_2026-09-23.json | 1.45 | +8.0% | 0.148 | 1.000 |  |  |
 | long_jump1 | s33_negative_filters_2026-09-23.json | 1.43 | +8.0% | 0.154 | 1.000 |  |  |
 | insider_officer_h10 | s23_insider_officer_2026-09-22.json | 1.37 | +5.4% | 0.172 | 1.000 |  |  |
