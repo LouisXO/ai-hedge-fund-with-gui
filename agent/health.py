@@ -29,7 +29,7 @@ OUT = "/Users/louis/optradar/out"
 HEALTH = os.path.join(OUT, "health.json")
 A = str(AGENT_DIR)
 JOBS = [  # label, what, log, marker regex, weekdays it runs (0 = Mon), hour it should have run by
-    ("com.louis.optradar", "08:41 早报", f"{OUT}/cron.log", r"^=== (.+) done ===", range(0, 5), 9),
+    ("com.louis.optradar", "08:41 早报", f"{OUT}/cron.log", r"^=== (?!weekly)(.+?) (?:start|done) ===", range(0, 5), 9),
     ("com.louis.agent.postclose", "13:25 收盘后(复盘、快照、备份)", f"{OUT}/agent/execute.log", r"^=== postclose (.+) ===", range(0, 5), 14),
     ("com.louis.agent.execute", "16:10 下单", f"{OUT}/agent/execute.log", r"^=== execute (.+?) AGENT_EXEC", range(0, 5), 17),
     ("com.louis.agent.form4", "06:00 Form 4", None, None, range(0, 5), 7),
@@ -99,7 +99,12 @@ def check_jobs(now: dt.datetime) -> list[dict]:
         if status not in ("0", "-") and label != "com.louis.optradar.weekly":
             r.update(level="warn", detail=f"上次退出码 {status}")
         elif status not in ("0", "-"):
-            r.update(level="warn", detail=f"上次退出码 {status}(周报失败会这样)")
+            # launchd keeps the exit code until the next scheduled run; a manual rerun that produced the report clears the warning
+            sat = now.date() - dt.timedelta(days=(now.weekday() - 5) % 7)
+            if os.path.exists(f"{OUT}/weekly/{sat}.html"):
+                r.update(detail=f"定时运行失败(退出码 {status}),已手动重跑,{sat} 周报已生成")
+            else:
+                r.update(level="bad" if now.date() >= sat else "warn", detail=f"上次退出码 {status},{sat} 周报没有生成")
         if log and marker and os.path.exists(log):
             last = None
             with open(log, errors="ignore") as f:
