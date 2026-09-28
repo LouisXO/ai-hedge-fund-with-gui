@@ -44,6 +44,8 @@ DATA = [  # name, db, sql for the latest date, max age in sessions before warn /
     ("指数 SPY/VIX", f"{A}/panel.db", "SELECT max(trade_date) FROM index_daily WHERE symbol = 'SPY'", 1, 3),
     ("内部人 Form 4", f"{A}/panel.db", "SELECT max(filing_date) FROM insider_tx", 2, 4),
     ("基本面 XBRL", f"{A}/panel.db", "SELECT max(filed) FROM fundamentals_pit", 8, 15),
+    # the OLDEST tenth of the companies, not the newest fetch: one re-fetched company must not make the table look fresh
+    ("基本面刷新(最旧的一成公司)", f"{A}/panel.db", "SELECT CAST(quantile_cont(fetched_at, 0.1) AS DATE) FROM xbrl_load_log WHERE status = 'ok'", 8, 12),
     ("新闻 Alpaca", f"{A}/news.db", "SELECT CAST(max(created_at) AS DATE) FROM news_items", 2, 4),
     ("期权日线", f"{A}/options.db", "SELECT max(trade_date) FROM opt_bars", 6, 12),
     ("空头持仓 FINRA", f"{A}/short.db", "SELECT max(public_date) FROM short_interest", 15, 25),

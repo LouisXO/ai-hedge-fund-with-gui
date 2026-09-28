@@ -16,7 +16,15 @@ Tags (us-gaap unless noted) — the inputs to the standard factor set:
   Assets, StockholdersEquity, LongTermDebtNoncurrent,
   CommonStockSharesOutstanding, dei:EntityCommonStockSharesOutstanding (instants).
 
-Usage: python -m agent.sources.sec_xbrl load [--since 2014-01-01] [--limit N]
+Refresh (2026-09-28): companyfacts is a snapshot of everything a company has filed, so new
+10-Q / 10-K facts only arrive when a company is fetched AGAIN. `load` alone fetches companies
+that were never fetched; `--max-age-days N` also re-fetches every company whose last successful
+fetch is older than N days. The weekly job runs with N = 6, i.e. everything. Re-fetching cannot
+change history: the key contains the accession number, so a later filing adds rows and never
+rewrites what an earlier filing said (point-in-time stays intact). A failed re-fetch keeps the
+company's previous rows and log entry.
+
+Usage: python -m agent.sources.sec_xbrl load [--since 2014-01-01] [--limit N] [--max-age-days 6]
        python -m agent.sources.sec_xbrl status
 """
 from __future__ import annotations
@@ -90,7 +98,7 @@ def rows_from(cik: int, doc: dict, since: str) -> list[dict]:
 
 
 def load(store: PanelStore, since: str, limit: int | None = None, retry_failed: bool = False,
-         workers: int = 4) -> dict:
+         workers: int = 4, max_age_days: int | None = None) -> dict:
     ua = user_agent()
     for stmt in DDL:
         store.con.execute(stmt)
@@ -101,8 +109,14 @@ def load(store: PanelStore, since: str, limit: int | None = None, retry_failed: 
     done = {r[0] for r in store.con.execute(done_q).fetchall()}
     if retry_failed:
         done = {r[0] for r in store.con.execute("SELECT cik FROM xbrl_load_log WHERE status='ok'").fetchall()}
+    had_ok: set[int] = set()
+    if max_age_days is not None:                      # refresh: a company counts as done only if fetched recently
+        had_ok = {r[0] for r in store.con.execute("SELECT cik FROM xbrl_load_log WHERE status = 'ok'").fetchall()}
+        cut = pd.Timestamp.now() - pd.Timedelta(days=max_age_days)
+        done = {r[0] for r in store.con.execute("SELECT cik FROM xbrl_load_log WHERE fetched_at >= ?", [cut]).fetchall()}
+        ciks = sorted(ciks, key=lambda c: (c in had_ok, c))   # never-fetched first, then the rest
     todo = [c for c in ciks if c not in done][:limit]
-    stats = {"todo": len(todo), "ok": 0, "missing": 0, "rows": 0}
+    stats = {"todo": len(todo), "ok": 0, "missing": 0, "kept_old": 0, "rows": 0}
     batch, log = [], []
     # download-bound (~1.8 s per company single-threaded); a few threads stay well
     # inside SEC's 10 requests/second while cutting the wall clock by 4x
@@ -114,7 +128,9 @@ def load(store: PanelStore, since: str, limit: int | None = None, retry_failed: 
 
     pool = ThreadPoolExecutor(max_workers=workers)
     for i, (cik, doc) in enumerate(pool.map(_fetch, todo), 1):
-        if doc is None:
+        if doc is None and cik in had_ok:
+            stats["kept_old"] += 1                     # a failed re-fetch must not erase a good company
+        elif doc is None:
             log.append({"cik": cik, "status": "missing", "n_rows": 0, "fetched_at": pd.Timestamp.now()})
             stats["missing"] += 1
         else:
@@ -133,7 +149,8 @@ def load(store: PanelStore, since: str, limit: int | None = None, retry_failed: 
                 df = df.drop_duplicates(subset=["cik", "ns", "tag", "period_start", "period_end", "accn"])
                 stats["rows"] += store.insert("xbrl_facts", df)
                 batch = []
-            store.insert("xbrl_load_log", pd.DataFrame(log))
+            if log:
+                store.insert("xbrl_load_log", pd.DataFrame(log))
             log = []
             print(f"  [{i}/{len(todo)}] ok {stats['ok']} missing {stats['missing']} rows {stats['rows']}", flush=True)
     pool.shutdown()
@@ -146,10 +163,14 @@ def main() -> int:
     ap.add_argument("--since", default="2014-01-01")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--retry-failed", action="store_true")
+    ap.add_argument("--max-age-days", type=int, default=None, help="also re-fetch companies last fetched more than N days ago")
     args = ap.parse_args()
     with PanelStore() as store:
         if args.cmd == "load":
-            print(load(store, args.since, args.limit, args.retry_failed))
+            st = load(store, args.since, args.limit, args.retry_failed, max_age_days=args.max_age_days)
+            print(st)
+            if args.max_age_days is not None and st["todo"] and st["kept_old"] + st["missing"] > 0.2 * st["todo"]:
+                return 2                               # more than a fifth failed: the refresh did not happen
         else:
             for stmt in DDL:
                 store.con.execute(stmt)
