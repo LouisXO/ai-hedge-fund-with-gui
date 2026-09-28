@@ -88,14 +88,21 @@ def opg_window(now_et: dt.datetime) -> bool:
 
 def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: set[str], as_of: dt.date,
               next_session: dt.date, ref_close: dict[str, float], spread_pct: dict[str, float],
-              cash_usd: float, blocked: set[str], scored: bool = True, tif: str = "opg") -> list[dict]:
+              cash_usd: float, blocked: set[str], scored: bool = True, tif: str = "opg",
+              frozen: set[str] | None = None) -> list[dict]:
     """The engine's one-day step, as orders for the next open.
 
     lots: this book's open lots ({ticker, qty, hold_until}); ranked: entry candidates
     in priority order; keep: names the book still wants (long book: top 2N; insider
     book: irrelevant, exits are by hold_until); blocked: tickers held by another book
     or unreconciled. Returns dicts ready for agent_orders.
+
+    frozen: tickers whose lots do not match the broker's position (reconcile). No order of
+    either side is planned for them: the lot's qty is not what the account holds (split,
+    merger, manual trade), so a sell of the lot's qty would be the wrong size. They stay
+    frozen until the ledger is corrected by hand (2026-09-28 audit: the sell loop ignored this).
     """
+    frozen = frozen or set()
     orders: list[dict] = []
     exits: set[str] = set()
     for lot in lots:
@@ -103,6 +110,8 @@ def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: s
         hu = lot.get("hold_until")
         expired = hu is not None and pd.Timestamp(hu).date() <= next_session
         dropped = hu is None and scored and t not in keep
+        if t in frozen:
+            continue
         if (expired or dropped) and t not in exits:
             exits.add(t)
             orders.append({"client_order_id": client_id(book, as_of, t, "sell"), "book": book, "as_of": as_of,
@@ -376,7 +385,12 @@ def main() -> int:
             day = market.adj.index[-1]
             if args.date:
                 day = market.adj.index[market.adj.index <= pd.Timestamp(args.date)][-1]
-            stale = day.date() < last_session
+            # Plan only from the last completed session's bar. Older = the update failed; newer = today's
+            # unfinished bar was loaded (a job replayed by launchd after a sleep runs in market hours).
+            stale = day.date() != last_session
+            market_hours = now_et.date() in calendar and dt.time(9, 25) <= now_et.time() < dt.time(16, 5)
+            skipped_reason = ("bar date != last session" if stale else
+                              "market hours: orders are only planned between 16:05 and 09:25 ET" if (market_hours and args.submit) else None)
             sync = sync_fills(con, broker, calendar)
             n_model = fill_model_px(con, store)
             positions = broker.positions()
@@ -391,7 +405,7 @@ def main() -> int:
                 ref_close[CORE_TICKER] = float(spy_close[0])
             plans: list[dict] = []
             targets_dbg: dict = {}
-            if not stale and not args.sync_only:
+            if skipped_reason is None and not args.sync_only:
                 for book, cfg in BOOKS.items():
                     if args.book and book != args.book:
                         continue
@@ -406,7 +420,7 @@ def main() -> int:
                         (ranked, retries), keep, scored = insider_targets(store, day, con), set(), True
                     spreads = {t: market.spread_pct(t, day) for t in ranked if t in market.close.columns}
                     book_plans = plan_book(book, cfg, lots, ranked, keep, day.date(), next_session, ref_close, spreads,
-                                           books[book]["cash_usd"], blocked | others, scored, tif)
+                                           books[book]["cash_usd"], blocked | others, scored, tif, frozen=blocked)
                     if book == "insider":
                         for o in book_plans:              # a retry of an entry the broker left unfilled: tagged, evaluated separately
                             if o["side"] == "buy" and o["ticker"] in retries:
@@ -444,6 +458,7 @@ def main() -> int:
         con.close()
 
     summary = {"as_of": str(day.date()), "last_session": str(last_session), "stale_bars": stale, "tif": tif,
+               "skipped_reason": None if args.sync_only else skipped_reason,
                "mode": "sync" if args.sync_only else "submit" if args.submit else "dry_run", "account_equity": float(acct["equity"]),
                "account_cash": float(acct["cash"]), "sync": sync, "model_px_filled": n_model,
                "reconcile": msgs, "targets": targets_dbg, "books": nav,
@@ -453,7 +468,8 @@ def main() -> int:
     with open(os.path.join(args.out_dir, f"{'sync' if args.sync_only else 'exec'}_{day.date()}.json"), "w") as f:
         json.dump(summary, f, indent=1, default=str)
     tag = "SYNC" if args.sync_only else "SUBMITTED" if args.submit else "DRY RUN"
-    print(f"[{tag}] bar {day.date()} (last session {last_session}{', STALE — nothing planned' if stale else ''}) tif={tif} "
+    note = f", NOTHING PLANNED: {skipped_reason}" if (skipped_reason and not args.sync_only) else ""
+    print(f"[{tag}] bar {day.date()} (last session {last_session}{note}) tif={tif} "
           f"· account ${float(acct['equity']):,.0f} · fills synced {sync['filled']}+{sync['closed']} · "
           f"reconcile {'ok' if not msgs else msgs}")
     for b in nav:
@@ -463,7 +479,7 @@ def main() -> int:
         print(f"  {o['book']:8s} {o['side']:4s} {o['ticker']:6s} x{o['qty']:<5d} {lp:<14s} ref {o['ref_close']:.2f}  {o['reason']}  [{o['status']}]")
     if skipped:
         print(f"  skipped {len(skipped)} already-submitted ids")
-    return 0
+    return 3 if (skipped_reason and not args.sync_only) else 0           # non-zero: the wrapper logs "execute failed", health reads it
 
 
 if __name__ == "__main__":

@@ -77,7 +77,8 @@ def main() -> int:
     con = ledger.connect()
     try:
         con.execute(DDL)
-        fills = con.execute("""SELECT client_order_id, book, ticker, side, filled_qty, filled_avg_px, CAST(filled_at AS DATE) d, reason
+        fills = con.execute("""SELECT client_order_id, book, ticker, side, filled_qty, filled_avg_px, CAST(filled_at AS DATE) d, reason,
+                                      order_type, limit_price
                                FROM agent_orders WHERE dry_run = FALSE AND filled_qty > 0""").df()
         missed = con.execute("""SELECT client_order_id, book, ticker, as_of, qty, reason, status FROM agent_orders
                                 WHERE dry_run = FALSE AND side = 'buy' AND book = 'insider' AND (filled_qty IS NULL OR filled_qty = 0)
@@ -101,10 +102,18 @@ def main() -> int:
         cross = cross_prices(pairs)
 
         fills["cross"] = [cross.get((t, d)) for t, d in zip(fills["ticker"], fills["d"])]
-        fills["adj"] = [((px - c) if s == "buy" else (c - px)) * q if c else 0.0
-                        for s, q, px, c in zip(fills["side"], fills["filled_qty"], fills["filled_avg_px"], fills["cross"])]
-        fills["gap_pct"] = [((px / c - 1) * 100 * (1 if s == "buy" else -1)) if c else None
-                            for s, px, c in zip(fills["side"], fills["filled_avg_px"], fills["cross"])]
+        # A limit order cannot fill in the opening cross when the cross is beyond its limit (S36c: entries are
+        # DAY limits at close + 3%). Such a buy filled later in the day, when the price came back; a real account
+        # with the same order gets about the limit, not the cross. Re-pricing it at the (higher) cross would book
+        # a purchase nobody could have made and understate the book by 9-12%/yr on the insider line (S45 D1).
+        # So: no adjustment for these fills, and they are reported apart from the execution gap.
+        def beyond(s, c, lim):
+            return bool(c and pd.notna(lim) and lim and ((s == "buy" and c > lim) or (s == "sell" and c < lim)))
+        fills["gap_fill"] = [beyond(s, c, lim) for s, c, lim in zip(fills["side"], fills["cross"], fills["limit_price"])]
+        fills["adj"] = [0.0 if (gf or not c) else ((px - c) if s == "buy" else (c - px)) * q
+                        for s, q, px, c, gf in zip(fills["side"], fills["filled_qty"], fills["filled_avg_px"], fills["cross"], fills["gap_fill"])]
+        fills["gap_pct"] = [None if (gf or not c) else ((px / c - 1) * 100 * (1 if s == "buy" else -1))
+                            for s, px, c, gf in zip(fills["side"], fills["filled_avg_px"], fills["cross"], fills["gap_fill"])]
         rows = []
         for (d, book), g in nav.groupby(["as_of", "book"]):
             f = fills[(fills["book"] == book) & (fills["d"] <= d)]
@@ -137,11 +146,14 @@ def main() -> int:
         by_book[b] = {"as_of": str(last[0]), "equity_sim": last[2], "adj_cum": last[3], "equity_auction": last[4], "n_fills": last[5]}
     g = fills["gap_pct"].dropna()
     out = {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "books": by_book,
-           "fills": {"n": int(len(fills)), "with_cross": int(g.size), "mean_gap_pct": float(g.mean()) if g.size else None,
+           "fills": {"n": int(len(fills)), "with_cross": int(fills["cross"].notna().sum()) if len(fills) else 0,
+                     "n_gap_fills": int(fills["gap_fill"].sum()) if len(fills) else 0,
+                     "mean_gap_pct": float(g.mean()) if g.size else None,
                      "median_gap_pct": float(g.median()) if g.size else None},
-           "fill_rows": [{"book": b, "ticker": t, "side": s, "day": str(d), "fill": px, "cross": c, "gap_pct": gp, "reason": rs}
-                         for b, t, s, d, px, c, gp, rs in zip(fills["book"], fills["ticker"], fills["side"], fills["d"], fills["filled_avg_px"],
-                                                                fills["cross"], fills["gap_pct"], fills["reason"])],
+           "fill_rows": [{"book": b, "ticker": t, "side": s, "day": str(d), "fill": px, "cross": c, "gap_pct": gp, "reason": rs,
+                          "limit": (None if pd.isna(lim) else float(lim)), "gap_fill": bool(gf)}
+                         for b, t, s, d, px, c, gp, rs, lim, gf in zip(fills["book"], fills["ticker"], fills["side"], fills["d"], fills["filled_avg_px"],
+                                                                         fills["cross"], fills["gap_pct"], fills["reason"], fills["limit_price"], fills["gap_fill"])],
            "missed": miss_rows,
            "missed_summary": {"n": len(miss_rows), "closed": len(closed),
                               "mean_ret_pct": sum(m["ret_pct"] for m in closed) / len(closed) if closed else None,

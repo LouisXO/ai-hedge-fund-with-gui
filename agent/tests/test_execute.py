@@ -138,3 +138,13 @@ def test_unfilled_insider_orders_are_retried_once_filled_ones_block():
     skip, retry = blocking_orders(rows)
     assert skip == {"A", "C", "D"}          # filled, still working, and two misses
     assert retry == {"B"}                    # one miss: retry once
+
+
+def test_frozen_ticker_gets_no_order_of_either_side():
+    """A lot that does not match the broker's position (split, merger, manual trade) is frozen: its qty is not
+    what the account holds, so neither the expired-hold sell nor a re-entry is planned (2026-09-28 audit)."""
+    cfg = BOOKS["insider"]
+    lots = [dict(_lot("H", 50, hold_until=NEXT), book="insider"), dict(_lot("K", 50, hold_until=NEXT), book="insider")]
+    orders = plan_book("insider", cfg, lots, ["N"], set(), AS_OF, NEXT, {"H": 20.0, "K": 20.0, "N": 8.0},
+                       {"N": 0.4}, cash_usd=28_000.0, blocked={"H"}, tif="day", frozen={"H"})
+    assert [(o["ticker"], o["side"]) for o in orders] == [("K", "sell"), ("N", "buy")]

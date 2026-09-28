@@ -251,8 +251,8 @@ def paper_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float
             row["tags"].append(f"部分成交 {int(fq)}/{int(qty)}")
         if row["gap_pct"] is not None and abs(row["gap_pct"]) >= 0.5:
             row["tags"].append(f"执行偏差 {row['gap_pct']:+.2f}%")
-        if b == "insider" and side == "buy" and otype == "limit":
-            row["tags"].append("内部人入场用了限价(S31:应开盘市价)")
+        if side == "buy" and otype == "market" and str(day) >= "2026-09-29":     # orders planned from 2026-09-28 on are limits (S36c)
+            row["tags"].append("入场用了市价单(S36c:所有入场都应是限价单)")
         if reason == "entry_retry":
             row["tags"].append("重试单(上次没成交,晚一天补买;单独统计)")
         out["orders"].append(row)
@@ -276,9 +276,9 @@ def paper_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float
     gaps = [o["gap_pct"] for o in out["orders"] if o["gap_pct"] is not None]
     if gaps and np.mean(np.abs(gaps)) >= 0.5:
         out["flags"].append({"rule": "paper_exec_gap", "text": f"平均执行偏差 {np.mean(gaps):+.2f}%/边({len(gaps)} 笔),超过 0.5%"})
-    lim_ins = [o for o in out["orders"] if any(t.startswith("内部人入场用了限价") for t in o["tags"])]
-    if lim_ins:
-        out["flags"].append({"rule": "paper_insider_limit", "text": f"内部人书 {len(lim_ins)} 张限价入场单(规则:市价开盘单)"})
+    mkt_in = [o for o in out["orders"] if any(t.startswith("入场用了市价单") for t in o["tags"])]
+    if mkt_in:
+        out["flags"].append({"rule": "paper_market_entry", "text": f"{len(mkt_in)} 张市价入场单(规则 S36c:限价 = 前收盘 + 3%)"})
     big = [p for p in out["positions"] if p["day_ret"] is not None and abs(p["day_ret"]) >= 5]
     if big:
         out["flags"].append({"rule": "paper_big_move", "text": "持仓大动:" + ", ".join(f"{p['ticker']} {p['day_ret']:+.1f}%" for p in big[:6]), "info": True})
@@ -428,7 +428,7 @@ def record_lessons(day: dt.date, flags: list[dict]) -> dict[str, int]:
     return counts
 
 
-RULE_NAMES = {"paper_unfilled": "模拟盘未成交", "paper_exec_gap": "执行偏差 > 0.5%", "paper_insider_limit": "内部人限价入场", "paper_big_move": "持仓大动",
+RULE_NAMES = {"paper_unfilled": "模拟盘未成交", "paper_exec_gap": "执行偏差 > 0.5%", "paper_insider_limit": "内部人限价入场(旧规则,2026-09-28 作废)", "paper_market_entry": "市价入场", "paper_big_move": "持仓大动",
               "real_overtrading": "实盘当日 ≥ 5 笔", "real_buy_after_jump": "实盘大动后追买(S25)", "real_short_dte": "实盘买临期期权", "real_0dte": "实盘买当日到期期权",
               "real_otm_lottery": "实盘买深虚值", "real_buy_high": "实盘买在日高附近", "real_sell_low": "实盘卖在日低附近",
               "real_vs_insiders": "实盘逆内部人卖出买入", "real_concentration": "实盘单一持仓 ≥ 40%", "real_add_same_day": "实盘同一合约当日加仓"}
