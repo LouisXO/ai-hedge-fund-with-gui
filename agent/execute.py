@@ -62,7 +62,7 @@ BOOKS = {
     "long":    {"alloc_usd": 60_000.0, "max_positions": TOP_N, "hold_days": None,
                 "entry_cap_pct": 3.0},        # LOO cap: buy at the open unless it gaps > 3% over D's close
     "insider": {"alloc_usd": 30_000.0, "max_positions": INSIDER_SLOTS, "hold_days": HOLD_DAYS,
-                "entry_cap_pct": None},       # cap = one quoted spread (S12/S13: the edge is ~one spread)
+                "entry_cap_pct": 3.0},        # DAY limit at D's close + 3% (2026-09-28: a market order paid the ask, INBX 105.33 vs a 98.69 open)
     "core":    {"alloc_usd": 10_000.0, "max_positions": 1, "hold_days": None,
                 "entry_cap_pct": 1.0},        # SPY, passive large-cap exposure (S37)
 }
@@ -136,9 +136,13 @@ def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: s
         # 2026-09-24: on the PAPER account the opening auction is not simulated reliably — every OPG
         # market order expired unfilled (5/5 on 09-24) and 7/9 OPG limits expired on 09-23, while DAY
         # orders queued overnight filled 30/30 in the first minutes (09-22). So main() sends DAY
-        # orders. The insider book still buys at market (S31: half its edge is on day one); the long
-        # book keeps the +3% cap as a limit.
-        otype = "market" if (tif == "opg" or book == "insider") else "limit"
+        # orders; the long book keeps the +3% cap as a limit.
+        # 2026-09-28: the insider book bought at market until today. A DAY market order is filled at the
+        # ask, and in thin names the ask in the first minutes is a placeholder: INBX filled at 105.33 when
+        # the opening cross was 98.69 and no trade all day printed above 104.6; 5 of 7 fills were above
+        # the cross. No book buys at market any more: every DAY entry is a limit at the reference close
+        # + entry_cap_pct. A name that opens above the cap is not chased; it is retried once (S36b).
+        otype = "market" if tif == "opg" else "limit"
         orders.append({"client_order_id": client_id(book, as_of, t, "buy"), "book": book, "as_of": as_of,
                        "ticker": t, "side": "buy", "qty": qty, "order_type": otype, "tif": tif,
                        "limit_price": None if otype == "market" else limit, "ref_close": px, "reason": "entry"})

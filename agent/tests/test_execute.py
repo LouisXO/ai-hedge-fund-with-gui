@@ -44,7 +44,7 @@ def test_no_entries_when_not_scored_and_no_exits_either():
     assert orders == []
 
 
-def test_insider_book_exits_on_hold_until_and_caps_entry_at_one_spread():
+def test_insider_book_exits_on_hold_until_and_caps_entry():
     cfg = BOOKS["insider"]
     lots = [dict(_lot("H", 50, hold_until=NEXT), book="insider"), dict(_lot("K", 50, hold_until=dt.date(2026, 9, 25)), book="insider")]
     orders = plan_book("insider", cfg, lots, ["N"], set(), AS_OF, NEXT, {"H": 20.0, "K": 20.0, "N": 8.0},
@@ -53,7 +53,7 @@ def test_insider_book_exits_on_hold_until_and_caps_entry_at_one_spread():
     assert orders[1]["order_type"] == "market" and orders[1]["limit_price"] is None
     day = plan_book("insider", cfg, lots, ["N"], set(), AS_OF, NEXT, {"H": 20.0, "K": 20.0, "N": 8.0},
                     {"N": 0.4}, cash_usd=28_000.0, blocked=set(), tif="day")
-    assert day[1]["order_type"] == "market" and day[1]["limit_price"] is None   # DAY on paper, still market (2026-09-24)
+    assert day[1]["order_type"] == "limit" and day[1]["limit_price"] == 8.24     # DAY: close + 3%, never market (2026-09-28)
     assert orders[1]["reason"] == "entry" and orders[0]["reason"] == "hold_expired"
 
 
@@ -125,11 +125,11 @@ def test_broker_refuses_anything_but_paper():
     assert b.base.startswith("https://paper-api.alpaca.markets")
 
 
-def test_insider_day_entry_is_market():
-    """Paper runs on DAY orders (OPG expired 5/5 on 2026-09-24); the insider book must still buy at market."""
-    cfg = {"max_positions": 20, "entry_cap_pct": None}
+def test_insider_day_entry_is_a_capped_limit():
+    """No book buys at market on DAY orders: a market order pays the ask (INBX 2026-09-28, 105.33 vs a 98.69 open)."""
+    cfg = {"max_positions": 20, "entry_cap_pct": 3.0}
     o = plan_book("insider", cfg, [], ["N"], set(), AS_OF, NEXT, {"N": 10.0}, {"N": 0.4}, cash_usd=28_000.0, blocked=set(), tif="day")
-    assert o and o[0]["order_type"] == "market" and o[0]["tif"] == "day" and o[0]["limit_price"] is None
+    assert o and o[0]["order_type"] == "limit" and o[0]["tif"] == "day" and o[0]["limit_price"] == 10.30
 
 
 def test_unfilled_insider_orders_are_retried_once_filled_ones_block():
