@@ -1,4 +1,4 @@
-# Family-wise ledger — 96 book-level variants
+# Family-wise ledger — 109 book-level variants
 
 Two-sided p from the Newey-West t; Holm step-down over the whole family. Variants with a negative t are the rejected event lines (the sign is informative, the test is symmetric).
 
@@ -18,6 +18,7 @@ Two-sided p from the Newey-West t; Holm step-down over the whole family. Variant
 | long_hi_decile | s38_short_interest_2026-09-24.json | 2.05 | +14.7% | 0.040 | 1.000 |  |  |
 | invvol | s24_long_v2_2026-09-22.json | 2.04 | +9.1% | 0.041 | 1.000 |  |  |
 | issuance | s24_long_v2_2026-09-22.json | 2.03 | +11.3% | 0.042 | 1.000 |  |  |
+| insider_cap3_limit_fill_if_low_le_limit | s45_d1_insider_cap_2026-09-28.json | 1.94 | +7.8% | 0.052 | 1.000 |  |  |
 | long_composite_n30 | books_2026-09-20_spycash_daily.json | 1.94 | +10.5% | 0.052 | 1.000 |  |  |
 | v2_clusters | s44_v2_bundle_2026-09-26.json | 1.94 | +8.8% | 0.052 | 1.000 |  |  |
 | insider_v1_5d | s34_buyback_clean_2026-09-23.json | 1.93 | +8.4% | 0.053 | 1.000 |  |  |
@@ -41,10 +42,18 @@ Two-sided p from the Newey-West t; Holm step-down over the whole family. Variant
 | long_both5 | s33_negative_filters_2026-09-23.json | 1.62 | +9.0% | 0.105 | 1.000 |  |  |
 | long_floor5 | s40_price_floor_2026-09-24.json | 1.58 | +8.7% | 0.114 | 1.000 |  |  |
 | long_floor2 | s44_v2_bundle_2026-09-26.json | 1.57 | +8.9% | 0.116 | 1.000 |  |  |
+| long_frac15 | s45_d2_small_capital_2026-09-28.json | 1.57 | +10.5% | 0.116 | 1.000 |  |  |
+| long_frac10 | s45_d2_small_capital_2026-09-28.json | 1.57 | +12.1% | 0.117 | 1.000 |  |  |
+| long_ws20_10k | s45_d2_small_capital_2026-09-28.json | 1.56 | +9.4% | 0.118 | 1.000 |  |  |
+| insider_cap3_skip_gap_gt_3 | s45_d1_insider_cap_2026-09-28.json | 1.54 | +5.7% | 0.123 | 1.000 |  |  |
+| long_ws15_20k | s45_d2_small_capital_2026-09-28.json | 1.52 | +10.1% | 0.128 | 1.000 |  |  |
 | long_off5 | s39_dilution_144_2026-09-24.json | 1.52 | +8.5% | 0.128 | 1.000 |  |  |
 | long_shelf20 | s39_dilution_144_2026-09-24.json | 1.52 | +8.4% | 0.129 | 1.000 |  |  |
 | long_f144_5 | s39_dilution_144_2026-09-24.json | 1.49 | +12.0% | 0.136 | 1.000 |  |  |
 | long_floor1 | s40_price_floor_2026-09-24.json | 1.49 | +8.3% | 0.137 | 1.000 |  |  |
+| long_ws20_20k | s45_d2_small_capital_2026-09-28.json | 1.48 | +8.9% | 0.138 | 1.000 |  |  |
+| long_ws10_20k | s45_d2_small_capital_2026-09-28.json | 1.47 | +11.2% | 0.141 | 1.000 |  |  |
+| long_ws30_10k | s45_d2_small_capital_2026-09-28.json | 1.47 | +7.8% | 0.142 | 1.000 |  |  |
 | base | s44_v2_bundle_2026-09-26.json | 1.46 | +8.1% | 0.144 | 1.000 |  |  |
 | long_base | s40_price_floor_2026-09-24.json | 1.46 | +8.1% | 0.144 | 1.000 |  |  |
 | long_base_off5 | s39_dilution_144_2026-09-24.json | 1.46 | +8.1% | 0.144 | 1.000 |  |  |
@@ -53,10 +62,14 @@ Two-sided p from the Newey-West t; Holm step-down over the whole family. Variant
 | long_jump5_strict | s44_v2_bundle_2026-09-26.json | 1.45 | +8.1% | 0.147 | 1.000 |  |  |
 | long_bear5 | s33_negative_filters_2026-09-23.json | 1.45 | +8.0% | 0.148 | 1.000 |  |  |
 | long_jump1 | s33_negative_filters_2026-09-23.json | 1.43 | +8.0% | 0.154 | 1.000 |  |  |
+| long_frac20 | s45_d2_small_capital_2026-09-28.json | 1.41 | +8.7% | 0.158 | 1.000 |  |  |
+| long_ws30_20k | s45_d2_small_capital_2026-09-28.json | 1.41 | +7.7% | 0.158 | 1.000 |  |  |
 | insider_officer_h10 | s23_insider_officer_2026-09-22.json | 1.37 | +5.4% | 0.172 | 1.000 |  |  |
 | insider_floor2 | s40_price_floor_2026-09-24.json | 1.35 | +5.8% | 0.176 | 1.000 |  |  |
 | insider_ceo_h10 | s23_insider_ceo_2026-09-22.json | 1.33 | +5.2% | 0.184 | 1.000 |  |  |
 | move_nonews_down_h10 | s25_move_nonews_down_2026-09-22.json | -1.30 | -14.8% | 0.193 | 1.000 |  |  |
+| long_ws10_10k | s45_d2_small_capital_2026-09-28.json | 1.30 | +10.0% | 0.195 | 1.000 |  |  |
+| long_ws15_10k | s45_d2_small_capital_2026-09-28.json | 1.28 | +8.2% | 0.202 | 1.000 |  |  |
 | buyback_all_h20 | s34_buyback_clean_2026-09-23.json | 1.24 | +3.9% | 0.215 | 1.000 |  |  |
 | insider_hi_dtc10 | s38_short_interest_2026-09-24.json | 1.22 | +6.7% | 0.222 | 1.000 |  |  |
 | insider_hi_si20 | s38_short_interest_2026-09-24.json | 1.17 | +6.4% | 0.243 | 1.000 |  |  |
