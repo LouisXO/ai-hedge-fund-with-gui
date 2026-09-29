@@ -12,7 +12,8 @@ day", so a test a year from now has no look-ahead.
   ratings      moomoo get_research_rating_summary: each broker's rating and target with its date
                (history only ~12 months deep, so archiving now is the only way to get more).
                Held names, watchlist, the long book's top 60 and the insider candidates only.
-  borrow       Alpaca /v2/assets: shortable / easy_to_borrow / marginable for every active US equity.
+  borrow       Alpaca /v2/assets: shortable / easy_to_borrow / marginable / fractionable for every active
+               US equity (fractionable from 2026-09-29; earlier rows NULL).
 
 moomoo is read-only here; no trading context is opened.
 
@@ -42,8 +43,19 @@ DDL = [
     """CREATE TABLE IF NOT EXISTS ratings (ticker VARCHAR, institution VARCHAR, rec_date DATE, rating VARCHAR, target DOUBLE,
        first_seen DATE, PRIMARY KEY (ticker, institution, rec_date))""",
     """CREATE TABLE IF NOT EXISTS borrow (day DATE, ticker VARCHAR, shortable BOOLEAN, easy_to_borrow BOOLEAN, marginable BOOLEAN,
-       PRIMARY KEY (day, ticker))""",
+       fractionable BOOLEAN, PRIMARY KEY (day, ticker))""",
 ]
+# borrow.fractionable was added on 2026-09-29 (S48, migrate #2): whether Alpaca takes a fractional order in the
+# name, for the coverage record a small real account would need. Rows from before are NULL.
+BORROW_COLS = ["day", "ticker", "shortable", "easy_to_borrow", "marginable", "fractionable"]
+
+
+def ensure_schema(con) -> None:
+    """Create the tables and add the columns that came later (DuckDB has no migration tool)."""
+    for s in DDL:
+        con.execute(s)
+    if "fractionable" not in {r[0] for r in con.execute("DESCRIBE borrow").fetchall()}:
+        con.execute("ALTER TABLE borrow ADD COLUMN fractionable BOOLEAN")
 
 
 def universe() -> list[str]:
@@ -145,17 +157,30 @@ def archive_ratings(con, q, names: list[str]) -> int:
     return n
 
 
-def archive_borrow(con) -> int:
+def fetch_assets() -> list[dict]:
+    """Alpaca /v2/assets (paper endpoint, read-only): every active US equity with its flags."""
     env = dict(l.strip().split("=", 1) for l in open(AGENT_DIR.parent / ".env") if "=" in l and not l.startswith("#"))
     h = {"APCA-API-KEY-ID": env["ALPACA_KEY_ID"], "APCA-API-SECRET-KEY": env["ALPACA_SECRET"]}
     req = urllib.request.Request("https://paper-api.alpaca.markets/v2/assets?status=active&asset_class=us_equity", headers=h)
     with urllib.request.urlopen(req, timeout=120) as r:
-        assets = json.load(r)
-    today = dt.date.today()
-    df = pd.DataFrame([{"day": today, "ticker": a["symbol"], "shortable": bool(a.get("shortable")), "easy_to_borrow": bool(a.get("easy_to_borrow")),
-                        "marginable": bool(a.get("marginable"))} for a in assets if a.get("tradable")])
+        return json.load(r)
+
+
+def borrow_frame(assets: list[dict], day: dt.date) -> pd.DataFrame:
+    """One row per tradable asset, columns in BORROW_COLS order. A flag the answer leaves out is NULL, not False."""
+    def flag(a, k):
+        return None if a.get(k) is None else bool(a[k])
+    return pd.DataFrame([{"day": day, "ticker": a["symbol"], "shortable": bool(a.get("shortable")),
+                          "easy_to_borrow": bool(a.get("easy_to_borrow")), "marginable": bool(a.get("marginable")),
+                          "fractionable": flag(a, "fractionable")} for a in assets if a.get("tradable")],
+                        columns=BORROW_COLS)
+
+
+def archive_borrow(con, assets: list[dict] | None = None) -> int:
+    df = borrow_frame(fetch_assets() if assets is None else assets, dt.date.today())
     con.register("_b", df)
-    con.execute("INSERT OR REPLACE INTO borrow SELECT * FROM _b")
+    cols = ", ".join(BORROW_COLS)
+    con.execute(f"INSERT OR REPLACE INTO borrow ({cols}) SELECT {cols} FROM _b")      # by name, not table position
     con.unregister("_b")
     return len(df)
 
@@ -166,8 +191,7 @@ def main() -> int:
     args = ap.parse_args()
     parts = set(args.only.split(","))
     con = duckdb.connect(str(ARCHIVE_DB))
-    for s in DDL:
-        con.execute(s)
+    ensure_schema(con)
     stats, t0 = {}, time.time()
     try:
         if parts & {"iv_hv", "consensus", "ratings"}:
