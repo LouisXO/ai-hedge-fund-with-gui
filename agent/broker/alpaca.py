@@ -8,7 +8,8 @@ Any of these failing raises before an order can be built. moomoo stays
 read-only as before: this module never imports it and the two never share
 credentials.
 
-Plain urllib, no SDK: the surface we use is four GETs and one POST.
+Plain urllib, no SDK: the surface we use is a few GETs, one POST and one
+DELETE (only `agent.execute --cancel-open --confirm` cancels).
 Order semantics we rely on (docs.alpaca.markets/docs/orders-at-alpaca):
   * time_in_force="opg" + type="limit"  = limit-on-open, the backtest's
     "fill at the next open" with a price cap; submitted after 09:28 ET it
