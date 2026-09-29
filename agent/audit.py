@@ -21,7 +21,9 @@ Checks
   insider       value_usd = shares x price; filing_date >= trans_date; ticker present in bars;
                 outliers > $50M; source mix by date
   universe      PIT membership ~500 per date; listing mask agrees with bars (no bars for "listed" days,
-                bars for "unlisted" days); ADV floor universe size by year
+                bars for "unlisted" days); ADV floor universe size by year; no liquid name with an Active
+                row outside the mask; the listing list is fresh (<= 8 days behind the bars); held names
+                whose listing state changed at the last refresh
   factors       per-day universe size and NaN share per family; z-score caps (winsor) — how many
                 names sit exactly at the cap per family; families' z dispersion; in the top 60, every
                 name whose B/M is at the winsor cap or whose share fact is older than 400 days
@@ -56,6 +58,9 @@ KNOWN_FLOWS = [  # ticker, column, filing date of the 10-K, USD billions, tolera
 ]
 TOP_KEEP = 60                   # the long book holds a name while it ranks inside this
 SHARE_FACT_MAX_AGE_DAYS = 400
+
+
+LISTING_MAX_AGE_DAYS = 8       # the list is refreshed every Sunday: more than 8 days behind the bars means a refresh failed
 
 
 class Report:
@@ -219,6 +224,70 @@ def audit_universe(store, rep: Report):
     adv = (close * vol).rolling(20).mean()
     by_year = (adv >= 5e6).sum(axis=1).groupby(adv.index.year).median()
     rep.add("universe", "names with ADV >= $5M by year (long book universe)", "PASS", by_year.to_dict())
+    audit_listing(store, rep)
+
+
+def audit_listing(store, rep: Report, ledger_db: str | None = None):
+    """The listing mask against the vendor's own active list, and against itself one refresh earlier."""
+    from agent import ledger
+    from agent.s11_insider_wide import listed_mask
+    q = store.con.execute
+    last = pd.Timestamp(q("SELECT max(trade_date) FROM bars").fetchone()[0])
+    lb = (last - pd.Timedelta(days=45)).date().isoformat()
+    close, vol = store.bars_wide("close", start=lb), store.bars_wide("volume", start=lb)
+    adv = (close * vol).rolling(20).mean().loc[last]
+    liquid = adv[(adv >= 5e6) & close.loc[last].notna()].index
+    active = set(q("SELECT DISTINCT symbol FROM listing_status WHERE status = 'Active' AND asset_type = 'Stock'").df()["symbol"])
+    lm = listed_mask(store, close.index, list(close.columns)).loc[last]
+    out = adv[[t for t in liquid if t in active and not lm[t]]].sort_values(ascending=False)
+    rep.add("universe", "liquid names with an Active row that the listing mask excludes", "PASS" if out.empty else "FAIL",
+            f"{len(out)} of {len(liquid)} with a bar on {last.date()} and ADV >= $5M {out.index[:10].tolist() if len(out) else ''}".rstrip())
+
+    # the weekly refresh can fail quietly (throttling, the truncated-list guard): the mask then runs on an old list,
+    # new listings stay out and delistings are not recorded
+    fetched = q("SELECT max(fetched_at) FROM listing_status WHERE status = 'Active'").fetchone()[0]
+    age = (last - pd.Timestamp(fetched).normalize()).days if fetched is not None else None
+    rep.add("universe", "listing list freshness (newest Active fetch vs newest bar)",
+            "WARN" if age is None or age > LISTING_MAX_AGE_DAYS else "PASS",
+            "no Active rows" if age is None else f"{age} days: fetched {pd.Timestamp(fetched):%Y-%m-%d %H:%M}, bars to {last.date()}")
+
+    # the mask is a union, so a company the vendor keeps as Active after its delisting stays "listed" after its last
+    # bar (KLG, WNS); no list can hold it (it needs a bar and ADV), but the mask is not the whole truth for these
+    dead = q("""WITH span AS (SELECT ticker, max(trade_date) AS last_bar FROM bars GROUP BY 1),
+                     dl AS (SELECT symbol, max(delisting_date) AS ended FROM listing_status
+                            WHERE status = 'Delisted' AND asset_type = 'Stock' GROUP BY 1)
+                SELECT symbol FROM dl JOIN span ON span.ticker = dl.symbol
+                WHERE symbol IN (SELECT symbol FROM listing_status WHERE status = 'Active' AND asset_type = 'Stock')
+                  AND abs(date_diff('day', last_bar, ended)) <= 10 AND date_diff('day', last_bar, ?) > 30
+                ORDER BY 1""", [last.date()]).df()["symbol"].tolist()
+    rep.add("universe", "names still Active after their bars and a Delisted row ended (kept listed by the mask)", "PASS",
+            f"{len(dead)} {dead[:10] if dead else ''}".rstrip())
+
+    # the list is downloaded again every Sunday: a held name that the new download stops (or starts) calling
+    # listed is sold (or bought) by the rules on the next run, so it is named here first
+    check = "held names whose listing state changed at the last refresh"
+    has_prev = q("SELECT count(*) FROM duckdb_tables() WHERE table_name = 'listing_status_prev'").fetchone()[0]
+    if not has_prev or not q("SELECT count(*) FROM listing_status_prev").fetchone()[0]:
+        rep.add("universe", check, "PASS", "no earlier refresh to compare with")
+        return
+    try:
+        con = ledger.connect(ledger_db or ledger.OPTRADAR_DB, read_only=True, tries=2)
+    except Exception as exc:
+        rep.add("universe", check, "WARN", f"ledger not readable: {str(exc)[:120]}")
+        return
+    try:
+        held = sorted(con.execute("SELECT DISTINCT ticker FROM agent_lots WHERE status = 'open'").df()["ticker"])
+    finally:
+        con.close()
+    day = pd.DatetimeIndex([last])
+    was, now = (listed_mask(store, day, held, table=t).loc[last] for t in ("listing_status_prev", "listing_status"))
+    word = {True: "listed", False: "not listed"}
+    moved = [f"{t} {word[bool(was[t])]} -> {word[bool(now[t])]}" for t in held if was[t] != now[t]]
+    # which two downloads are compared: after a failed refresh this is last week's change, not this week's
+    at = [q(f"SELECT max(fetched_at) FROM {t} WHERE status = 'Active'").fetchone()[0] for t in ("listing_status_prev", "listing_status")]
+    when = " -> ".join("none" if a is None else f"{pd.Timestamp(a):%Y-%m-%d}" for a in at)
+    rep.add("universe", check, "WARN" if moved else "PASS",
+            f"{len(moved)} of {len(held)} held (lists fetched {when}) {moved if moved else ''}".rstrip())
 
 
 def audit_factors(store, rep: Report):

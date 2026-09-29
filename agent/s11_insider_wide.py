@@ -8,7 +8,7 @@ can (NYSE 98% / NASDAQ 85% including delisted).
 
 Universe here is point-in-time and survivorship-free by construction:
 a name is in on day D if
-  - listing_status says it was listed (ipo_date <= D < delisting_date), and
+  - listing_status says it was listed (ipo_date <= D <= delisting_date, any of its listings), and
   - it had a Form 4 filer that quarter (panel.issuer_seen), and
   - its 20-day dollar volume on D clears --min-adv (default $1M), which is
     what makes a position executable at all.
@@ -36,17 +36,43 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, "site-data", "validation")
 
 
-def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str]) -> pd.DataFrame:
-    """True where listing_status says the symbol was trading that day."""
-    ls = store.con.execute("""SELECT symbol, min(ipo_date) AS ipo, max(delisting_date) AS delist
-                              FROM listing_status WHERE asset_type = 'Stock' GROUP BY 1""").df()
+def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str],
+                table: str = "listing_status") -> pd.DataFrame:
+    """True where listing_status says the symbol was trading that day.
+
+    Every row is one listing interval and the mask is their union: an Active row runs from ipo_date with no
+    end, a Delisted row from ipo_date to delisting_date (inclusive). Taking min(ipo_date) and
+    max(delisting_date) per symbol instead (the rule until 2026-09-28) ended a ticker's life at the old
+    company's delisting when the ticker was used again (SNDK, DELL), and at a Delisted row the vendor
+    carries for a living company (OKE, TEL).
+
+    A company the vendor still carries as Active after it was delisted stays True after its last bar (KLG,
+    WNS, AILE; RCM, LTRY, ABST, SCU, QTNT have bars that stop well before their Delisted row ends); no list
+    can hold it, since that needs a bar and ADV, and the audit counts the first kind.
+
+    TODO(S47 补充, not fixed yet): the mask says which days a name may be picked, not which prices belong to
+    the listing it is in. Factors look back by row position (agent/books/factors.py: hist.iloc[-253] and a
+    253-row volatility), so for about a year after a new listing starts on a ticker that had bars before
+    it (another company's, the pre-reorganisation stock, zero-volume filler) momentum and volatility read
+    those older prices: WOLF (new stock 2025-09-29, 17x jump at the seam), SE before 2017-10-20 (Spectra
+    Energy), VAL, GPOR, BIOA; 37 tickers and ~4,100 liquid name-days since 2017. The fix is to blank a
+    ticker's prices before the start of the listing interval it is in (a start-date twin of this function,
+    applied in agent/books/data.py load_market); it changes factor inputs, so it waits for the owner's
+    decision. Until then a momentum-only list can rank such a name first; the composite has not, because
+    the seam also inflates volatility.
+    """
+    ls = store.con.execute(f"""SELECT symbol, status, ipo_date, delisting_date
+                               FROM {table} WHERE asset_type = 'Stock'""").df()
     ls = ls[ls["symbol"].isin(tickers)]
-    out = pd.DataFrame(False, index=dates, columns=tickers)
-    for sym, ipo, delist in ls.itertuples(index=False):
-        lo = pd.Timestamp(ipo) if pd.notna(ipo) else dates[0]
-        hi = pd.Timestamp(delist) if pd.notna(delist) else dates[-1]
-        out.loc[(dates >= lo) & (dates <= hi), sym] = True
-    return out
+    col = {t: i for i, t in enumerate(tickers)}
+    day = dates.to_numpy()
+    arr = np.zeros((len(dates), len(tickers)), dtype=bool)
+    for sym, status, ipo, delist in ls.itertuples(index=False):
+        on = np.ones(len(day), dtype=bool) if pd.isna(ipo) else day >= pd.Timestamp(ipo).to_datetime64()
+        if status != "Active" and pd.notna(delist):
+            on &= day <= pd.Timestamp(delist).to_datetime64()
+        arr[on, col[sym]] = True
+    return pd.DataFrame(arr, index=dates, columns=tickers)
 
 
 def event_stats(ev: pd.DataFrame, fwd: pd.DataFrame, mkt: pd.Series, horizon: int, label: str) -> dict:
