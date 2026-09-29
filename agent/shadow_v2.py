@@ -7,7 +7,7 @@ is no shadow ledger that could drift from the rules.
 
   record   writes the cluster lists for a bar (called by agent.execute next to the v1 list;
            `python -m agent.shadow_v2` also records the latest bar if it is missing)
-  replay   engine.simulate on the recorded lists from 2026-09-25, $60,000, fills at the open,
+  replay   engine.simulate on the recorded lists from START, the long book's allocation (agent_books), fills at the open,
            zero cost (the auction basis the evaluation uses), idle cash stays cash
 Output: out/agent/shadow_v2.json (NAV per line, difference to the control, holdings, what
 each rule blocked).
@@ -36,7 +36,6 @@ from hedge_fund.validation.stats import newey_west_t
 DB = "/Users/louis/optradar/optradar.db"
 OUT = "/Users/louis/optradar/out/agent/shadow_v2.json"
 START = "2026-09-29"          # restarted with the S47 data correction (was 2026-09-25); first fills at the 2026-09-30 open
-CAPITAL = 60_000.0
 NAMES = {"v1c": "v1 对照", "floor2": "+ $2 下限", "jump5": "+ 5 日大动不进", "cap20": "+ 行业上限 20%", "clusters": "两簇", "bundle": "v2 规则包"}
 
 
@@ -72,16 +71,24 @@ def recorded_lists(con) -> tuple[dict, dict]:
     return {d: lists[d] for d in days}, {d: cl[d] for d in days}
 
 
-def replay(market: Market, lists: dict, cl: dict, groups: pd.Series) -> dict:
+def long_capital(con) -> float:
+    """The long book's allocation from the ledger (S48: no constant): the replay is sized like the book it shadows."""
+    row = con.execute("SELECT alloc_usd FROM agent_books WHERE book = 'long'").fetchone()
+    if not row or not row[0]:
+        raise RuntimeError("agent_books has no long book: run agent.execute once before the shadow replay")
+    return float(row[0])
+
+
+def replay(market: Market, lists: dict, cl: dict, groups: pd.Series, capital: float) -> dict:
     end = market.adj.index[-1]
-    res = run_lines(market, lists, cl, groups, START, str(end.date()), CAPITAL, exec_frac=0.0, cash_in_spy=False, fixed_cost_pct=0.0)
+    res = run_lines(market, lists, cl, groups, START, str(end.date()), capital, exec_frac=0.0, cash_in_spy=False, fixed_cost_pct=0.0)
     nav = pd.DataFrame({k: r.nav for k, r in res.items()})
     ret = nav.pct_change().dropna()
     spy = market.spy.reindex(nav.index).ffill()
     lines = {}
     for k in v2.LINES:
         diff = (ret[k] - ret["v1c"]).to_numpy() if len(ret) else np.array([])
-        lines[k] = {"name": NAMES[k], "nav": [round(float(x), 2) for x in nav[k]], "since_pct": float(nav[k].iloc[-1] / CAPITAL - 1) * 100,
+        lines[k] = {"name": NAMES[k], "nav": [round(float(x), 2) for x in nav[k]], "since_pct": float(nav[k].iloc[-1] / capital - 1) * 100,
                     "vs_control_pct": float(nav[k].iloc[-1] / nav["v1c"].iloc[-1] - 1) * 100,
                     "diff_t_nw": None if k == "v1c" or len(diff) < 20 else float(newey_west_t(diff, lag=5)),
                     "n_trades_closed": len(res[k].trades), "exposure": float(res[k].exposure.iloc[-1])}
@@ -94,7 +101,7 @@ def replay(market: Market, lists: dict, cl: dict, groups: pd.Series) -> dict:
     blocked = {"floor2": [t for t in top if t in px.index and pd.notna(px[t]) and px[t] < v2.FLOOR_USD],
                "jump5": [t for t in top if t in jump.index and bool(jump[t])]}
     counts = pd.Series([g.get(t, "Other") for t in top]).value_counts()
-    return {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "start": START, "capital": CAPITAL, "days": [str(d.date()) for d in nav.index],
+    return {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "start": START, "capital": capital, "days": [str(d.date()) for d in nav.index],
             "spy": [round(float(x / spy.iloc[0] * 100), 3) for x in spy], "lines": lines, "n_lists": len(lists), "last_list": str(last.date()),
             "blocked_on_last_list": blocked, "top30_by_industry": {k: int(v) for k, v in counts.items()},
             "top30_share_M": float(np.mean([t in set(cl[last]["M"]) for t in top])),
@@ -110,6 +117,7 @@ def main() -> int:
         try:
             n = record(con, store, market, day)
             lists, cl = recorded_lists(con)
+            capital = long_capital(con)
         finally:
             con.close()
     if n:
@@ -117,7 +125,7 @@ def main() -> int:
     if not lists:
         print("shadow v2: no recorded lists yet")
         return 0
-    out = replay(market, lists, cl, groups)
+    out = replay(market, lists, cl, groups, capital)
     with open(OUT, "w") as f:
         json.dump(out, f, ensure_ascii=False, indent=1)
     print(f"shadow v2: {len(out['days'])} days, {out['n_lists']} lists; " + ", ".join(f"{k} {v['since_pct']:+.2f}%" for k, v in out["lines"].items()))
