@@ -218,7 +218,7 @@ def render(rows: list[dict], dsr: dict | None = None, dsr_note: str | None = Non
     if dsr is None:
         L.append(f"Not computed: {dsr_note or 'no NAV / panel given'}.")
     else:
-        source = (" This NAV is the S47 restatement on the corrected data; the base row in the ledger above still comes "
+        source = (" This NAV is the latest restatement on the corrected data (agent/s47_restate.py: S47, then S47b); the base row in the ledger above still comes "
                   "from its own report, so its t and alpha2 can differ from these."
                   if dsr["nav_file"] == BASE_NAV else "")
         L += [f"alpha2 series (alpha + residual on SPY and IWM − SPY) of `{dsr['nav_file']}` [{dsr['column']}], "
