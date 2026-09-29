@@ -235,7 +235,8 @@ def audit_factors(store, rep: Report):
     f = latest_before(fund, day)
     try:                                                   # an overridden count is as old as the override
         ov = store.con.execute("SELECT ticker, as_of FROM shares_override").df().set_index("ticker")["as_of"]
-        f.loc[f.index.intersection(ov.index), "shares_asof"] = pd.to_datetime(ov).reindex(f.index.intersection(ov.index))
+        hit = f.index[f.index.isin(ov.index) & f["shares_asof"].isna() & f["shares"].notna()]   # applied only where XBRL had none
+        f.loc[hit, "shares_asof"] = pd.to_datetime(ov).reindex(hit)
     except Exception:
         pass
     at_cap, old, cap = top_list_suspects(fs, f, day)
