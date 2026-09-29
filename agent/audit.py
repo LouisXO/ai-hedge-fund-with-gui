@@ -201,9 +201,11 @@ def audit_prices(store, rep: Report):
 
 
 def audit_index(store, rep: Report):
-    df = store.con.execute("SELECT symbol, count(*), min(trade_date), max(trade_date) FROM index_daily GROUP BY 1").fetchall()
+    # only the production symbols: research ETFs (agent.backfill.FACTOR_ETFS, weekly/manual) may lag
+    df = store.con.execute("SELECT symbol, count(*), min(trade_date), max(trade_date) FROM index_daily "
+                           "WHERE symbol IN ('SPY', '^VIX', 'IWM', 'QQQ') GROUP BY 1").fetchall()
     last_bar = store.con.execute("SELECT max(trade_date) FROM bars").fetchone()[0]
-    ok = all(r[3] >= last_bar for r in df)
+    ok = len(df) == 4 and all(r[3] >= last_bar for r in df)             # a symbol missing entirely is not a pass
     rep.add("index", "SPY/IWM/QQQ/VIX up to the last bar", "PASS" if ok else "WARN", str(df))
 
 

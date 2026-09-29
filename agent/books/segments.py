@@ -15,6 +15,14 @@ interval's end and the new start, the last close on or before the old end and th
 after the new start differ by less than SAME_MAX_MOVE of the earlier one, and no close in between moves
 that much in a day (a redomicile, a reorganisation that kept the stock).
 
+S47b addendum (2026-09-29, recorded before it ran): with no traded bar inside the old interval, nothing in
+the bars is the old security's. When the traded bars before the new start run on into it (the last one at
+most SAME_MAX_GAP sessions before the start, the first close after it within SAME_MAX_MOVE of that one),
+they are the current security under a date the vendor set late (a SPAC that completed, a rename: MRX, CCC,
+DRS as RADA) and the ticker is not split; the mask still calls those days unlisted. Bars that stop or jump
+there are still split off. On 2026-09-29 this keeps 8 tickers whole (ALTI CCC DRS MRX PRE STI TGE WEST);
+HOS and GOLD have bars in the old interval and stay split.
+
 Defined here, not in the plan (review of 2026-09-29): a "close" is one of a bar that TRADED (volume > 0).
 The vendor fills a halted or delisted stock with zero-volume bars at its last price (BTU: 2.07 from
 2016-04-13 to 2017-04-03, the new stock at 27.25 on 04-04; GPOR: 0.1383 to 2021-05-17, the new stock at
@@ -156,6 +164,11 @@ def split_points(seam: pd.DataFrame, facts: pd.DataFrame, sessions: pd.DatetimeI
     df["seam_move"] = pd.to_numeric(df.get("seam_move", np.nan), errors="coerce")
     same = ((df["gap_sessions"] <= SAME_MAX_GAP) & (move < SAME_MAX_MOVE)            # NaN (a close missing) is not same
             & ~(df["seam_move"] >= SAME_MAX_MOVE))                                  # no day in between jumps that much
+    if "pre_date" in df:                                                            # S47b addendum: nothing of the old one
+        pre = pd.to_datetime(df["pre_date"]).to_numpy()
+        pre_gap = np.searchsorted(days, df["new_start"].to_numpy(), side="left") - np.searchsorted(days, pre, side="right")
+        pre_move = (df["close_after"].astype(float) / df["pre_close"].astype(float) - 1).abs()
+        same |= (df["close_before"].isna() & pd.notna(pre) & (pre_gap <= SAME_MAX_GAP) & (pre_move < SAME_MAX_MOVE))
     df["split"] = ~same
     df["cutoff"] = earliest_cutoff(df["old_end"], df["new_start"])
     first = pd.to_datetime(df.get("first_traded", pd.NaT))
@@ -202,7 +215,9 @@ def load_splits(store, table: str = "listing_status", extra: pd.DataFrame | None
                          arg_max(close, trade_date) FILTER (WHERE trade_date <= old_end AND traded) AS close_before,
                          arg_min(close, trade_date) FILTER (WHERE trade_date >= new_start AND traded) AS close_after,
                          min(trade_date) FILTER (WHERE trade_date >= new_start AND traded) AS traded_after,
-                         min(trade_date) FILTER (WHERE trade_date >= lo_cut AND traded) AS first_traded
+                         min(trade_date) FILTER (WHERE trade_date >= lo_cut AND traded) AS first_traded,
+                         max(trade_date) FILTER (WHERE trade_date < new_start AND traded) AS pre_date,
+                         arg_max(close, trade_date) FILTER (WHERE trade_date < new_start AND traded) AS pre_close
                   FROM b GROUP BY 1, 2),
             t AS (SELECT ticker, symbol, trade_date, win_lo,          -- each traded close against the traded one before it
                          abs(close / lag(close) OVER (PARTITION BY ticker, symbol ORDER BY trade_date) - 1) AS mv

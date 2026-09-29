@@ -83,6 +83,20 @@ def test_a_jump_between_the_rows_is_two_securities_even_when_the_ends_match():
     assert not split_points(sm, f.assign(seam_move=0.29), SESSIONS).loc["GPOR", "split"]
 
 
+@pytest.mark.parametrize("pre_date, pre_close, split, why", [
+    ("2026-06-30", 60.0, False, "traded on into the listing the vendor dated late (MRX): the current security"),
+    ("2026-06-30", 38.0, True, "a 70% jump at the start: another security"),
+    ("2026-05-01", 60.0, True, "stopped two months before the start: cannot be shown to carry on"),
+])
+def test_bars_with_nothing_in_the_old_interval_stay_when_they_run_on_into_the_new(pre_date, pre_close, split, why):
+    # S47b addendum: MRX was another company to 2013; Marex trades from 2024-04-25, the vendor's row starts 2026-07-01
+    sm = seams(listing(("MRX", "Delisted", "2001-01-02", "2013-10-17"), ("MRX", "Active", "2026-07-01", None)))
+    f = facts(MRX=("2024-04-25", np.nan, 65.22)).assign(pre_date=pd.Timestamp(pre_date), pre_close=pre_close)
+    assert split_points(sm, f, SESSIONS).loc["MRX", "split"] == split, why
+    old_bars = f.assign(close_before=11.0)                                   # a close in the old interval: rule as before
+    assert split_points(sm, old_bars, SESSIONS).loc["MRX", "split"]
+
+
 def test_no_split_without_bars_before_the_when_issued_days_or_without_an_earlier_end():
     sm = seams(listing(("NEWCO", "Delisted", "1990-01-02", "2005-01-03"), ("NEWCO", "Active", "2020-06-01", None),
                        ("OKE", "Active", "1985-07-01", None), ("OKE", "Delisted", "1985-07-01", "2026-09-14"),

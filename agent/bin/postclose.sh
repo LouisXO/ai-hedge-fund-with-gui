@@ -6,6 +6,7 @@
 #   1. agent.execute --sync-only   bars through today (Alpaca, 16-min delay), SPY/IWM/VIX, fills synced,
 #                                   model prices, lots vs positions reconciled, books marked
 #   2. account_snapshot            moomoo real account (read-only): NAV, positions, today's deals
+#   2b. moomoo_shares              share counts from moomoo quote snapshots for flagged names + long top 60 (S47b)
 #   3. agent.watch                 watchlist alerts (runs again at 16:10 for evening filings; deduped)
 #   4a. agent.auction_basis        auction-basis NAV + missed-trade shadow (S27b)
 #   4. agent.review                today's review page + lessons + notification
@@ -24,6 +25,7 @@ echo "=== postclose $(date) ===" >> "$LOG"
 FAILED_STEPS=""
 $PY -W ignore -m agent.execute --sync-only >> "$LOG" 2>&1 || { echo "sync FAILED (exit $?): fills, lots and NAV not booked" >> "$LOG"; FAILED_STEPS="$FAILED_STEPS sync"; }
 /Users/louis/.moomoo/venv/bin/python -W ignore /Users/louis/optradar/bin/account_snapshot.py --quiet >> "$LOG" 2>&1 || echo "account snapshot failed (non-fatal)" >> "$LOG"
+/Users/louis/.moomoo/venv/bin/python -W ignore -m agent.sources.moomoo_shares >> "$LOG" 2>&1 || echo "moomoo share counts failed (non-fatal)" >> "$LOG"   # S47b 1: quote snapshots only; before the 16:10 scoring
 $PY -W ignore -m agent.watch >> "$LOG" 2>&1 || echo "watchlist failed (non-fatal)" >> "$LOG"
 $PY -W ignore -m agent.watch_reminders >> "$LOG" 2>&1 || echo "moomoo reminder sync failed (non-fatal)" >> "$LOG"   # watchlist levels -> moomoo app push
 $PY -W ignore -m agent.balder_log >> "$LOG" 2>&1 || echo "balder log failed (non-fatal)" >> "$LOG"          # posts the user dropped into iCloud/Balder, scored
