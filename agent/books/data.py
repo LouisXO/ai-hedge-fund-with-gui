@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import sys
+
 import numpy as np
 import pandas as pd
 
@@ -98,8 +100,8 @@ def fundamentals(store: PanelStore) -> pd.DataFrame | None:
     # row's filing — see apply_share_overrides. Every other row, and every unflagged count, is as built.
     try:
         df = apply_share_overrides(store, df)
-    except Exception:
-        pass
+    except Exception as exc:                                    # scoring goes on with the counts as built, but says so
+        print(f"WARNING share overrides not applied: {str(exc)[:200]}", file=sys.stderr)
     return df
 
 
