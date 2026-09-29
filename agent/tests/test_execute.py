@@ -148,3 +148,76 @@ def test_frozen_ticker_gets_no_order_of_either_side():
     orders = plan_book("insider", cfg, lots, ["N"], set(), AS_OF, NEXT, {"H": 20.0, "K": 20.0, "N": 8.0},
                        {"N": 0.4}, cash_usd=28_000.0, blocked={"H"}, tif="day", frozen={"H"})
     assert [(o["ticker"], o["side"]) for o in orders] == [("K", "sell"), ("N", "buy")]
+
+
+def test_insider_buys_carry_their_entry_classification_sells_do_not():
+    """S47: what the order was relative to the backtest's entry is written on the order; it chooses nothing."""
+    from agent.execute import tag_insider_entries
+    cfg = BOOKS["insider"]
+    lots = [dict(_lot("H", 50, hold_until=NEXT), book="insider")]
+    close = {"H": 20.0, "N": 8.0, "R": 5.0}
+    orders = plan_book("insider", cfg, lots, ["N", "R"], set(), AS_OF, NEXT, close, {}, cash_usd=28_000.0, blocked=set(), tif="day")
+    before = [(o["ticker"], o["side"], o["qty"], o["limit_price"]) for o in orders]
+    info = {"N": {"trigger_filing_day": AS_OF, "lag_sessions": 0, "entry_kind": "on_time"},
+            "R": {"trigger_filing_day": dt.date(2026, 9, 18), "lag_sessions": 1, "entry_kind": "retry"}}
+    tag_insider_entries(orders, {"R"}, info)
+    assert [(o["ticker"], o["side"], o["qty"], o["limit_price"]) for o in orders] == before
+    by = {o["ticker"]: o for o in orders}
+    assert "entry_kind" not in by["H"] and by["H"]["reason"] == "hold_expired"
+    assert by["N"]["reason"] == "entry" and by["N"]["entry_kind"] == "on_time" and by["N"]["lag_sessions"] == 0
+    assert by["R"]["reason"] == "entry_retry" and by["R"]["entry_kind"] == "retry"
+    assert by["R"]["trigger_filing_day"] == dt.date(2026, 9, 18)
+
+
+def test_entry_classification_goes_from_the_order_to_the_lot(tmp_path):
+    con = ledger.connect(str(tmp_path / "t.db"))
+    ledger.ensure_schema(con)
+    con.execute("INSERT INTO agent_books VALUES ('insider', 30000, 30000, 20, ?, now())", [AS_OF])
+    late = {"client_order_id": client_id("insider", AS_OF, "N", "buy"), "book": "insider", "as_of": AS_OF, "ticker": "N",
+            "side": "buy", "qty": 10, "order_type": "limit", "tif": "day", "limit_price": 8.24, "ref_close": 8.0,
+            "reason": "entry", "alpaca_id": "o1", "status": "accepted", "dry_run": False,
+            "trigger_filing_day": dt.date(2026, 9, 18), "lag_sessions": 1, "entry_kind": "late"}
+    sell = {"client_order_id": client_id("insider", AS_OF, "H", "sell"), "book": "insider", "as_of": AS_OF, "ticker": "H",
+            "side": "sell", "qty": 5, "order_type": "market", "tif": "day", "limit_price": None, "ref_close": 20.0,
+            "reason": "hold_expired", "alpaca_id": "o2", "status": "accepted", "dry_run": False}
+    ledger._insert(con, "agent_orders", pd.DataFrame([late, sell]))           # one frame, as main() writes a run
+    rows = con.execute("SELECT ticker, trigger_filing_day, lag_sessions, entry_kind FROM agent_orders ORDER BY ticker").fetchall()
+    assert rows == [("H", None, None, None), ("N", dt.date(2026, 9, 18), 1, "late")]
+    cal = [dt.date(2026, 9, d) for d in (21, 22, 23, 24, 25, 28, 29, 30)]
+    fb = FakeBroker({late["client_order_id"]: {"id": "o1", "status": "filled", "filled_qty": "10", "filled_avg_price": "8.05",
+                                               "filled_at": "2026-09-22T13:30:01Z"}})
+    assert sync_fills(con, fb, cal)["filled"] == 1
+    lot = con.execute("""SELECT qty, entry_px, hold_until, status, entry_order, trigger_filing_day, lag_sessions, entry_kind,
+                                exit_day, entry_model_px FROM agent_lots""").fetchall()
+    assert lot == [(10, 8.05, dt.date(2026, 9, 29), "open", late["client_order_id"], dt.date(2026, 9, 18), 1, "late", None, None)]
+    con.close()
+
+
+def test_schema_adds_the_classification_columns_to_an_old_ledger_once(tmp_path):
+    """The production ledger predates the columns: ALTER adds them, rows already there read NULL, a rerun is a no-op."""
+    con = ledger.connect(str(tmp_path / "t.db"))
+    con.execute("""CREATE TABLE agent_orders (
+        client_order_id VARCHAR PRIMARY KEY, book VARCHAR, as_of DATE, ticker VARCHAR, side VARCHAR,
+        qty INT, order_type VARCHAR, tif VARCHAR, limit_price DOUBLE, ref_close DOUBLE, reason VARCHAR,
+        alpaca_id VARCHAR, status VARCHAR, submitted_at TIMESTAMP, filled_qty DOUBLE, filled_avg_px DOUBLE,
+        filled_at TIMESTAMP, model_px DOUBLE, dry_run BOOLEAN)""")
+    con.execute("""CREATE TABLE agent_lots (
+        lot_id VARCHAR PRIMARY KEY, book VARCHAR, ticker VARCHAR, qty DOUBLE, entry_day DATE, entry_px DOUBLE,
+        entry_model_px DOUBLE, hold_until DATE, exit_day DATE, exit_px DOUBLE, exit_model_px DOUBLE,
+        ret_pct DOUBLE, status VARCHAR, entry_order VARCHAR, exit_order VARCHAR)""")
+    buy_id = client_id("insider", AS_OF, "N", "buy")
+    con.execute("INSERT INTO agent_orders (client_order_id, book, ticker, side, qty, dry_run, status) VALUES (?, 'insider', 'N', 'buy', 10, FALSE, 'new')", [buy_id])
+    con.execute("INSERT INTO agent_lots (lot_id, book, ticker, qty, status) VALUES ('insider|O|2026-09-18', 'insider', 'O', 5, 'open')")
+    ledger.ensure_schema(con)
+    ledger.ensure_schema(con)
+    for table in ("agent_orders", "agent_lots"):
+        cols = [r[0] for r in con.execute(f"DESCRIBE {table}").fetchall()]
+        assert cols[-3:] == ["trigger_filing_day", "lag_sessions", "entry_kind"] and len(cols) == len(set(cols))
+    assert con.execute("SELECT trigger_filing_day, lag_sessions, entry_kind FROM agent_orders").fetchall() == [(None, None, None)]
+    con.execute("INSERT INTO agent_books VALUES ('insider', 30000, 30000, 20, ?, now())", [AS_OF])
+    cal = [dt.date(2026, 9, d) for d in (21, 22, 23, 24, 25, 28, 29, 30)]
+    fb = FakeBroker({buy_id: {"id": "o1", "status": "filled", "filled_qty": "10", "filled_avg_price": "8.05",
+                              "filled_at": "2026-09-22T13:30:01Z"}})
+    assert sync_fills(con, fb, cal)["filled"] == 1              # an order from before the change still becomes a lot
+    assert con.execute("SELECT ticker, qty, entry_kind FROM agent_lots ORDER BY ticker").fetchall() == [("N", 10, None), ("O", 5, None)]
+    con.close()

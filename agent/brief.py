@@ -101,11 +101,17 @@ def _eval_progress(live_db) -> str:
         started = dict(live_db.execute("SELECT book, started FROM agent_books").fetchall())
     except Exception:
         return ""
+    try:                                  # S47: entries on the backtest's timing; late entries and retries are counted apart
+        on_time = dict(live_db.execute("""SELECT book, count(*) FROM agent_lots WHERE status = 'closed' AND entry_kind = 'on_time'
+                                          GROUP BY book""").fetchall())
+    except Exception:                     # a ledger from before the columns were added
+        on_time = None
     parts = []
     for book, e in cfg.items():
         if not isinstance(e, dict):
             continue
-        parts.append(f"{book} 平仓 {closed.get(book, 0)}/{e['n_closed_lots']}(或 {e['or_date']},开始 {started.get(book, '—')})")
+        timing = f",其中按时入场 {on_time.get(book, 0)}" if (book == "insider" and on_time is not None) else ""
+        parts.append(f"{book} 平仓 {closed.get(book, 0)}/{e['n_closed_lots']}{timing}(或 {e['or_date']},开始 {started.get(book, '—')})")
     return "评估点(预注册,之前不做判决):" + " · ".join(parts) if parts else ""
 
 
