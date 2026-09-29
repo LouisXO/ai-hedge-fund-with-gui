@@ -221,3 +221,30 @@ def test_schema_adds_the_classification_columns_to_an_old_ledger_once(tmp_path):
     assert sync_fills(con, fb, cal)["filled"] == 1              # an order from before the change still becomes a lot
     assert con.execute("SELECT ticker, qty, entry_kind FROM agent_lots ORDER BY ticker").fetchall() == [("N", 10, None), ("O", 5, None)]
     con.close()
+
+
+def test_a_long_buy_and_an_insider_buy_sync_together_only_the_insider_lot_is_classified(tmp_path):
+    """The lot is built from the order row for every book: a long buy has no classification and no hold."""
+    con = ledger.connect(str(tmp_path / "t.db"))
+    ledger.ensure_schema(con)
+    con.execute("INSERT INTO agent_books VALUES ('insider', 30000, 30000, 20, ?, now()), ('long', 60000, 60000, 30, ?, now())",
+                [AS_OF, AS_OF])
+    base = {"as_of": AS_OF, "side": "buy", "qty": 10, "order_type": "limit", "tif": "day", "status": "accepted", "dry_run": False}
+    ins = {**base, "client_order_id": client_id("insider", AS_OF, "N", "buy"), "book": "insider", "ticker": "N",
+           "limit_price": 8.24, "ref_close": 8.0, "reason": "entry", "alpaca_id": "o1",
+           "trigger_filing_day": AS_OF, "lag_sessions": 0, "entry_kind": "on_time"}
+    lng = {**base, "client_order_id": client_id("long", AS_OF, "L", "buy"), "book": "long", "ticker": "L",
+           "limit_price": 51.5, "ref_close": 50.0, "reason": "entry", "alpaca_id": "o2"}
+    ledger._insert(con, "agent_orders", pd.DataFrame([ins, lng]))
+    fill = {"status": "filled", "filled_qty": "10", "filled_at": "2026-09-22T13:30:01Z"}
+    fb = FakeBroker({ins["client_order_id"]: {**fill, "id": "o1", "filled_avg_price": "8.05"},
+                     lng["client_order_id"]: {**fill, "id": "o2", "filled_avg_price": "50.10"}})
+    cal = [dt.date(2026, 9, d) for d in (21, 22, 23, 24, 25, 28, 29, 30)]
+    assert sync_fills(con, fb, cal)["filled"] == 2
+    lots = con.execute("""SELECT book, ticker, entry_px, hold_until, entry_order, trigger_filing_day, lag_sessions, entry_kind
+                          FROM agent_lots ORDER BY book""").fetchall()
+    assert lots == [("insider", "N", 8.05, dt.date(2026, 9, 29), ins["client_order_id"], AS_OF, 0, "on_time"),
+                    ("long", "L", 50.10, None, lng["client_order_id"], None, None, None)]
+    assert con.execute("SELECT book, cash_usd FROM agent_books ORDER BY book").fetchall() == [("insider", 30000 - 80.5),
+                                                                                             ("long", 60000 - 501.0)]
+    con.close()

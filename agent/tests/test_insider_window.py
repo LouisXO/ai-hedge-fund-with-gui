@@ -1,7 +1,9 @@
 """Insider candidates as the backtest defines them (S47): one filing day at a time, the $50M cap,
-a window in trading days — and the entry classification that the evaluation groups by."""
+purchases priced like the market, a listed name, a window in trading days — and the entry
+classification that the evaluation groups by."""
 import datetime as dt
 
+import duckdb
 import pandas as pd
 import pytest
 
@@ -189,3 +191,150 @@ def test_eval_progress_shows_total_and_on_time(con):
     line = _eval_progress(con)
     assert "insider 平仓 5/200,其中按时入场 2(或" in line
     assert "long 平仓 0/100(或" in line                  # the classification is the insider book's
+
+
+def test_window_sessions_take_timestamps_too():
+    assert signals_insider.window_sessions(MON.date(), 2, [pd.Timestamp(d) for d in SESSIONS]) == [FRI.date(), MON.date()]
+
+
+def add_bars(store, ticker, px, vol=500_000.0, last=TUE.date()):
+    store.upsert_bars(pd.DataFrame([{"ticker": ticker, "trade_date": d, "open": px, "high": px, "low": px, "close": px,
+                                     "adj_close": px, "volume": vol, "source": "test", "fetched_at": pd.Timestamp.now()}
+                                    for d in SESSIONS if d <= last]))
+
+
+def test_trigger_day_must_be_listed_as_in_the_backtest(store):
+    """Owner, S47 addendum (c): the trigger day passes the backtest's own listing mask (Market.listed)."""
+    from agent import s11_insider_wide
+    from agent.books import data
+    assert signals_insider.listed_mask is s11_insider_wide.listed_mask is data.listed_mask
+    add_bars(store, "NEW", 20.0)                         # trades, but listing_status has no row for it
+    add_bars(store, "OLD", 20.0)
+    listed(store, ["OLD"], ipo="2001-01-02", delisted=FRI)   # delisted on Friday: Friday is in, Monday out
+    insider(store, "NEW", "X", 400_000, MON, price=20.0)
+    insider(store, "OLD", "X", 400_000, MON, price=20.0)
+    insider(store, "OLD", "Y", 300_000, FRI, price=20.0)
+    df = signals_insider.candidates(store, MON, 2, SESSIONS).set_index("ticker")
+    assert not df.loc["NEW", "eligible"] and df.loc["NEW", "reason"] == "not_listed"
+    assert df.loc["OLD", "eligible"] and df.loc["OLD", "trigger_filing_day"] == FRI.date() and df.loc["OLD", "lag_sessions"] == 1
+    assert df.loc["OLD", "last_filing"] == FRI.date()   # Monday is no entry, so Friday also sets the order
+
+
+def test_a_purchase_priced_off_the_market_does_not_count_nct(store):
+    """S47 addendum item 13: NCT filed a $650k buy at $0.40 on 2026-09-25; the stock closed at $4.43."""
+    from agent.books.data import insider_flows
+    for d, lo, hi in [("2026-09-23", 5.35, 6.1044), ("2026-09-24", 4.53, 5.36), ("2026-09-25", 4.0, 4.5999)]:
+        store.upsert_bars(pd.DataFrame([{"ticker": "NCT", "trade_date": pd.Timestamp(d).date(), "open": hi, "high": hi, "low": lo,
+                                         "close": 4.43, "adj_close": 4.43, "volume": 1e6, "source": "test",
+                                         "fetched_at": pd.Timestamp.now()}]))
+    insider(store, "NCT", "Zhu Muchun", 650_000, "2026-09-25", price=0.40)
+    f = insider_flows(store, "2026-09-25").set_index("ticker")
+    assert f.loc["NCT", "n_buyers"] == 0 and f.loc["NCT", "buy_usd"] == 0
+    assert InsiderBuys().events(store, "2026-09-25", "2026-09-25").empty          # the backtest drops it too: one code path
+    insider(store, "NCT", "Other", 300_000, "2026-09-25", price=4.43)           # a buy at the market's price still counts
+    ev = InsiderBuys().events(store, "2026-09-25", "2026-09-25")
+    assert list(ev["ticker"]) == ["NCT"] and ev.iloc[0]["strength"] == pytest.approx(300_000)
+
+
+def test_price_band_edges_the_bar_used_and_no_bar(store):
+    from agent.books.data import insider_flows
+    # AAA trades at 20.00 flat: a purchase counts between 16.00 and 25.00, both ends included
+    insider(store, "AAA", "IN_LO", 100_000, MON, price=16.0)
+    insider(store, "AAA", "IN_HI", 100_000, MON, price=25.0)
+    insider(store, "AAA", "OUT_LO", 100_000, MON, price=15.99)
+    insider(store, "AAA", "OUT_HI", 100_000, MON, price=25.01)
+    insider(store, "AAA", "WEEKEND", 100_000, MON, price=20.0, trans_day="2026-09-19")   # a Saturday: Friday's bar
+    insider(store, "AAA", "SELLER", 5_000_000, MON, code="S", price=1.0)                 # sales are not checked
+    insider(store, "ZZZ", "NOBAR", 900_000, MON, price=20.0)                              # no bar at all: never counts
+    f = insider_flows(store, MON.date().isoformat()).set_index("ticker")
+    assert f.loc["AAA", "n_buyers"] == 3 and f.loc["AAA", "buy_usd"] == pytest.approx(300_000)
+    assert f.loc["AAA", "sell_usd"] == pytest.approx(5_000_000)
+    assert f.loc["ZZZ", "n_buyers"] == 0 and f.loc["ZZZ", "buy_usd"] == 0
+
+
+def test_a_transaction_dated_after_its_filing_is_priced_by_the_filing_day(store):
+    """No bar after the filing date is ever read: a mistyped future trans_date must not reach tomorrow's price."""
+    from agent.books.data import insider_flows
+    store.con.execute("UPDATE bars SET low = 100, high = 100 WHERE ticker = 'AAA' AND trade_date = ?", [TUE.date()])
+    insider(store, "AAA", "X", 400_000, MON, price=100.0, trans_day=TUE)
+    assert insider_flows(store, MON.date().isoformat()).set_index("ticker").loc["AAA", "n_buyers"] == 0   # Monday's 20.00
+
+
+def test_a_late_entry_left_unfilled_is_retried_once_three_sessions_back(store, con):
+    """Owner, S47 addendum (d): Friday's filing reached the panel on Monday morning, Monday's order
+    expired; Tuesday's window for that name still holds Friday. Every other name looks back two sessions."""
+    insider(store, "AAA", "X", 400_000, FRI)
+    insider(store, "BBB", "X", 400_000, FRI)             # never ordered: on Tuesday Friday is out of its window
+    insider(store, "CCC", "X", 400_000, FRI)             # two unfilled orders: not chased
+    for as_of, t in [("2026-09-21", "AAA"), ("2026-09-18", "CCC"), ("2026-09-21", "CCC")]:
+        con.execute("""INSERT INTO agent_orders (client_order_id, book, as_of, ticker, side, qty, dry_run, status, filled_qty)
+                       VALUES (?, 'insider', ?, ?, 'buy', 10, FALSE, 'expired', 0)""", [f"insider|{as_of}|{t}|buy", as_of, t])
+    names, retries, info = insider_targets(store, TUE, con, SESSIONS)
+    assert names == ["AAA"] and retries == {"AAA"}
+    assert info["AAA"] == {"trigger_filing_day": FRI.date(), "lag_sessions": 2, "entry_kind": "retry"}
+
+
+def test_no_filings_or_no_calendar_give_no_targets(store, con):
+    """The insider branch runs before the other books' orders are sent: an empty day must not raise."""
+    assert insider_targets(store, TUE, con, SESSIONS) == ([], set(), {})       # insider_tx is empty
+    insider(store, "AAA", "X", 400_000, TUE)
+    assert insider_targets(store, TUE, con, []) == ([], set(), {})             # no sessions to look back over
+
+
+def test_eval_progress_on_a_ledger_without_the_columns(tmp_path):
+    c = ledger.connect(str(tmp_path / "old.db"))
+    c.execute("""CREATE TABLE agent_books (book VARCHAR PRIMARY KEY, alloc_usd DOUBLE, cash_usd DOUBLE, max_positions INT,
+                                           started DATE, updated TIMESTAMP)""")
+    c.execute("""CREATE TABLE agent_lots (lot_id VARCHAR PRIMARY KEY, book VARCHAR, ticker VARCHAR, qty DOUBLE, status VARCHAR,
+                                          entry_order VARCHAR)""")
+    c.execute("INSERT INTO agent_lots VALUES ('l', 'insider', 'T', 1, 'closed', NULL)")
+    line = _eval_progress(c)
+    assert "insider 平仓 1/200(或" in line and "按时入场" not in line
+    c.close()
+
+
+def test_eval_progress_counts_only_entries_ordered_from_evaluate_from(con, tmp_path):
+    """Owner, S47 addendum (f): the evaluation starts with the first run on corrected data; the
+    9/28 orders sent by the old code (DMRA, LLYVK, GPI) fill on 9/29 but do not count."""
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("evaluate_from: 2026-09-29\nevaluate_at:\n  insider:\n    n_closed_lots: 200\n    or_date: 2027-06-30\n")
+    for as_of, t, kind in [("2026-09-28", "DMRA", None), ("2026-09-29", "X", "on_time"), ("2026-09-30", "Y", "late")]:
+        coid = f"insider|{as_of}|{t}|buy"
+        con.execute("""INSERT INTO agent_orders (client_order_id, book, as_of, ticker, side, qty, dry_run, entry_kind)
+                       VALUES (?, 'insider', ?, ?, 'buy', 1, FALSE, ?)""", [coid, as_of, t, kind])
+        con.execute("""INSERT INTO agent_lots (lot_id, book, ticker, qty, status, entry_order, entry_kind)
+                       VALUES (?, 'insider', ?, 1, 'closed', ?, ?)""", [f"l{t}", t, coid, kind])
+    con.execute("INSERT INTO agent_lots (lot_id, book, ticker, qty, status) VALUES ('lz', 'insider', 'Z', 1, 'closed')")  # no entry order
+    line = _eval_progress(con, str(cfg))
+    assert line.startswith("评估点(预注册,之前不做判决;只计 2026-09-29 起下单的入场):")
+    assert "insider 平仓 2/200,其中按时入场 1(或" in line
+    assert "insider 平仓 4/200,其中按时入场 1(或" in _eval_progress(con)       # without the key: every closed lot, as before
+
+
+class Recording:
+    """A ledger connection that logs each statement and can make ALTER fail, or do nothing."""
+    def __init__(self, con, alter=None):
+        self.con, self.alter, self.sql = con, alter, []
+
+    def execute(self, sql, *args):
+        self.sql.append(sql)
+        if sql.startswith("ALTER") and self.alter == "fail":
+            raise duckdb.IOException("IO Error: No space left on device")
+        if sql.startswith("ALTER") and self.alter == "noop":
+            return None
+        return self.con.execute(sql, *args)
+
+
+def test_schema_alters_only_what_is_missing_and_never_hides_a_failure(con):
+    """Owner, S47 addendum (e): sync_fills needs the columns, so a failed ALTER must stop the run loudly."""
+    rec = Recording(con)
+    ledger.ensure_schema(rec)
+    assert not [s for s in rec.sql if s.startswith("ALTER")]              # all present: nothing altered
+    con.execute("ALTER TABLE agent_lots DROP COLUMN entry_kind")
+    with pytest.raises(duckdb.IOException):
+        ledger.ensure_schema(Recording(con, "fail"))
+    with pytest.raises(RuntimeError, match="agent_lots.entry_kind"):
+        ledger.ensure_schema(Recording(con, "noop"))
+    rec = Recording(con)
+    ledger.ensure_schema(rec)
+    assert [s for s in rec.sql if s.startswith("ALTER")] == ["ALTER TABLE agent_lots ADD COLUMN entry_kind VARCHAR"]
