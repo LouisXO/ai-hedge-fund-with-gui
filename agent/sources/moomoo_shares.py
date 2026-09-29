@@ -15,9 +15,13 @@ would stop reaching new filings unless it is refreshed.
 shares_override keeps one row per ticker, latest wins; a manual row newer than the fetch stays.
 shares_override_log keeps every (ticker, as_of) row, including the ones shares_override had before
 (the fundamentals rows take the earliest override after their filing from either table).
-A count here replaces a hand-checked one only on filings after the snapshot: for multi-class names
-(moomoo may count one class) check the printed "> 30%" list before the first write and put a
-disputed count back as a manual row.
+A count here replaces a hand-checked one only on filings after the snapshot. The 1% check only
+catches issued_shares and total_market_val out of step, not a count of one class of a multi-class
+company (ERIE, BRK.B, V): check the printed "> 30%" list before the first write. A disputed count
+is fixed by a manual row with the snapshot's as_of (on the same date shares_override wins over the
+log, and a rerun of the fetch keeps it); nothing here stops the next day's fetch for that name.
+Daily order: after the 16:10 list (the top 60 it fetches is the last bar's) and before the audit,
+whose market-cap check reads these rows; before the first fetch that check is a WARN.
 
 moomoo is read-only here: the quote context and get_market_snapshot, nothing else. The SDK lives in
 the moomoo venv:
