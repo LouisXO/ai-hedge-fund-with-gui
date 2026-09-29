@@ -282,6 +282,11 @@ def paper_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float
         if reason == "entry_retry":
             row["tags"].append("重试单(上次没成交,晚一天补买;单独统计)")
         out["orders"].append(row)
+    for o in submit_errors(prev):                         # refused at the POST: never in agent_orders
+        out["orders"].append({"book": o.get("book"), "ticker": o.get("ticker"), "side": o.get("side"), "qty": int(o.get("qty") or 0),
+                              "type": o.get("order_type"), "tif": o.get("tif"), "limit": o.get("limit_price"), "ref_close": o.get("ref_close"),
+                              "reason": o.get("reason"), "status": str(o.get("status")), "filled_qty": 0.0, "fill_px": None, "model_px": None,
+                              "open": None, "close": None, "gap_pct": None, "day1_pct": None, "tags": ["提交时被拒"]})
 
     for b, t, qty, eday, epx, empx, hu in lots:
         c = ctxs.get(t, {})
@@ -301,9 +306,10 @@ def paper_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float
     def flag(rule: str, text: str, cls: str) -> None:
         out["flags"].append({"rule": rule, "text": text, "cls": cls, "date": str(day), "key": rule, **({"info": True} if cls == "info" else {})})
 
-    rejected = [o for o in out["orders"] if o["status"] == "rejected"]
+    rejected = [o for o in out["orders"] if o["status"] == "rejected" or "提交时被拒" in o["tags"]]
     if rejected:
-        flag("paper_rejected", f"{len(rejected)} 张单被券商拒绝:{', '.join(o['ticker'] for o in rejected)}", "action")
+        flag("paper_rejected", f"{len(rejected)} 张单被券商拒绝:" + ", ".join(o["ticker"] + ("(提交时被拒)" if "提交时被拒" in o["tags"] else "")
+                                                                          for o in rejected), "action")
     rec = reconcile_msgs(day)
     if rec:
         flag("paper_reconcile", f"账本对券商持仓不一致 {len(rec)} 条:" + ";".join(str(m) for m in rec[:3]), "action")
@@ -324,6 +330,19 @@ def paper_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float
     if big:
         flag("paper_big_move", "持仓大动:" + ", ".join(f"{p['ticker']} {p['day_ret']:+.1f}%" for p in big[:6]), "info")
     return out
+
+
+def submit_errors(prev: dt.date | None) -> list[dict]:
+    """Orders the broker refused at submission in the previous session's 16:10 run (the one that planned the
+    orders filled today). agent.execute keeps only accepted POSTs in agent_orders; a refused one is only in
+    exec_<date>.json, with status 'error: ...'."""
+    if prev is None:
+        return []
+    try:
+        j = json.load(open(os.path.join(OUT_DIR, f"exec_{prev}.json")))
+    except Exception:
+        return []
+    return [o for o in (j.get("orders") or []) if str(o.get("status") or "").startswith("error")]
 
 
 def reconcile_msgs(day: dt.date) -> list:
@@ -648,14 +667,19 @@ def record_lessons(day: dt.date, flags: list[dict]) -> dict[str, int]:
         with open(LESSONS) as f:
             rows = [json.loads(l) for l in f if l.strip()]
     rows = [r for r in rows if r.get("review", r.get("date")) != day.isoformat()]
-    have = {(r["date"], r["rule"], r.get("key") or r.get("text")) for r in rows}
+    have = {(r["date"], r["rule"], r.get("key") or r.get("text")): r for r in rows}
     for f in flags:
         if not recorded(f):
             continue
         r = {"date": f.get("date") or day.isoformat(), "rule": f["rule"], "text": f["text"], "review": day.isoformat(), "key": f.get("key") or f["text"]}
-        if (r["date"], r["rule"], r["key"]) in have:
+        old = have.get((r["date"], r["rule"], r["key"]))
+        if old is not None:
+            # a later review recorded it first (reruns out of order): the lesson moves to this earlier review,
+            # which is the one that shows the deal from now on, so a rerun of the later day does not drop it
+            if old.get("review", old["date"]) > day.isoformat():
+                old["review"] = day.isoformat()
             continue
-        have.add((r["date"], r["rule"], r["key"]))
+        have[(r["date"], r["rule"], r["key"])] = r
         rows.append(r)
     rows.sort(key=lambda r: (r["date"], r.get("review", r["date"])))
     with open(LESSONS, "w") as f:
@@ -761,7 +785,8 @@ def summary_lines(rep: dict) -> list[str]:
                                              if n.get("pnl") is not None else ""))
     cl = rep["paper"].get("closed") or []
     if cl:
-        L.append(f"模拟盘平仓 {len(cl)} 笔:" + "; ".join(f"{x['book']} {x['ticker']} {x['ret_pct']:+.1f}%" for x in cl if x.get("ret_pct") is not None))
+        L.append(f"模拟盘平仓 {len(cl)} 笔:" + "; ".join(f"{x['book']} {x['ticker']} " + (f"{x['ret_pct']:+.1f}%" if x.get("ret_pct") is not None else "—")
+                                                        for x in cl))
     if r["deals"]:
         L.append(f"实盘成交 {len(r['deals'])} 笔(上次复盘之后)" + (f",平仓 {len(r['round_trips'])} 笔:" + "; ".join(f"{x['ticker']} {x['ret_pct']:+.0f}%" for x in r["round_trips"]) if r["round_trips"] else ""))
     else:
