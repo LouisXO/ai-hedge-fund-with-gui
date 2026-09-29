@@ -20,7 +20,8 @@ Checks
                 outliers > $50M; source mix by date
   universe      PIT membership ~500 per date; listing mask agrees with bars (no bars for "listed" days,
                 bars for "unlisted" days); ADV floor universe size by year; no liquid name with an Active
-                row outside the mask; held names whose listing state changed at the last refresh
+                row outside the mask; the listing list is fresh (<= 8 days behind the bars); held names
+                whose listing state changed at the last refresh
   factors       per-day universe size and NaN share per family; z-score caps (winsor) — how many
                 names sit exactly at the cap per family; families' z dispersion
   ledger        agent_picks/agent_orders/agent_lots consistency; paper vs model prices present
@@ -47,6 +48,9 @@ KNOWN = {  # rough magnitudes for the latest TTM, USD billions (2026 filings); t
     "BRK.B": {"rev": (350, 420), "ni": (50, 130), "shares_b": (1.4, 2.3)},
     "F":    {"rev": (170, 200), "ni": (2, 8), "shares_b": (3.9, 4.1)},
 }
+
+
+LISTING_MAX_AGE_DAYS = 8       # the list is refreshed every Sunday: more than 8 days behind the bars means a refresh failed
 
 
 class Report:
@@ -193,6 +197,26 @@ def audit_listing(store, rep: Report, ledger_db: str | None = None):
     rep.add("universe", "liquid names with an Active row that the listing mask excludes", "PASS" if out.empty else "FAIL",
             f"{len(out)} of {len(liquid)} with a bar on {last.date()} and ADV >= $5M {out.index[:10].tolist() if len(out) else ''}".rstrip())
 
+    # the weekly refresh can fail quietly (throttling, the truncated-list guard): the mask then runs on an old list,
+    # new listings stay out and delistings are not recorded
+    fetched = q("SELECT max(fetched_at) FROM listing_status WHERE status = 'Active'").fetchone()[0]
+    age = (last - pd.Timestamp(fetched).normalize()).days if fetched is not None else None
+    rep.add("universe", "listing list freshness (newest Active fetch vs newest bar)",
+            "WARN" if age is None or age > LISTING_MAX_AGE_DAYS else "PASS",
+            "no Active rows" if age is None else f"{age} days: fetched {pd.Timestamp(fetched):%Y-%m-%d %H:%M}, bars to {last.date()}")
+
+    # the mask is a union, so a company the vendor keeps as Active after its delisting stays "listed" after its last
+    # bar (KLG, WNS); no list can hold it (it needs a bar and ADV), but the mask is not the whole truth for these
+    dead = q("""WITH span AS (SELECT ticker, max(trade_date) AS last_bar FROM bars GROUP BY 1),
+                     dl AS (SELECT symbol, max(delisting_date) AS ended FROM listing_status
+                            WHERE status = 'Delisted' AND asset_type = 'Stock' GROUP BY 1)
+                SELECT symbol FROM dl JOIN span ON span.ticker = dl.symbol
+                WHERE symbol IN (SELECT symbol FROM listing_status WHERE status = 'Active' AND asset_type = 'Stock')
+                  AND abs(date_diff('day', last_bar, ended)) <= 10 AND date_diff('day', last_bar, ?) > 30
+                ORDER BY 1""", [last.date()]).df()["symbol"].tolist()
+    rep.add("universe", "names still Active after their bars and a Delisted row ended (kept listed by the mask)", "PASS",
+            f"{len(dead)} {dead[:10] if dead else ''}".rstrip())
+
     # the list is downloaded again every Sunday: a held name that the new download stops (or starts) calling
     # listed is sold (or bought) by the rules on the next run, so it is named here first
     check = "held names whose listing state changed at the last refresh"
@@ -213,7 +237,11 @@ def audit_listing(store, rep: Report, ledger_db: str | None = None):
     was, now = (listed_mask(store, day, held, table=t).loc[last] for t in ("listing_status_prev", "listing_status"))
     word = {True: "listed", False: "not listed"}
     moved = [f"{t} {word[bool(was[t])]} -> {word[bool(now[t])]}" for t in held if was[t] != now[t]]
-    rep.add("universe", check, "WARN" if moved else "PASS", f"{len(moved)} of {len(held)} held {moved if moved else ''}".rstrip())
+    # which two downloads are compared: after a failed refresh this is last week's change, not this week's
+    at = [q(f"SELECT max(fetched_at) FROM {t} WHERE status = 'Active'").fetchone()[0] for t in ("listing_status_prev", "listing_status")]
+    when = " -> ".join("none" if a is None else f"{pd.Timestamp(a):%Y-%m-%d}" for a in at)
+    rep.add("universe", check, "WARN" if moved else "PASS",
+            f"{len(moved)} of {len(held)} held (lists fetched {when}) {moved if moved else ''}".rstrip())
 
 
 def audit_factors(store, rep: Report):

@@ -45,6 +45,21 @@ def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str],
     max(delisting_date) per symbol instead (the rule until 2026-09-28) ended a ticker's life at the old
     company's delisting when the ticker was used again (SNDK, DELL), and at a Delisted row the vendor
     carries for a living company (OKE, TEL).
+
+    A company the vendor still carries as Active after it was delisted stays True after its last bar (KLG,
+    WNS, AILE: 8 such names in 2026-09); no list can hold it, since that needs a bar and ADV, and the audit
+    counts them.
+
+    TODO(S47 补充, not fixed yet): the mask says which days a name may be picked, not which prices belong to
+    the listing it is in. Factors look back by row position (agent/books/factors.py: hist.iloc[-253] and a
+    253-row volatility), so for about a year after a new listing starts on a ticker that had bars before
+    it (another company's, the pre-reorganisation stock, zero-volume filler) momentum and volatility read
+    those older prices: WOLF (new stock 2025-09-29, 17x jump at the seam), SE before 2017-10-20 (Spectra
+    Energy), VAL, GPOR, BIOA; 37 tickers and ~4,100 liquid name-days since 2017. The fix is to blank a
+    ticker's prices before the start of the listing interval it is in (a start-date twin of this function,
+    applied in agent/books/data.py load_market); it changes factor inputs, so it waits for the owner's
+    decision. Until then a momentum-only list can rank such a name first; the composite has not, because
+    the seam also inflates volatility.
     """
     ls = store.con.execute(f"""SELECT symbol, status, ipo_date, delisting_date
                                FROM {table} WHERE asset_type = 'Stock'""").df()

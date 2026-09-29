@@ -32,7 +32,8 @@ LISTING_DDL = """CREATE TABLE IF NOT EXISTS {name} (
         PRIMARY KEY (symbol, status, ipo_date))"""
 LISTING_COLS = ["symbol", "name", "exchange", "asset_type", "ipo_date", "delisting_date", "status", "fetched_at"]
 NO_IPO_DATE = "1900-01-01"          # a key column cannot be NULL; the listing mask reads this as "from the first bar"
-MIN_ACTIVE_SHARE = 0.9              # a fresh active list smaller than this share of the last one is a broken download
+MIN_ACTIVE_SHARE = 0.9              # a fresh active list with fewer symbols than this share of the table's is a broken download
+CLOSE_WINDOW_DAYS = 60              # a Delisted row ends an Active row only if it ends at most this long before it was last seen
 
 DDL = [
     """CREATE TABLE IF NOT EXISTS bars (
@@ -184,35 +185,66 @@ class PanelStore:
 
     def close_stale_listings(self, fresh_at=None) -> dict:
         """Active rows the vendor's active list no longer carries (fetched before `fresh_at`, default the
-        latest Active fetch).
+        latest Active fetch). No row is ever deleted without its interval being kept.
 
-        If a Delisted row of the same symbol ends on or after the row's ipo_date, the vendor has said when
-        that listing ended: the Active row is removed and the Delisted row carries the interval. Without
-        one the row stays as it is (still open-ended) and is reported, because a name the vendor merely
-        dropped from its list may be alive and held.
+        A Delisted row of the same symbol ends such a row when it says when this listing ended: it ends on
+        or after the row's ipo_date, no more than CLOSE_WINDOW_DAYS before the row was last seen on the
+        active list (fetched_at), and it began by then. The Active row then becomes a Delisted row with its
+        own ipo_date and the earliest such end (the later end if that Delisted key already exists). Its
+        start is kept: the vendor's Delisted row often starts later than the Active row for the same
+        company (DOC 2013 against 1987), and dropping the Active row would take those years out of the
+        mask. An old company's delisting years before (OKE, TEL: 194 such rows) or a listing that began
+        after the row was last seen (a new company on the ticker) cannot end it.
+
+        A row nothing ends stays open-ended, because a name the vendor merely dropped may be alive and held:
+        `ipo_changed` when the symbol has a fresh Active row (the vendor moved its ipo_date; the older start
+        stays in the union), `active_missing` when it has none.
         """
         if fresh_at is None:
             fresh_at = self.con.execute("SELECT max(fetched_at) FROM listing_status WHERE status = 'Active'").fetchone()[0]
-        stale = self.con.execute("""
-            SELECT a.symbol, a.ipo_date,
-                   EXISTS (SELECT 1 FROM listing_status d WHERE d.symbol = a.symbol AND d.status <> 'Active'
-                           AND d.delisting_date >= a.ipo_date) AS ended
-            FROM listing_status a WHERE a.status = 'Active' AND a.fetched_at < ? ORDER BY 1, 2""", [fresh_at]).df()
-        ended = stale[stale["ended"]]
-        for sym, ipo in zip(ended["symbol"], ended["ipo_date"]):
-            self.con.execute("DELETE FROM listing_status WHERE symbol = ? AND status = 'Active' AND ipo_date = ?",
-                             [sym, pd.Timestamp(ipo).date()])
+        stale = self.con.execute(f"""
+            SELECT a.symbol, a.name, a.exchange, a.asset_type, a.ipo_date, a.fetched_at,
+                   (SELECT min(d.delisting_date) FROM listing_status d
+                     WHERE d.symbol = a.symbol AND d.status = 'Delisted' AND d.delisting_date >= a.ipo_date
+                       AND d.delisting_date >= CAST(a.fetched_at AS DATE) - INTERVAL {CLOSE_WINDOW_DAYS} DAY
+                       AND d.ipo_date <= CAST(a.fetched_at AS DATE)) AS ended,
+                   (SELECT max(x.delisting_date) FROM listing_status x
+                     WHERE x.symbol = a.symbol AND x.status = 'Delisted' AND x.ipo_date = a.ipo_date) AS had_end,
+                   EXISTS (SELECT 1 FROM listing_status f
+                           WHERE f.symbol = a.symbol AND f.status = 'Active' AND f.fetched_at >= ?) AS fresh
+            FROM listing_status a WHERE a.status = 'Active' AND a.fetched_at < ? ORDER BY 1, 5""",
+                                     [fresh_at, fresh_at]).df()
+        ended = stale[stale["ended"].notna()].copy()
+        if len(ended):
+            ended["delisting_date"] = pd.to_datetime(ended[["ended", "had_end"]].max(axis=1)).dt.date
+            ended["ipo_date"] = pd.to_datetime(ended["ipo_date"]).dt.date
+            ended["status"], ended["fetched_at"] = "Delisted", fresh_at
+            self.con.register("_ls_closed", ended[LISTING_COLS])
+            self.con.execute("""DELETE FROM listing_status l USING _ls_closed c
+                                WHERE l.symbol = c.symbol AND l.status = 'Active' AND l.ipo_date = c.ipo_date""")
+            self.con.execute(f"INSERT OR REPLACE INTO listing_status SELECT {', '.join(LISTING_COLS)} FROM _ls_closed")
+            kept = self.con.execute("""SELECT count(*) FROM listing_status l JOIN _ls_closed c USING (symbol, ipo_date)
+                                       WHERE l.status = 'Delisted' AND l.delisting_date = c.delisting_date""").fetchone()[0]
+            self.con.unregister("_ls_closed")
+            if kept != len(ended):                  # every closed listing is there, from the same start
+                raise RuntimeError(f"closing stale listings: {len(ended)} closed, {kept} found as Delisted rows")
+        open_ = stale[stale["ended"].isna()]
         return {"active_closed": sorted(set(ended["symbol"])),
-                "active_missing": sorted(set(stale.loc[~stale["ended"], "symbol"]))}
+                "ipo_changed": sorted(set(open_.loc[open_["fresh"], "symbol"])),
+                "active_missing": sorted(set(open_.loc[~open_["fresh"], "symbol"]))}
 
     def write_listing(self, active: pd.DataFrame, delisted: pd.DataFrame) -> dict:
         """One refresh from the vendor's two lists. Adds to a symbol's history, never replaces it.
 
         Everything happens in one transaction: the table as it was is copied to listing_status_prev (the
         audit compares the two), the rows are upserted by (symbol, status, ipo_date), and Active rows that
-        left the active list are closed (close_stale_listings). A fresh active list much shorter than the
-        last one is refused: with the mask a union of intervals, the active list is what keeps a name in
-        the universe, and a truncated download must not be read as 2,000 delistings.
+        left the active list are closed (close_stale_listings). The snapshot is taken only by the first
+        refresh of a day: a second run the same day must not hide what the first one changed.
+
+        A fresh active list with far fewer symbols than the table's Active rows is refused: with the mask a
+        union of intervals, the active list is what keeps a name in the universe, and a truncated download
+        must not be read as 2,000 delistings. The table's count, not the last download's, is the yardstick,
+        so that lists shrinking a little each week cannot pass one after the other.
         """
         self.migrate_listing_key()
         df = pd.concat([active, delisted], ignore_index=True)
@@ -224,29 +256,34 @@ class PanelStore:
         # the same listing twice in one download: keep the one that ends last (INSERT OR REPLACE would keep the first)
         df = (df.assign(_end=pd.to_datetime(df["delisting_date"])).sort_values("_end", na_position="last", kind="stable")
                 .drop_duplicates(LISTING_KEY, keep="last").drop(columns="_end").sort_values(LISTING_KEY))
-        had = self.con.execute("""SELECT count(*) FROM listing_status WHERE status = 'Active' AND fetched_at =
-                                  (SELECT max(fetched_at) FROM listing_status WHERE status = 'Active')""").fetchone()[0]
+        had, last_at = self.con.execute("""SELECT count(DISTINCT symbol), max(fetched_at) FROM listing_status
+                                           WHERE status = 'Active'""").fetchone()
         n_active = int((df["status"] == "Active").sum())
-        if n_active < MIN_ACTIVE_SHARE * had:
-            raise RuntimeError(f"listing refresh refused: the active list has {n_active} rows, the last one had {had}")
+        n_sym = df.loc[df["status"] == "Active", "symbol"].nunique()
+        if n_sym < MIN_ACTIVE_SHARE * had:
+            raise RuntimeError(f"listing refresh refused: the active list has {n_sym} symbols, the table has {had}")
+        fresh_at = df.loc[df["status"] == "Active", "fetched_at"].max()
+        has_prev = self.con.execute("SELECT count(*) FROM duckdb_tables() WHERE table_name = 'listing_status_prev'").fetchone()[0]
+        snapshot = not has_prev or last_at is None or pd.Timestamp(last_at).date() < pd.Timestamp(fresh_at).date()
         before = self._listing_count("listing_status")
         self.con.execute("BEGIN")
         try:
-            self.con.execute("CREATE OR REPLACE TABLE listing_status_prev AS SELECT * FROM listing_status")
+            if snapshot:
+                self.con.execute("CREATE OR REPLACE TABLE listing_status_prev AS SELECT * FROM listing_status")
             self.con.register("_ls_in", df)
             new = self.con.execute("SELECT count(*) FROM _ls_in i ANTI JOIN listing_status l USING (symbol, status, ipo_date)").fetchone()[0]
             self.con.execute(f"INSERT OR REPLACE INTO listing_status SELECT {', '.join(LISTING_COLS)} FROM _ls_in")
             self.con.unregister("_ls_in")
             if self._listing_count("listing_status") != before + new:       # a refresh only adds rows or updates them
                 raise RuntimeError(f"listing refresh: {before} rows + {new} new != {self._listing_count('listing_status')}")
-            out = self.close_stale_listings(df.loc[df["status"] == "Active", "fetched_at"].max())
+            out = self.close_stale_listings(fresh_at)
             after = self._listing_count("listing_status")
             self.con.execute("COMMIT")
         except Exception:
             self.con.execute("ROLLBACK")
             raise
         return {"active": n_active, "delisted": int(len(df) - n_active), "rows_before": before, "rows_after": after,
-                "new_segments": int(new), **out}
+                "new_segments": int(new), "snapshot": bool(snapshot), **out}
 
     def log_fetch(self, rows: list[dict]) -> None:
         if not rows:

@@ -51,7 +51,8 @@ def fetch(state: str, date: str | None = None, tries: int = 4, wait: float = 20.
         text = get(params)
         if text.startswith("symbol,"):
             break
-        time.sleep(wait)
+        if attempt < tries - 1:
+            time.sleep(wait)
     rows = list(csv.DictReader(io.StringIO(text)))
     if not rows or "symbol" not in rows[0]:
         raise RuntimeError(text[:300])
@@ -63,14 +64,18 @@ def fetch(state: str, date: str | None = None, tries: int = 4, wait: float = 20.
                          "status": df["status"], "fetched_at": pd.Timestamp.now()})
 
 
+def download(**kw) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Both lists, before anything is written: a failed download leaves the table as it was."""
+    return fetch("active", **kw), fetch("delisted", **kw)
+
+
 def refresh(store: PanelStore, **kw) -> dict:
-    # both lists first, then one write: a failed download leaves the table as it was
-    active, delisted = fetch("active", **kw), fetch("delisted", **kw)
-    return store.write_listing(active, delisted)
+    return store.write_listing(*download(**kw))
 
 
 def migrate(store: PanelStore) -> dict:
-    """Once per database: the key change, then the Active rows that were already stale."""
+    """Once per database: the key change, then the Active rows that were already stale are closed with their
+    start kept (PanelStore.close_stale_listings). Running it again changes nothing."""
     out = store.migrate_listing_key()
     store.con.execute("BEGIN")
     try:
@@ -87,8 +92,14 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["refresh", "migrate"])
     args = ap.parse_args()
+    if args.cmd == "migrate":
+        with PanelStore() as store:
+            print(migrate(store))
+        return 0
+    # download first: a throttled vendor can take minutes, and an open PanelStore locks panel.db for everyone
+    lists = download()
     with PanelStore() as store:
-        print(migrate(store) if args.cmd == "migrate" else refresh(store))
+        print(store.write_listing(*lists))
     return 0
 
 

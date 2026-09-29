@@ -179,11 +179,73 @@ def test_refresh_refuses_a_truncated_active_list(store):
     assert store.con.execute("SELECT count(*), max(fetched_at) FROM listing_status").fetchone() == (21, T0.to_pydatetime())
 
 
+def test_a_closed_listing_keeps_its_start_when_the_delisted_row_starts_later(store):
+    # the vendor's Delisted row for a company often starts years after its Active row did (DOC, LAB, NMIH)
+    store.write_listing(rows(*FILL, ("ZZZA", "Active", "2010-01-04", None), at=T0), rows(at=T0))
+    out = store.write_listing(rows(*FILL), rows(("ZZZA", "Delisted", "2020-01-02", "2026-09-14")))
+    assert [r for r in table(store) if r[0] == "ZZZA"] == [("ZZZA", "Delisted", "2010-01-04", "2026-09-14"),
+                                                           ("ZZZA", "Delisted", "2020-01-02", "2026-09-14")]
+    m = listed_mask(store, DATES, ["ZZZA"])["ZZZA"]
+    assert m.loc["2015-06-01"] and m.loc["2026-09-14"] and not m.loc["2026-09-15":].any()
+    assert out["active_closed"] == ["ZZZA"] and out["active_missing"] == []
+
+
+def test_an_old_delisting_does_not_end_a_listing_seen_last_week(store):
+    # OKE: an old Delisted row, and one download that misses the Active row; the company is alive
+    store.write_listing(rows(*FILL, ("OKE", "Active", "1985-07-01", None), at=T0),
+                        rows(("OKE", "Delisted", "1985-07-01", "2019-03-01"), at=T0))
+    out = store.write_listing(rows(*FILL), rows(("OKE", "Delisted", "1985-07-01", "2019-03-01")))
+    assert ("OKE", "Active", "1985-07-01", None) in table(store)
+    assert listed_mask(store, DATES, ["OKE"])["OKE"].all()
+    assert out["active_closed"] == [] and out["active_missing"] == ["OKE"]
+
+
+def test_a_new_company_on_the_ticker_does_not_end_the_old_listing(store):
+    # REU was last seen on the active list on 2026-09-20; a listing that began after that is another company's
+    store.write_listing(rows(*FILL, ("REU", "Active", "2010-01-04", None), at=T0), rows(at=T0))
+    store.write_listing(rows(*FILL), rows(("REU", "Delisted", "2026-09-21", "2026-09-25")))
+    assert ("REU", "Active", "2010-01-04", None) in table(store)          # nothing says when it ended: still open
+    # its own delisting arrives a week later: that one ends it, not the later company's
+    store.write_listing(rows(*FILL, at=T1 + pd.Timedelta(days=7)),
+                        rows(("REU", "Delisted", "2026-09-21", "2026-09-25"), ("REU", "Delisted", "2010-01-04", "2026-09-14"),
+                             at=T1 + pd.Timedelta(days=7)))
+    assert [r for r in table(store) if r[0] == "REU"] == [("REU", "Delisted", "2010-01-04", "2026-09-14"),
+                                                          ("REU", "Delisted", "2026-09-21", "2026-09-25")]
+    assert listed_mask(store, DATES, ["REU"])["REU"].tolist() == [True] * 7 + [False, True]
+
+
+def test_a_moved_ipo_date_is_reported_apart_and_keeps_the_older_start(store):
+    store.write_listing(rows(*FILL, ("CRTO", "Active", "2016-01-04", None), at=T0), rows(at=T0))
+    out = store.write_listing(rows(*FILL, ("CRTO", "Active", "2026-07-27", None)), rows())
+    assert [r for r in table(store) if r[0] == "CRTO"] == [("CRTO", "Active", "2016-01-04", None),
+                                                           ("CRTO", "Active", "2026-07-27", None)]
+    assert listed_mask(store, DATES, ["CRTO"])["CRTO"].loc["2020-01-02":].all()
+    assert out["ipo_changed"] == ["CRTO"] and out["active_missing"] == [] and out["active_closed"] == []
+
+
+def test_lists_that_shrink_a_little_each_week_cannot_pass_one_after_another(store):
+    full = [(f"S{i:03d}", "Active", "2000-01-03", None) for i in range(100)]
+    store.write_listing(rows(*full, at=T0), rows(at=T0))
+    store.write_listing(rows(*full[:91]), rows())                                  # 91% of the table: accepted
+    with pytest.raises(RuntimeError, match="active list"):                         # 85%: >= 90% of 91, < 90% of 100
+        store.write_listing(rows(*full[:85], at=T1 + pd.Timedelta(days=7)), rows(at=T1 + pd.Timedelta(days=7)))
+    assert store.con.execute("SELECT count(*) FROM listing_status WHERE status = 'Active'").fetchone()[0] == 100
+
+
 def test_refresh_keeps_the_table_as_it_was_before(store):
     store.write_listing(rows(("OKE", "Active", "1985-07-01", None), at=T0), rows(("X", "Delisted", "2001-01-02", "2005-01-03"), at=T0))
     assert table(store, "listing_status_prev") == []
     store.write_listing(rows(("OKE", "Active", "1985-07-01", None)), rows(("OKE", "Delisted", "1985-07-01", "2026-09-14")))
     assert table(store, "listing_status_prev") == [("OKE", "Active", "1985-07-01", None), ("X", "Delisted", "2001-01-02", "2005-01-03")]
+
+
+def test_a_second_refresh_the_same_day_keeps_the_snapshot(store):
+    store.write_listing(rows(("OKE", "Active", "1985-07-01", None), at=T0), rows(at=T0))
+    first = store.write_listing(rows(("OKE", "Active", "1985-07-01", None)), rows(("X", "Delisted", "2001-01-02", "2005-01-03")))
+    again = store.write_listing(rows(("OKE", "Active", "1985-07-01", None), at=T1 + pd.Timedelta(hours=5)),
+                                rows(("X", "Delisted", "2001-01-02", "2005-01-03"), at=T1 + pd.Timedelta(hours=5)))
+    assert first["snapshot"] and not again["snapshot"]
+    assert table(store, "listing_status_prev") == [("OKE", "Active", "1985-07-01", None)]
 
 
 def test_refresh_migrates_an_old_table_first(old_store):
@@ -221,6 +283,57 @@ def test_loader_writes_nothing_when_one_list_fails(store):
     with pytest.raises(RuntimeError):
         av_listing.refresh(store, get=lambda p: CSV["active"] if p["state"] == "active" else "{}", wait=0.0)
     assert store.con.execute("SELECT max(fetched_at) FROM listing_status").fetchone()[0] == T0.to_pydatetime()
+
+
+def test_fetch_does_not_wait_after_its_last_try(monkeypatch):
+    slept = []
+    monkeypatch.setattr(av_listing.time, "sleep", slept.append)
+    with pytest.raises(RuntimeError):
+        av_listing.fetch("active", tries=3, wait=7.0, get=lambda p: "{}")
+    assert slept == [7.0, 7.0]
+
+
+def test_refresh_downloads_before_it_opens_the_database(monkeypatch):
+    # an open PanelStore locks panel.db for every other process; a throttled vendor can take minutes
+    seen = []
+
+    class Store:
+        def __enter__(self):
+            seen.append("open")
+            return self
+
+        def __exit__(self, *exc):
+            seen.append("close")
+
+        def write_listing(self, active, delisted):
+            seen.append("write")
+            return {}
+
+    monkeypatch.setattr(av_listing, "PanelStore", Store)
+    monkeypatch.setattr(av_listing, "fetch", lambda state, **kw: seen.append(state) or rows())
+    monkeypatch.setattr("sys.argv", ["av_listing", "refresh"])
+    assert av_listing.main() == 0
+    assert seen == ["active", "delisted", "open", "write", "close"]
+
+
+def test_migrate_closes_stale_rows_with_their_start_and_is_safe_twice(tmp_path):
+    path = tmp_path / "panel.db"
+    con = duckdb.connect(str(path))
+    con.execute(OLD_DDL)
+    df = pd.concat([rows(("ZZ", "Active", "2010-01-04", None), ("OLD", "Active", "2012-01-03", None), at=T0),
+                    rows(("AA", "Active", "2000-01-03", None), ("ZZ", "Delisted", "2020-01-02", "2026-09-14"),
+                         ("OLD", "Delisted", "2012-01-03", "2019-03-01"))])
+    con.execute("INSERT INTO listing_status SELECT symbol, name, exchange, asset_type, ipo_date, delisting_date, "
+                "status, fetched_at FROM df")
+    con.close()
+    with PanelStore(path) as s:
+        out = av_listing.migrate(s)
+        assert out["migrated"] and out["active_closed"] == ["ZZ"] and out["active_missing"] == ["OLD"]
+        assert (out["rows_before"], out["rows_now"]) == (5, 5)             # ZZ: one Active row became a Delisted row
+        assert ("ZZ", "Delisted", "2010-01-04", "2026-09-14") in table(s)
+        snap = table(s)
+        again = av_listing.migrate(s)
+        assert not again["migrated"] and again["active_closed"] == [] and table(s) == snap
 
 
 # -- the audit --------------------------------------------------------------
@@ -274,3 +387,34 @@ def test_audit_lists_held_names_whose_listing_state_changed(store, tmp_path, cap
     assert check == "held names whose listing state changed at the last refresh" and status == "WARN"
     assert "HELD listed -> not listed" in detail and "BACK not listed -> listed" in detail
     assert "OKE" not in detail and "SOLD" not in detail           # still listed; no longer held
+
+
+def test_audit_warns_when_the_listing_list_is_stale(store, tmp_path):
+    store.write_listing(rows(("OKE", "Active", "1985-07-01", None), ("KLG", "Active", "2023-10-02", None), at=T0),
+                        rows(("KLG", "Delisted", "2023-10-02", "2025-09-25"), at=T0))
+    bars(store, ["KLG"], last="2025-09-25")
+    bars(store, ["OKE"], last="2026-09-25")
+    ledger = ledger_with(tmp_path, [])
+    rep = audit.Report()
+    audit.audit_listing(store, rep, ledger_db=ledger)
+    got = {r[1]: r for r in rep.rows}
+    fresh = got["listing list freshness (newest Active fetch vs newest bar)"]
+    assert fresh[2] == "PASS" and fresh[3].startswith("5 days")
+    assert got["names still Active after their bars and a Delisted row ended (kept listed by the mask)"][3] == "1 ['KLG']"
+    bars(store, ["OKE"], last="2026-10-02")                      # a week later the refresh failed
+    rep = audit.Report()
+    audit.audit_listing(store, rep, ledger_db=ledger)
+    fresh = {r[1]: r for r in rep.rows}["listing list freshness (newest Active fetch vs newest bar)"]
+    assert fresh[2] == "WARN" and fresh[3].startswith("12 days")
+
+
+def test_audit_still_names_a_changed_holding_after_a_second_refresh_the_same_day(store, tmp_path):
+    bars(store, ["HELD"])
+    store.write_listing(rows(*FILL, ("HELD", "Active", "2010-01-04", None), at=T0), rows(at=T0))
+    later = rows(("HELD", "Delisted", "2010-01-04", "2026-09-22"))
+    store.write_listing(rows(*FILL), later)
+    store.write_listing(rows(*FILL, at=T1 + pd.Timedelta(hours=5)), later.assign(fetched_at=T1 + pd.Timedelta(hours=5)))
+    rep = audit.Report()
+    audit.audit_listing(store, rep, ledger_db=ledger_with(tmp_path, [("HELD", "open")]))
+    check, status, detail = rep.rows[-1][1:]
+    assert status == "WARN" and "HELD listed -> not listed" in detail and "fetched 2026-09-20 -> 2026-09-27" in detail
