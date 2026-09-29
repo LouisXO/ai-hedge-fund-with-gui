@@ -19,6 +19,7 @@ Order semantics we rely on (docs.alpaca.markets/docs/orders-at-alpaca):
 from __future__ import annotations
 
 import datetime as dt
+import http.client
 import json
 import urllib.error
 import urllib.parse
@@ -29,7 +30,13 @@ MAX_CLIENT_ID = 128
 
 
 class BrokerError(RuntimeError):
-    pass
+    """Every failure of a broker call. `status` is the HTTP code when the broker answered, None when the
+    request never got an answer (connection refused, DNS, timeout, reset, a body that is not JSON): then
+    a POST may or may not have reached the broker, and the caller looks the order up (agent/execute.py)."""
+
+    def __init__(self, msg: str, status: int | None = None):
+        super().__init__(msg)
+        self.status = status
 
 
 class NotPaperAccount(BrokerError):
@@ -59,7 +66,13 @@ class PaperBroker:
                 txt = r.read().decode()
                 return json.loads(txt) if txt else None
         except urllib.error.HTTPError as e:
-            raise BrokerError(f"{method} {path} -> {e.code}: {e.read().decode()[:300]}") from None
+            raise BrokerError(f"{method} {path} -> {e.code}: {e.read().decode()[:300]}", status=e.code) from None
+        # 2026-09-28 audit: these escaped as-is, so one timeout in the submit loop aborted the run before any
+        # accepted order was written to the ledger. URLError covers DNS and refused connections; TimeoutError
+        # and ConnectionError (reset, aborted, RemoteDisconnected) the socket; HTTPException a truncated body.
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException,
+                json.JSONDecodeError, UnicodeDecodeError) as e:
+            raise BrokerError(f"{method} {path} -> no answer: {type(e).__name__}: {str(e)[:200]}") from None
 
     # -- reads ---------------------------------------------------------------------
     def account(self) -> dict:
@@ -96,7 +109,7 @@ class PaperBroker:
         try:
             return self._req("GET", "/orders:by_client_order_id", {"client_order_id": client_order_id})
         except BrokerError as e:
-            if "404" in str(e):
+            if e.status == 404:
                 return None
             raise
 
