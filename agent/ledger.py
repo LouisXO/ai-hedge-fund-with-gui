@@ -83,6 +83,17 @@ _ADD_COLUMNS = [("agent_picks", "limit_ref", "DOUBLE"), ("agent_picks", "spread_
 # Rows from before 2026-09-29 and the other books keep NULL.
 _ADD_COLUMNS += [(table, col, typ) for table in ("agent_orders", "agent_lots")
                  for col, typ in (("trigger_filing_day", "DATE"), ("lag_sessions", "INT"), ("entry_kind", "VARCHAR"))]
+# Fills applied incrementally (S48): Alpaca reports an order's CUMULATIVE filled_qty and average price, so
+# sync_fills books only what was not booked before. applied_qty / applied_notional = the part of the fill
+# already in the lot and the book's cash. A lot sold in parts keeps what was sold so far (sold_qty,
+# sold_notional); its exit price is the weighted price of all the parts.
+_ADD_COLUMNS += [("agent_orders", "applied_qty", "DOUBLE"), ("agent_orders", "applied_notional", "DOUBLE"),
+                 ("agent_lots", "sold_qty", "DOUBLE"), ("agent_lots", "sold_notional", "DOUBLE")]
+# Run in the same transaction as the ALTER that adds the column, never again. The code before S48 booked an
+# order's whole filled_qty each time it synced it, so on an existing ledger that is what was applied.
+_BACKFILL = {("agent_orders", "applied_qty"): "UPDATE agent_orders SET applied_qty = coalesce(filled_qty, 0)",
+             ("agent_orders", "applied_notional"):
+                 "UPDATE agent_orders SET applied_notional = coalesce(filled_qty, 0) * coalesce(filled_avg_px, 0)"}
 
 
 def _columns(con, table: str) -> set[str]:
@@ -99,7 +110,17 @@ def ensure_schema(con) -> None:
         con.execute(stmt)
     for table, col, typ in _ADD_COLUMNS:
         if col not in _columns(con, table):
-            con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+            if (table, col) not in _BACKFILL:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+                continue
+            con.execute("BEGIN TRANSACTION")
+            try:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+                con.execute(_BACKFILL[(table, col)])
+                con.execute("COMMIT")
+            except Exception:
+                con.execute("ROLLBACK")
+                raise
     missing = [f"{table}.{col}" for table, col, _ in _ADD_COLUMNS if col not in _columns(con, table)]
     if missing:
         raise RuntimeError(f"ledger schema: columns still missing after ALTER: {', '.join(missing)}")

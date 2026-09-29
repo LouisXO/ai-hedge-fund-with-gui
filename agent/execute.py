@@ -27,8 +27,17 @@ Guards: paper endpoint + PK key + PA account (agent/broker/alpaca.py);
 list; per-order and per-run notional caps; bars must be through the last
 session or nothing is planned (a stale signal is worse than no trade).
 
+Order path (S48): each order is written to agent_orders as soon as its POST
+returns; a POST that fails is looked up by client_order_id (found = accepted,
+404 = not_sent or rejected); every submit and sync run first claims orders
+the broker has under this system's ids that the ledger lacks. Fills are
+booked by increment (applied_qty). Buys still in flight hold their slot and
+cash; the planned buys must fit in the book's cash plus its sells' proceeds
+and in the account's cash (`guard_buys`).
+
 Usage:
   python -m agent.execute [--submit] [--no-update] [--book long|insider] [--date YYYY-MM-DD]
+  python -m agent.execute --cancel-open [--confirm]   lists this system's open orders; cancels only with --confirm
 """
 from __future__ import annotations
 
@@ -37,6 +46,7 @@ import datetime as dt
 import json
 import math
 import os
+import re
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -68,13 +78,46 @@ BOOKS = {
 }
 CORE_TICKER = "SPY"
 MAX_ORDERS_PER_RUN = 60
-MAX_ORDER_NOTIONAL = 10_000.0
-OPEN_STATES = {"new", "accepted", "pending_new", "accepted_for_bidding", "partially_filled", "held", "submitted"}
-FINAL_STATES = {"filled", "canceled", "expired", "rejected", "done_for_day", "replaced", "stopped", "suspended"}
+MAX_ORDER_NOTIONAL = 10_000.0     # hard ceiling of one order, whatever the book's size
+SLOT_CAP_MULT = 1.5               # and at most 1.5 x the book's slot (S48; the ceiling alone was 5 slots of the long book)
+SELL_HAIRCUT = 0.97               # a planned sell funds buys at ref close x 0.97 in the pre-submit check
+MARKET_BUY_PAD = 1.03             # a market buy (or one without a price) is valued at ref close x 1.03
+CLAIM_DAYS = 14                   # how far back the broker's orders are searched for ones the ledger lacks
+# Ledger statuses of our own besides the broker's: 'not_sent' = the POST failed and the broker has no such
+# order (final: the same id is sent again by a rerun, a later evening's order has its own id); 'rejected' with
+# no alpaca_id = the broker refused the POST; 'submit_unknown' = the POST failed and so did the lookup (not
+# final: the next sync asks again); 'claimed' = found at the broker, missing from the ledger (next sync fills it in).
+NOT_SENT, SUBMIT_UNKNOWN, CLAIMED = "not_sent", "submit_unknown", "claimed"
+OPEN_STATES = {"new", "accepted", "pending_new", "accepted_for_bidding", "partially_filled", "held", "submitted",
+               SUBMIT_UNKNOWN, CLAIMED}
+FINAL_STATES = {"filled", "canceled", "expired", "rejected", "done_for_day", "replaced", "stopped", "suspended", NOT_SENT}
+FINAL_SQL = ", ".join(f"'{s}'" for s in sorted(FINAL_STATES))     # for "status NOT IN (...)"
+COID_RE = re.compile(r"^(?P<book>[a-z]+)\|(?P<as_of>\d{4}-\d{2}-\d{2})\|(?P<ticker>[^|]+)\|(?P<side>buy|sell)$")
 
 
 def client_id(book: str, as_of: dt.date, ticker: str, side: str) -> str:
     return f"{book}|{as_of.isoformat()}|{ticker}|{side}"
+
+
+def parse_client_id(coid: str | None) -> dict | None:
+    """book|date|ticker|side of one of this system's books, else None (an order placed by hand has its own id)."""
+    m = COID_RE.match(coid or "")
+    if not m or m["book"] not in BOOKS:
+        return None
+    return {"book": m["book"], "as_of": dt.date.fromisoformat(m["as_of"]), "ticker": m["ticker"], "side": m["side"]}
+
+
+def order_cap(slot: float) -> float:
+    """The most one buy may cost: 1.5 slots of its book, never more than $10,000."""
+    return min(SLOT_CAP_MULT * slot, MAX_ORDER_NOTIONAL)
+
+
+def buy_px(o: dict, ref_close: dict[str, float] | None = None) -> float | None:
+    """The price a buy is budgeted at: its limit, else the reference close + 3% (market / claimed orders)."""
+    if o.get("limit_price"):
+        return float(o["limit_price"])
+    ref = o.get("ref_close") or (ref_close or {}).get(o["ticker"])
+    return float(ref) * MARKET_BUY_PAD if ref else None
 
 
 # ---------------------------------------------------------------- planning (pure) ----
@@ -89,7 +132,7 @@ def opg_window(now_et: dt.datetime) -> bool:
 def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: set[str], as_of: dt.date,
               next_session: dt.date, ref_close: dict[str, float], spread_pct: dict[str, float],
               cash_usd: float, blocked: set[str], scored: bool = True, tif: str = "opg",
-              frozen: set[str] | None = None) -> list[dict]:
+              frozen: set[str] | None = None, inflight: list[dict] | None = None) -> list[dict]:
     """The engine's one-day step, as orders for the next open.
 
     lots: this book's open lots ({ticker, qty, hold_until}); ranked: entry candidates
@@ -101,8 +144,14 @@ def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: s
     either side is planned for them: the lot's qty is not what the account holds (split,
     merger, manual trade), so a sell of the lot's qty would be the wrong size. They stay
     frozen until the ledger is corrected by hand (2026-09-28 audit: the sell loop ignored this).
+
+    inflight: this book's buy orders that are not final yet ({ticker, qty (unfilled part), limit_price,
+    ref_close}). Each holds a slot unless its ticker is already a lot, and its cost (qty x limit, or ref
+    close x 1.03 without a limit) is not available cash: the book's cash only moves when a fill is synced,
+    so a second run the same evening would otherwise spend it again on the next candidates (S48).
     """
     frozen = frozen or set()
+    inflight = inflight or []
     orders: list[dict] = []
     exits: set[str] = set()
     for lot in lots:
@@ -123,19 +172,24 @@ def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: s
     cash_plan = cash_usd + sum(int(l["qty"]) * ref_close.get(l["ticker"], 0.0) for l in lots if l["ticker"] in exits)
     n_open = len(lots) - len(exits)
     held = {l["ticker"] for l in lots}
+    flying = {f["ticker"] for f in inflight}
+    n_open += len(flying - held)
+    for f in inflight:
+        px = buy_px(f, ref_close)
+        cash_plan -= float(f["qty"]) * px if px else slot       # no price at all: assume it takes a slot's cash
     if not scored:
         return orders
     for t in ranked:
         if n_open >= cfg["max_positions"]:
             break
-        if t in held or t in blocked or t in exits:
+        if t in held or t in blocked or t in exits or t in flying:
             continue
         px = ref_close.get(t)
         if px is None or not np.isfinite(px) or px <= 0 or cash_plan < slot * 0.5:
             continue
         cap = cfg["entry_cap_pct"] if cfg["entry_cap_pct"] is not None else max(spread_pct.get(t, 0.5), 0.1)
         limit = round(px * (1 + cap / 100), 2 if px >= 1 else 4)
-        spend = min(slot, cash_plan, MAX_ORDER_NOTIONAL)
+        spend = min(slot, cash_plan, order_cap(slot))
         qty = math.floor(spend / limit)
         if qty < 1:
             continue
@@ -216,8 +270,10 @@ def bars_update_note(stats: dict | None) -> str | None:
 
 def entry_candidates(ranked: list[str]) -> list[str]:
     """No book enters a class share ('BRK-A', 'LGF.B') for now: the panel and the broker spell it
-    differently (S47 addendum, 2026-09-28). A held one is unaffected: its exits do not go through here."""
-    return [t for t in ranked if "-" not in t and "." not in t]
+    differently (S47 addendum, 2026-09-28). A held one is unaffected: its exits do not go through here.
+    Nor a pseudo ticker ('SE@2007', an earlier security under a reused ticker, S47b): load_market refuses a
+    market where one is listed on the last bar, and this is the second guard (a --date replay)."""
+    return [t for t in ranked if "-" not in t and "." not in t and "@" not in t]
 
 
 # ---------------------------------------------------------------- ledger helpers ------
@@ -248,54 +304,102 @@ def _sessions_after(calendar: list[dt.date], day: dt.date, n: int) -> dt.date:
     return later[min(n - 1, len(later) - 1)] if later else day + dt.timedelta(days=n)
 
 
+def _et_naive(stamp) -> pd.Timestamp:
+    t = pd.Timestamp(stamp)
+    return (t.tz_localize("UTC") if t.tzinfo is None else t).tz_convert(ET).tz_localize(None)
+
+
 def sync_fills(con, broker, calendar: list[dt.date]) -> dict:
-    """Pull the state of every order we submitted that is not final; open/close lots on fills."""
-    pending = con.execute("""SELECT client_order_id, book, ticker, side, qty FROM agent_orders
-                             WHERE dry_run = FALSE AND (status IS NULL OR status NOT IN ('filled','canceled','expired','rejected','done_for_day','replaced'))"""
-                          ).fetchall()
-    stats = {"checked": len(pending), "filled": 0, "closed": 0, "final_unfilled": 0}
-    for coid, book, ticker, side, qty in pending:
+    """Pull the state of every order we submitted that is not final; open/close lots on fills.
+
+    Alpaca reports an order's cumulative filled_qty and average price. Only the increment over what the ledger
+    already applied (applied_qty, applied_notional) moves the lot and the book's cash, so an order seen while
+    partially filled and again when filled is booked once (2026-09-28 audit: it was booked in full each time).
+    The order's row, its lot and the book's cash change in one transaction. A lot sold in parts, by one order
+    or several, closes at the weighted price of all the parts. An order the broker does not know and never
+    confirmed (the POST failed, see submit_and_record) becomes not_sent.
+    """
+    pending = con.execute(f"""SELECT client_order_id, book, ticker, side, alpaca_id,
+                                     coalesce(applied_qty, 0), coalesce(applied_notional, 0) FROM agent_orders
+                              WHERE dry_run = FALSE AND (status IS NULL OR status NOT IN ({FINAL_SQL}))""").fetchall()
+    stats = {"checked": len(pending), "filled": 0, "closed": 0, "final_unfilled": 0, "partial": 0, "not_sent": 0,
+             "sell_without_lot": 0}
+    for coid, book, ticker, side, alpaca_id, aq, an in pending:
         o = broker.order_by_client_id(coid)
         if o is None:
+            if not alpaca_id:                    # never confirmed by the broker and it has no such order
+                con.execute("UPDATE agent_orders SET status = ? WHERE client_order_id = ?", [NOT_SENT, coid])
+                stats["not_sent"] += 1
             continue
         status = o.get("status")
         fq = float(o.get("filled_qty") or 0)
         fpx = float(o["filled_avg_price"]) if o.get("filled_avg_price") else None
-        fat = pd.Timestamp(o["filled_at"]).tz_convert(ET).tz_localize(None) if o.get("filled_at") else None
-        con.execute("""UPDATE agent_orders SET status = ?, alpaca_id = ?, filled_qty = ?, filled_avg_px = ?, filled_at = ?
-                       WHERE client_order_id = ?""", [status, o.get("id"), fq, fpx, fat, coid])
-        if fq <= 0 or fpx is None:
-            if status in FINAL_STATES:
+        stamp = o.get("filled_at") or o.get("updated_at")      # a partial fill may carry no filled_at yet
+        fat = _et_naive(stamp) if stamp else (pd.Timestamp.now(ET).tz_localize(None) if fq > 0 else None)
+        dq = fq - aq
+        dn = fq * fpx - an if fpx is not None else 0.0
+        con.execute("BEGIN TRANSACTION")
+        try:
+            con.execute("""UPDATE agent_orders SET status = ?, alpaca_id = ?, filled_qty = ?, filled_avg_px = ?, filled_at = ?,
+                                  applied_qty = ?, applied_notional = ? WHERE client_order_id = ?""",
+                        [status, o.get("id"), fq, fpx, fat if fq > 0 else None,
+                         fq if dq > 1e-9 and fpx is not None else aq, fq * fpx if dq > 1e-9 and fpx is not None else an, coid])
+            if dq > 1e-9 and fpx is not None:
+                if status not in FINAL_STATES:
+                    stats["partial"] += 1
+                if side == "buy":
+                    _apply_buy(con, coid, book, ticker, fq, fpx, dq, dn, fat, calendar)
+                    stats["filled"] += 1
+                elif _apply_sell(con, coid, book, ticker, dq, dn, fat, stats):
+                    stats["closed"] += 1
+            elif fq <= 0 and status in FINAL_STATES:
                 stats["final_unfilled"] += 1
-            continue
-        fill_day = fat.date()
-        if side == "buy":
-            hold = BOOKS[book]["hold_days"]
-            hold_until = _sessions_after(calendar, fill_day, hold) if hold else None
-            # by column name (the table grows by ALTER); the entry classification comes from the order row
-            con.execute("""INSERT OR REPLACE INTO agent_lots (lot_id, book, ticker, qty, entry_day, entry_px, hold_until, status,
-                                                              entry_order, trigger_filing_day, lag_sessions, entry_kind)
-                           SELECT ?, ?, ?, ?, ?, ?, ?, 'open', client_order_id, trigger_filing_day, lag_sessions, entry_kind
-                           FROM agent_orders WHERE client_order_id = ?""",
-                        [f"{book}|{ticker}|{fill_day.isoformat()}", book, ticker, fq, fill_day, fpx, hold_until, coid])
-            con.execute("UPDATE agent_books SET cash_usd = cash_usd - ?, updated = ? WHERE book = ?",
-                        [fq * fpx, pd.Timestamp.now(), book])
-            stats["filled"] += 1
-        else:
-            lot = con.execute("""SELECT lot_id, entry_px, qty FROM agent_lots WHERE book = ? AND ticker = ? AND status = 'open'
-                                 ORDER BY entry_day LIMIT 1""", [book, ticker]).fetchone()
-            if lot:
-                lot_id, entry_px, lqty = lot
-                ret = (fpx / entry_px - 1) * 100 if entry_px else None
-                if fq >= lqty - 1e-6:
-                    con.execute("""UPDATE agent_lots SET status='closed', exit_day=?, exit_px=?, ret_pct=?, exit_order=? WHERE lot_id=?""",
-                                [fill_day, fpx, ret, coid, lot_id])
-                else:                                            # partial: shrink the lot, keep it open
-                    con.execute("UPDATE agent_lots SET qty = qty - ? WHERE lot_id = ?", [fq, lot_id])
-                con.execute("UPDATE agent_books SET cash_usd = cash_usd + ?, updated = ? WHERE book = ?",
-                            [fq * fpx, pd.Timestamp.now(), book])
-                stats["closed"] += 1
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
     return stats
+
+
+def _apply_buy(con, coid, book, ticker, fq, fpx, dq, dn, fat, calendar) -> None:
+    """The lot of a buy order holds its cumulative fill at the order's average price."""
+    lot = con.execute("SELECT lot_id FROM agent_lots WHERE entry_order = ?", [coid]).fetchone()
+    if lot:
+        con.execute("UPDATE agent_lots SET qty = qty + ?, entry_px = ? WHERE lot_id = ?", [dq, fpx, lot[0]])
+    else:
+        fill_day = fat.date()
+        hold = BOOKS[book]["hold_days"]
+        hold_until = _sessions_after(calendar, fill_day, hold) if hold else None
+        # by column name (the table grows by ALTER); the entry classification comes from the order row
+        con.execute("""INSERT OR REPLACE INTO agent_lots (lot_id, book, ticker, qty, entry_day, entry_px, hold_until, status,
+                                                          entry_order, trigger_filing_day, lag_sessions, entry_kind)
+                       SELECT ?, ?, ?, ?, ?, ?, ?, 'open', client_order_id, trigger_filing_day, lag_sessions, entry_kind
+                       FROM agent_orders WHERE client_order_id = ?""",
+                    [f"{book}|{ticker}|{fill_day.isoformat()}", book, ticker, dq, fill_day, fpx, hold_until, coid])
+    con.execute("UPDATE agent_books SET cash_usd = cash_usd - ?, updated = ? WHERE book = ?", [dn, pd.Timestamp.now(), book])
+
+
+def _apply_sell(con, coid, book, ticker, dq, dn, fat, stats) -> bool:
+    """Shrink the book's lot by the sold increment; close it at the weighted price of all its sold parts."""
+    lot = con.execute("""SELECT lot_id, entry_px, qty, coalesce(sold_qty, 0), coalesce(sold_notional, 0) FROM agent_lots
+                         WHERE book = ? AND ticker = ? AND status = 'open' ORDER BY entry_day LIMIT 1""", [book, ticker]).fetchone()
+    if not lot:
+        stats["sell_without_lot"] += 1
+        return False
+    lot_id, entry_px, lqty, sq, sn = lot
+    sq, sn = sq + dq, sn + dn
+    if lqty - dq <= 1e-6:
+        exit_px = sn / sq
+        ret = (exit_px / entry_px - 1) * 100 if entry_px else None
+        # a closed lot shows the whole position: qty = all shares sold, exit_px = their weighted price
+        con.execute("""UPDATE agent_lots SET status = 'closed', qty = ?, sold_qty = ?, sold_notional = ?, exit_day = ?,
+                              exit_px = ?, ret_pct = ?, exit_order = ? WHERE lot_id = ?""",
+                    [sq, sq, sn, fat.date(), exit_px, ret, coid, lot_id])
+    else:                                                # partial: the lot keeps what the account still holds
+        con.execute("UPDATE agent_lots SET qty = qty - ?, sold_qty = ?, sold_notional = ? WHERE lot_id = ?",
+                    [dq, sq, sn, lot_id])
+    con.execute("UPDATE agent_books SET cash_usd = cash_usd + ?, updated = ? WHERE book = ?", [dn, pd.Timestamp.now(), book])
+    return True
 
 
 def fill_model_px(con, store: PanelStore) -> int:
@@ -323,12 +427,272 @@ def reconcile(lots: list[dict], positions: dict[str, dict]) -> tuple[set[str], l
         pq = float(positions[t]["qty"]) if t in positions else 0.0
         if abs(pq - q) > 1e-6:
             blocked.add(t)
-            msgs.append(f"{t}: lots {q:g} vs alpaca {pq:g}")
+            hint = split_hint(q, pq)
+            msgs.append(f"{t}: lots {q:g} vs alpaca {pq:g}" + (f" ({hint})" if hint else ""))
     for t in positions:
         if t not in by_t:
             blocked.add(t)
             msgs.append(f"{t}: alpaca position with no lot (manual?)")
     return blocked, msgs
+
+
+def split_hint(lot_qty: float, broker_qty: float) -> str | None:
+    """'possible split 3:1' / 'possible reverse split 1:10' when the broker holds a whole multiple (2..20) or a
+    whole fraction (1/20..1/2) of the ledger's shares. A reverse split usually pays the fraction in cash (100 shares
+    1:3 -> 33), so a broker qty that is the whole part of lot / n for exactly one n in 2..20 is reported too. Only
+    reported: the lot stays frozen until the owner confirms the corporate action and corrects qty and entry_px
+    by hand (S48; no automatic change)."""
+    if lot_qty <= 0 or broker_qty <= 0:
+        return None
+    for r, kind in ((broker_qty / lot_qty, "split {n}:1"), (lot_qty / broker_qty, "reverse split 1:{n}")):
+        n = round(r)
+        if 2 <= n <= 20 and abs(r - n) < 1e-6:
+            return "possible " + kind.format(n=n)
+    whole = [n for n in range(2, 21) if math.floor(lot_qty / n + 1e-9) == broker_qty]
+    if len(whole) == 1:
+        return f"possible reverse split 1:{whole[0]}, fraction paid in cash"
+    return None
+
+
+def split_hints(lots: list[dict], positions: dict[str, dict]) -> list[dict]:
+    """The reconcile mismatches that look like a split or a reverse split, for the JSON."""
+    by_t: dict[str, float] = {}
+    for l in lots:
+        by_t[l["ticker"]] = by_t.get(l["ticker"], 0.0) + float(l["qty"])
+    out = []
+    for t, q in sorted(by_t.items()):
+        pq = float(positions[t]["qty"]) if t in positions else 0.0
+        hint = split_hint(q, pq) if abs(pq - q) > 1e-6 else None
+        if hint:
+            out.append({"ticker": t, "lots_qty": q, "broker_qty": pq, "hint": hint})
+    return out
+
+
+def cash_check(con, broker_cash: float | None, tol: float = 1.0) -> dict:
+    """The three books' cash must add up to the account's cash within $1, checked only when no order is in
+    flight (a working order's fill has not reached the books yet). ok = None when it was not checked.
+    Written to the JSON as cash_check; agent.health reads it."""
+    books_cash = float(con.execute("SELECT coalesce(sum(cash_usd), 0) FROM agent_books").fetchone()[0])
+    n_open = int(con.execute(f"""SELECT count(*) FROM agent_orders WHERE dry_run = FALSE
+                                 AND (status IS NULL OR status NOT IN ({FINAL_SQL}))""").fetchone()[0])
+    out = {"books_cash": round(books_cash, 2), "broker_cash": None if broker_cash is None else round(broker_cash, 2),
+           "diff": None, "orders_in_flight": n_open, "ok": None}
+    if broker_cash is None or n_open:
+        return out
+    out["diff"] = round(broker_cash - books_cash, 2)
+    out["ok"] = abs(out["diff"]) <= tol
+    return out
+
+
+def inflight_buys(con, book: str | None = None) -> list[dict]:
+    """Buy orders not final yet, the unfilled part only (the filled part is a lot already and out of the cash)."""
+    q = f"""SELECT book, ticker, qty - coalesce(applied_qty, 0), limit_price, ref_close FROM agent_orders
+            WHERE dry_run = FALSE AND side = 'buy' AND (status IS NULL OR status NOT IN ({FINAL_SQL}))"""
+    rows = con.execute(q + (" AND book = ?" if book else ""), [book] if book else []).fetchall()
+    return [{"book": b, "ticker": t, "qty": float(q_ or 0), "limit_price": lp, "ref_close": rc}
+            for b, t, q_, lp, rc in rows if (q_ or 0) > 0]
+
+
+def inflight_sells(con) -> list[dict]:
+    """Sell orders the broker confirmed (alpaca_id known) that are not final yet, the unfilled part only. Their
+    lots still exit in plan_book, so their proceeds are in its cash_plan; a rerun the same evening drops them as
+    already sent, so the guard has to count them here, like the buys in flight. An order the broker never
+    confirmed (submit_unknown) is not counted: its money may never come."""
+    rows = con.execute(f"""SELECT book, ticker, qty - coalesce(applied_qty, 0), ref_close FROM agent_orders
+                           WHERE dry_run = FALSE AND side = 'sell' AND alpaca_id IS NOT NULL
+                             AND (status IS NULL OR status NOT IN ({FINAL_SQL}))""").fetchall()
+    return [{"book": b, "ticker": t, "qty": float(q or 0), "ref_close": rc} for b, t, q, rc in rows if (q or 0) > 0]
+
+
+def _notional(o: dict, ref_close: dict[str, float] | None = None) -> float:
+    px = buy_px(o, ref_close)
+    return float(o["qty"]) * px if px else 0.0
+
+
+def guard_buys(plans: list[dict], book_cash: dict[str, float], inflight: list[dict], broker_cash: float | None,
+               slots: dict[str, float], ref_close: dict[str, float] | None = None,
+               sells_inflight: list[dict] | None = None) -> tuple[list[dict], list[str]]:
+    """The last check before anything is sent (S48). Buys only; a sell is never cut.
+
+    1. one buy costs at most order_cap(its book's slot): 1.5 slots, never over $10,000;
+    2. a book's buys cost at most its cash, less its buys in flight, plus its sells at ref close x 0.97;
+    3. all buys together cost at most the broker's cash, less all buys in flight, plus all sells x 0.97.
+    "Its sells" = the planned ones and the ones already at the broker and not filled yet (sells_inflight, e.g. sent
+    by an earlier run the same evening; a ticker with a planned sell is counted once). Over a limit, shares come
+    off the lowest-priority buy first (the book's last; across books the plan's last), down to dropping it.
+
+    It binds in ordinary runs too, not only on a wrong ledger: plan_book counts a sell's proceeds at 1.00 x ref
+    close and may spend them to the last dollar, the guard at 0.97. A book that funds its buys with the evening's
+    sells then loses about 3% of those proceeds from its last buy (shares, and a name only when that buy is
+    smaller than the shortfall). Returns (the orders, one note per cut).
+    """
+    notes: list[str] = []
+    sells_inflight = sells_inflight or []
+    out = [dict(o) for o in plans]
+    for o in out:
+        if o["side"] != "buy" or o["book"] not in slots:
+            continue
+        px, cap = buy_px(o, ref_close), order_cap(slots[o["book"]])
+        if px and o["qty"] * px > cap + 1e-6:
+            q = math.floor(cap / px)
+            notes.append(f"{o['book']} {o['ticker']}: ${o['qty'] * px:,.0f} over the ${cap:,.0f} order cap, qty {o['qty']} -> {q}")
+            o["qty"] = q
+
+    def sells(rows, flying_sells):
+        planned = {(o["book"], o["ticker"]) for o in rows if o["side"] == "sell"}
+        usd = sum(o["qty"] * (o.get("ref_close") or 0.0) for o in rows if o["side"] == "sell")
+        usd += sum(f["qty"] * ((ref_close or {}).get(f["ticker"]) or f.get("ref_close") or 0.0)
+                   for f in flying_sells if (f["book"], f["ticker"]) not in planned)
+        return usd * SELL_HAIRCUT
+
+    def trim(rows, avail, label):
+        buys = [o for o in rows if o["side"] == "buy" and o["qty"] > 0]
+        over = sum(_notional(o, ref_close) for o in buys) - avail
+        for o in reversed(buys):
+            if over <= 1e-6:
+                break
+            px = buy_px(o, ref_close) or 0.0
+            cut = min(o["qty"], math.ceil(over / px)) if px else o["qty"]
+            notes.append(f"{label}: buys over the cash by ${over:,.0f}, {o['book']} {o['ticker']} qty {o['qty']} -> {o['qty'] - cut}")
+            o["qty"] -= cut
+            over -= cut * px
+
+    for book in dict.fromkeys(o["book"] for o in out):
+        rows = [o for o in out if o["book"] == book]
+        fly = sum(_notional(f, ref_close) for f in inflight if f["book"] == book)
+        trim(rows, book_cash.get(book, 0.0) - fly + sells(rows, [f for f in sells_inflight if f["book"] == book]),
+             f"book {book}")
+    if broker_cash is not None:
+        fly = sum(_notional(f, ref_close) for f in inflight)
+        trim(out, broker_cash - fly + sells(out, sells_inflight), "account")
+    return [o for o in out if o["side"] == "sell" or o["qty"] >= 1], notes
+
+
+def final_orders(con, broker, plans: list[dict], book_cash: dict[str, float], broker_cash: float | None,
+                 slots: dict[str, float], ref_close: dict[str, float]) -> tuple[list[dict], list[str], list[str]]:
+    """What main() sends: the plan less the ids the broker or the ledger already has, capped per run, through
+    guard_buys with this ledger's orders in flight. Returns (orders, ids skipped as already sent, guard notes).
+
+    An order the broker never had (not_sent, or a refused POST: rejected without an alpaca_id) is sent again by a
+    rerun under the same id, as before S48 when neither was written."""
+    existing = {o["client_order_id"] for o in broker.open_orders()}
+    already = {r[0] for r in con.execute("""SELECT client_order_id FROM agent_orders WHERE dry_run = FALSE
+                                            AND NOT (coalesce(status, '') IN (?, 'rejected') AND alpaca_id IS NULL)""",
+                                         [NOT_SENT]).fetchall()}
+    skipped = [o["client_order_id"] for o in plans if o["client_order_id"] in existing | already]
+    plans = [o for o in plans if o["client_order_id"] not in existing | already]
+    out, notes = guard_buys(cap_orders(plans), book_cash, inflight_buys(con), broker_cash, slots, ref_close,
+                            inflight_sells(con))
+    return out, skipped, notes
+
+
+def cap_orders(plans: list[dict], n: int = MAX_ORDERS_PER_RUN) -> list[dict]:
+    """At most n orders a run; the cut falls on buys only, every sell is kept."""
+    sells = [o for o in plans if o["side"] == "sell"]
+    buys = [o for o in plans if o["side"] != "sell"][:max(0, n - len(sells))]
+    keep = {id(o) for o in sells + buys}
+    return [o for o in plans if id(o) in keep]
+
+
+def claim_orphans(con, broker_orders: list[dict]) -> list[dict]:
+    """Orders the broker has under this system's ids (book|date|ticker|side) that the ledger does not (or holds as
+    not_sent): a run that died between a POST and its ledger write left them. Each gets status 'claimed' and
+    applied_qty 0, so the sync that follows books its fills. A not_sent row is updated in place and keeps what the
+    plan wrote (reason, ref_close, the insider entry classification that its lot inherits); an order the ledger
+    lacks is inserted with reason 'claimed'. Returns the claimed rows."""
+    known = {r[0]: (r[1], r[2]) for r in con.execute(
+        "SELECT client_order_id, status, reason FROM agent_orders WHERE dry_run = FALSE").fetchall()}
+    rows, claimed = [], []
+    for o in broker_orders:
+        coid = o.get("client_order_id")
+        p = parse_client_id(coid)
+        if p is None or (coid in known and known[coid][0] != NOT_SENT):
+            continue
+        sub = o.get("submitted_at") or o.get("created_at")
+        sub = _et_naive(sub) if sub else None
+        if coid in known:
+            con.execute("""UPDATE agent_orders SET alpaca_id = ?, status = ?, submitted_at = coalesce(?, submitted_at),
+                                  applied_qty = 0, applied_notional = 0 WHERE client_order_id = ?""",
+                        [o.get("id"), CLAIMED, sub, coid])
+            claimed.append({"client_order_id": coid, **p, "reason": known[coid][1], "alpaca_id": o.get("id"),
+                            "status": CLAIMED})
+            continue
+        rows.append({"client_order_id": coid, **p, "qty": int(float(o.get("qty") or 0)), "order_type": o.get("type"),
+                     "tif": o.get("time_in_force"), "limit_price": float(o["limit_price"]) if o.get("limit_price") else None,
+                     "ref_close": None, "reason": "claimed", "alpaca_id": o.get("id"), "status": CLAIMED,
+                     "submitted_at": sub, "dry_run": False, "applied_qty": 0.0, "applied_notional": 0.0})
+    if rows:
+        ledger._insert(con, "agent_orders", pd.DataFrame(rows))
+    return claimed + rows
+
+
+def submit_and_record(con, broker, o: dict) -> dict:
+    """POST one order and write its ledger row at once, whatever happened (S48; the run used to write all rows
+    after the loop, so one exception lost every order already accepted).
+
+    A POST that raises is looked up by client_order_id: found = the broker took it (status 'accepted'); not found =
+    'rejected' when the broker answered 4xx, else 'not_sent'; the lookup failing too = 'submit_unknown', which holds
+    its slot and cash until the next sync asks again. Returns o, updated as written.
+    """
+    o.update({"dry_run": False, "submitted_at": pd.Timestamp.now(), "applied_qty": 0.0, "applied_notional": 0.0})
+    err = None
+    try:
+        resp = broker.submit(o["ticker"], o["side"], o["qty"], o["order_type"], o["tif"], o["client_order_id"], o["limit_price"])
+        if resp and resp.get("id"):
+            o.update({"alpaca_id": resp["id"], "status": resp.get("status") or "accepted"})
+        else:
+            err = broker_mod.BrokerError(f"POST answered without an order id: {str(resp)[:120]}")
+    except broker_mod.BrokerError as exc:
+        err = exc
+    if err is not None:
+        o["error"] = str(err)[:200]
+        try:
+            found = broker.order_by_client_id(o["client_order_id"])
+            if found:
+                o.update({"alpaca_id": found.get("id"), "status": "accepted"})
+            else:
+                rejected = err.status is not None and 400 <= err.status < 500
+                o.update({"alpaca_id": None, "status": "rejected" if rejected else NOT_SENT})
+        except broker_mod.BrokerError as exc:
+            o.update({"alpaca_id": None, "status": SUBMIT_UNKNOWN, "error": f"{o['error']}; lookup: {str(exc)[:120]}"})
+    ledger._insert(con, "agent_orders", pd.DataFrame([o]))
+    return o
+
+
+def send_orders(con, broker, plans: list[dict], submit: bool) -> tuple[list[dict], list[str]]:
+    """Send (or, without submit, only mark as dry run) each order in turn, each written as it returns. After an
+    order with no answer at all (submit_unknown) the rest are not attempted. Returns (sent, ids not attempted)."""
+    sent: list[dict] = []
+    for i, o in enumerate(plans):
+        if not submit:
+            o.update({"alpaca_id": None, "status": "dry_run", "dry_run": True, "submitted_at": pd.Timestamp.now()})
+            sent.append(o)
+            continue
+        sent.append(submit_and_record(con, broker, o))
+        if o["status"] == SUBMIT_UNKNOWN:
+            return sent, [p["client_order_id"] for p in plans[i + 1:]]
+    return sent, []
+
+
+def cancel_open(broker, confirm: bool) -> int:
+    """List this system's open orders (client_order_id book|date|ticker|side) and cancel them only with confirm.
+    Orders placed by hand are neither listed nor touched. The next sync records the canceled status."""
+    mine = [o for o in broker.open_orders() if parse_client_id(o.get("client_order_id"))]
+    print(f"{len(mine)} open order(s) of this system" + ("" if confirm else " — listing only, add --confirm to cancel them"))
+    for o in mine:
+        print(f"  {o['client_order_id']:<36s} {o.get('side', ''):4s} {o.get('qty', '')!s:>6s} {o.get('type', '')} "
+              f"{o.get('limit_price') or ''} [{o.get('status')}]")
+    if not confirm:
+        return 0
+    failed = 0
+    for o in mine:
+        try:
+            broker.cancel(o["id"])
+            print(f"  canceled {o['client_order_id']}")
+        except broker_mod.BrokerError as exc:
+            failed += 1
+            print(f"  cancel FAILED {o['client_order_id']}: {exc}")
+    return 1 if failed else 0
 
 
 def mark_books(con, as_of: dt.date, close: dict[str, float], account_equity: float | None) -> list[dict]:
@@ -405,9 +769,12 @@ def insider_targets(store: PanelStore, day: pd.Timestamp, con, sessions: list[dt
     Returns (tickers, retries, {ticker: trigger_filing_day, lag_sessions, entry_kind}); the third
     is recorded on the order for the evaluation and decides nothing here.
     """
+    # An order the broker never had (not_sent, or a POST it refused: rejected without an alpaca_id) is not a
+    # miss: before S48 such orders were not written at all, and counting them would use up the one retry.
     rows = con.execute("""SELECT ticker, status, filled_qty FROM agent_orders
-                          WHERE book = 'insider' AND side = 'buy' AND dry_run = FALSE AND as_of >= ?""",
-                       [(day - pd.Timedelta(days=8)).date()]).fetchall()
+                          WHERE book = 'insider' AND side = 'buy' AND dry_run = FALSE AND as_of >= ?
+                            AND NOT (coalesce(status, '') IN (?, 'rejected') AND alpaca_id IS NULL)""",
+                       [(day - pd.Timedelta(days=8)).date(), NOT_SENT]).fetchall()
     skip, retry = blocking_orders(rows)
     # the one retry (S36b) holds for a late entry too: its filing day is a session further back (owner, S47 addendum d)
     df = signals_insider.candidates(store, day, window, sessions, longer={t: window + 1 for t in retry})
@@ -443,10 +810,15 @@ def main() -> int:
     ap.add_argument("--optradar-db", default=ledger.OPTRADAR_DB)
     ap.add_argument("--out-dir", default=OUT_DIR, help="where exec_<date>.json goes (the selftest points this at a temp dir)")
     ap.add_argument("--sync-only", action="store_true", help="after-close bookkeeping only: bars, fills, reconcile, mark; plan nothing")
+    ap.add_argument("--cancel-open", action="store_true",
+                    help="list this system's open orders (book|date|ticker|side ids) and exit; cancels them only with --confirm")
+    ap.add_argument("--confirm", action="store_true", help="with --cancel-open: really cancel")
     args = ap.parse_args()
 
     broker = broker_mod.from_env()
     acct = broker.account()                                   # raises unless PA… paper account
+    if args.cancel_open:                                      # stop tool: touches no ledger, plans nothing
+        return cancel_open(broker, args.confirm)
     now_et = dt.datetime.now(ET)
     calendar = broker.calendar(now_et.date() - dt.timedelta(days=30), now_et.date() + dt.timedelta(days=30))
     past = [d for d in calendar if d < now_et.date() or (d == now_et.date() and now_et.hour >= 16)]
@@ -470,9 +842,22 @@ def main() -> int:
                 print(f"index update skipped: {exc}")
 
     con = ledger.connect(args.optradar_db)
+    claimed, claim_error, not_attempted, guard_notes = [], None, [], []
     try:
         ledger.ensure_schema(con)
-        books = ensure_books(con)
+        ensure_books(con)
+        # Orders the broker has under our ids that the ledger lacks (a run that died after a POST): written
+        # before the sync, so their fills are booked like any other. Submit and sync runs only; a dry run
+        # writes no order. A failed lookup stops a submit run from sending: the ledger may be incomplete.
+        if args.submit or args.sync_only:
+            try:
+                claimed = claim_orphans(con, broker.orders_since(now_et - dt.timedelta(days=CLAIM_DAYS)))
+            except broker_mod.BrokerError as exc:
+                claim_error = str(exc)[:200]
+            for r in claimed:
+                print(f"  claimed an order the ledger lacked: {r['client_order_id']} ({r['alpaca_id']})")
+            if claim_error:
+                print(f"  orphan check failed: {claim_error}")
         with PanelStore(read_only=True) as store:
             market = load_market(store, (pd.Timestamp(last_session) - pd.Timedelta(days=420)).date().isoformat())
             day = market.adj.index[-1]
@@ -487,12 +872,18 @@ def main() -> int:
             # ---- bars guards (S47 item 4): the date check above passes as soon as ONE symbol has today's bar
             coverage = bars_coverage(market.close, market.adv20, day)
             skipped_reason = skipped_reason or bars_guard_reason(coverage)
+            if claim_error and args.submit:
+                skipped_reason = skipped_reason or "orphan check failed: the broker's order list could not be read"
             sync = sync_fills(con, broker, calendar)
+            books = ensure_books(con)                         # after the sync: its fills moved the cash
+            cash_chk = cash_check(con, float(acct["cash"]) if acct.get("cash") is not None else None)
+            flying = inflight_buys(con)
             n_model = fill_model_px(con, store)
             positions = broker.positions()
             lots_all = open_lots(con)
             no_bar = held_without_bar([l for l in lots_all if l["book"] == "long"], market.adj, day)   # bars guard, see plan below
             blocked, msgs = reconcile(lots_all, positions)
+            splits = split_hints(lots_all, positions)
             next_session = _sessions_after(calendar, day.date(), 1)
             tif = "opg" if (os.environ.get("AGENT_TIF") == "opg" and opg_window(dt.datetime.now(ET))) else "day"   # DAY on paper; see plan_book
             close_row = market.close.loc[day]
@@ -520,7 +911,8 @@ def main() -> int:
                     ranked = entry_candidates(ranked)     # class shares: not entered for now (S47 addendum)
                     spreads = {t: market.spread_pct(t, day) for t in ranked if t in market.close.columns}
                     book_plans = plan_book(book, cfg, lots, ranked, keep, day.date(), next_session, ref_close, spreads,
-                                           books[book]["cash_usd"], blocked | others, scored, tif, frozen=blocked)
+                                           books[book]["cash_usd"], blocked | others, scored, tif, frozen=blocked,
+                                           inflight=[f for f in flying if f["book"] == book])
                     if book == "insider":                 # retries and late entries: tagged, evaluated separately
                         tag_insider_entries(book_plans, retries, entry_info)
                     plans += book_plans
@@ -528,30 +920,16 @@ def main() -> int:
                                          "top": ranked[:10]}
             nav = mark_books(con, day.date(), ref_close, float(acct["equity"]))
 
-        # ---- caps, then submit or print
-        plans = plans[:MAX_ORDERS_PER_RUN]
-        existing = {o["client_order_id"] for o in broker.open_orders()}
-        already = {r[0] for r in con.execute("SELECT client_order_id FROM agent_orders WHERE dry_run = FALSE").fetchall()}
-        sent, skipped = [], []
-        for o in plans:
-            if o["client_order_id"] in existing or o["client_order_id"] in already:
-                skipped.append(o["client_order_id"])
-                continue
-            if args.submit:
-                try:
-                    resp = broker.submit(o["ticker"], o["side"], o["qty"], o["order_type"], o["tif"],
-                                         o["client_order_id"], o["limit_price"])
-                    o.update({"alpaca_id": resp.get("id"), "status": resp.get("status"), "dry_run": False})
-                except broker_mod.BrokerError as exc:
-                    o.update({"alpaca_id": None, "status": f"error: {str(exc)[:120]}", "dry_run": False})
-            else:
-                o.update({"alpaca_id": None, "status": "dry_run", "dry_run": True})
-            o["submitted_at"] = pd.Timestamp.now()
-            sent.append(o)
-        if args.submit:
-            ok = [o for o in sent if o["alpaca_id"]]                  # a rejected POST is not an order
-            if ok:
-                ledger._insert(con, "agent_orders", pd.DataFrame(ok))
+        # ---- already sent, caps and the pre-submit guard, then submit or print
+        slots = {b["book"]: b["equity_usd"] / BOOKS[b["book"]]["max_positions"] for b in nav if b["book"] in BOOKS}
+        plans, skipped, guard_notes = final_orders(con, broker, plans, {b: r["cash_usd"] for b, r in books.items()},
+                                                   float(acct["cash"]) if acct.get("cash") is not None else None,
+                                                   slots, ref_close)
+        for n in guard_notes:
+            print(f"  pre-submit guard: {n}")
+        sent, not_attempted = send_orders(con, broker, plans, args.submit)
+        if not_attempted:
+            print(f"  broker unreachable, {len(not_attempted)} order(s) not attempted")
     finally:
         con.close()
 
@@ -559,7 +937,9 @@ def main() -> int:
                "skipped_reason": None if args.sync_only else skipped_reason,
                "mode": "sync" if args.sync_only else "submit" if args.submit else "dry_run", "account_equity": float(acct["equity"]),
                "account_cash": float(acct["cash"]), "sync": sync, "model_px_filled": n_model,
-               "reconcile": msgs, "targets": targets_dbg, "books": nav,
+               "reconcile": msgs, "possible_splits": splits, "cash_check": cash_chk, "targets": targets_dbg, "books": nav,
+               "claimed_orders": [r["client_order_id"] for r in claimed], "claim_error": claim_error,
+               "guard_notes": guard_notes, "not_attempted": not_attempted,
                "orders": [{k: (str(v) if isinstance(v, (dt.date, pd.Timestamp)) else v) for k, v in o.items()} for o in sent],
                "skipped_duplicates": skipped, "generated_at": dt.datetime.now().isoformat(timespec="seconds")}
     summary.update({"bars_coverage_pct": None if coverage is None else round(coverage * 100, 2),
@@ -574,15 +954,20 @@ def main() -> int:
     note = f", NOTHING PLANNED: {skipped_reason}" if (skipped_reason and not args.sync_only) else ""
     print(f"[{tag}] bar {day.date()} (last session {last_session}{note}) tif={tif} "
           f"· account ${float(acct['equity']):,.0f} · fills synced {sync['filled']}+{sync['closed']} · "
-          f"reconcile {'ok' if not msgs else msgs}")
+          f"reconcile {'ok' if not msgs else msgs} · cash check "
+          f"{'not run (orders in flight)' if cash_chk['ok'] is None else 'ok' if cash_chk['ok'] else 'OFF by $' + format(cash_chk['diff'], ',.2f')}")
     for b in nav:
         print(f"  {b['book']:8s} equity ${b['equity_usd']:,.0f}  cash ${b['cash_usd']:,.0f}  positions {b['n_positions']}")
     for o in sent:
         lp = f"limit {o['limit_price']}" if o["limit_price"] else ("MOO" if o["tif"] == "opg" else "MKT day")
-        print(f"  {o['book']:8s} {o['side']:4s} {o['ticker']:6s} x{o['qty']:<5d} {lp:<14s} ref {o['ref_close']:.2f}  {o['reason']}  [{o['status']}]")
+        print(f"  {o['book']:8s} {o['side']:4s} {o['ticker']:6s} x{o['qty']:<5d} {lp:<14s} ref {o['ref_close'] or 0:.2f}  {o['reason']}  "
+              f"[{o['status']}]" + (f"  {o['error']}" if o.get("error") else ""))
     if skipped:
         print(f"  skipped {len(skipped)} already-submitted ids")
-    return 3 if (skipped_reason and not args.sync_only) else 0           # non-zero: the wrapper logs "execute failed", health reads it
+    if skipped_reason and not args.sync_only:
+        return 3                                      # non-zero: the wrapper logs "execute failed", health reads it
+    incomplete = not_attempted or [o for o in sent if o.get("status") in (NOT_SENT, SUBMIT_UNKNOWN)]
+    return 4 if incomplete else 0                     # an order the broker may not have: the evening needs a rerun
 
 
 if __name__ == "__main__":

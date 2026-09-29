@@ -114,7 +114,9 @@ def insider_check(con, store, since: dt.date | None) -> dict | None:
         return None
     day = pd.Timestamp(last)
     prior = con.execute("""SELECT ticker, status, filled_qty FROM agent_orders WHERE book = 'insider' AND side = 'buy' AND dry_run = FALSE
-                           AND as_of >= ? AND as_of < ?""", [(day - pd.Timedelta(days=8)).date(), day.date()]).fetchall()
+                           AND as_of >= ? AND as_of < ?
+                           AND NOT (coalesce(status, '') IN ('not_sent', 'rejected') AND alpaca_id IS NULL)""",   # as insider_targets
+                        [(day - pd.Timedelta(days=8)).date(), day.date()]).fetchall()
     skip, retry = blocking_orders(prior)
     cand = signals_insider.candidates(store, day, 2, None, longer={t: 3 for t in retry})
     names = [] if cand.empty else list(cand[cand["eligible"] & ~cand["ticker"].isin(skip)].sort_values("buy_usd", ascending=False)["ticker"])
@@ -146,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     picks = con.execute("SELECT as_of, ticker, rank FROM agent_picks WHERE signal_name = ? AND as_of >= ? ORDER BY as_of, rank", [long_live.SIGNAL, PAPER_START]).df()
     lots = con.execute("SELECT ticker FROM agent_lots WHERE book = 'long' AND status = 'open'").df()["ticker"].tolist()
     orders = con.execute("""SELECT as_of, book, coalesce(filled_qty, 0) > 0 AS filled, status FROM agent_orders
-                            WHERE dry_run = FALSE AND as_of >= current_date - 9""").df()
+                            WHERE dry_run = FALSE AND as_of >= current_date - 9 AND alpaca_id IS NOT NULL""").df()   # broker had it
     auct = con.execute("SELECT * FROM agent_auction_nav WHERE book = 'long' ORDER BY as_of").df()
     capital = float(con.execute("SELECT alloc_usd FROM agent_books WHERE book = 'long'").fetchone()[0])   # S48: not a constant
     con.close()                                  # no ledger lock held through the replay and the list recomputation
