@@ -257,12 +257,25 @@ cd ~/hedge-fund && PYTHONPATH=. $PY -W ignore -m agent.health --no-llm-probe --n
 
 **怎么发现**:Mac 通知"公开站推送已中止";`execute.log`(13:25 任务)或 `cron.log`(08:41 任务)里有 `publish_guard: 发现 N 处疑似真实账户信息`,下面逐行列出 `文件:行号 [标记] 片段`。
 
-**原因**:`site/publish.sh` 在提交 `site/public` 之前扫描暂存的页面,在 `git push` 之前扫描所有待推送提交的新增行和提交说明(`site/publish_guard.py`)。推送的是整个 `v2-rebuild` 分支,所以别的 session 提交的文档也在扫描范围里。
+**原因**:`site/publish.sh` 在提交 `site/public` 之前扫描暂存的页面,在 `git push` 之前扫描待推送范围(`site/publish_guard.py --range`):每个待推送提交各自的新增行和文件名(命中显示为 `<提交号>:<文件>:<行号>`)、整个范围的净差异(覆盖合并提交里的冲突解决)、以及提交说明。推送的是整个 `v2-rebuild` 分支,所以别的 session 提交的文档也在扫描范围里。
 
 **处理**
 
 - 命中在 `site/public`:生成器把不该公开的内容写进了页面。页面已取消暂存、没有提交;修生成器,重跑 `PUBLISH=1 zsh site/publish.sh`。
-- 命中在别的提交:把那几行移到私有仓库(`optradar/docs/PRIVATE.md` 等),在本仓库提交删除,再重跑。提交还没推送,删掉之后不会进入公开历史。
+- 命中在别的提交(还没推送):**补一个删除提交没有用**。`git push` 会把范围内的全部提交都推上去,泄露的那个提交进入公开历史,凭提交号就能读到;检查也会因为那个提交继续拦截。必须改写本地未推送的历史,让泄露提交不再出现在 `v2-rebuild` 上:
+  1. 先把命中的内容抄到私有仓库(`optradar/docs/PRIVATE.md` 等)。
+  2. 改写。最简单的办法是把所有未推送的提交压成一个:
+     ```bash
+     cd ~/hedge-fund && git log --oneline origin/v2-rebuild..HEAD   # 看清要改写哪些提交
+     # 不要先 git fetch:publish.sh 刚把本地分支变基到 origin/v2-rebuild 上;远端若又前进,reset 后的提交会撤销远端的新改动
+     git reset --soft origin/v2-rebuild          # 未推送的改动全部回到暂存区,工作区文件不变
+     # 编辑命中的文件,删掉那几行(或 git rm 整个文件),然后
+     git add -A && git commit -m "<重新写的说明>"
+     ```
+     想保留每个提交各自的说明时,由用户本人对未推送的提交做交互式改写(`git rebase -i origin/v2-rebuild`,把泄露的提交标成 `edit` 修掉)。提交说明本身命中时也用这两种办法之一改写。
+  3. 重跑检查,确认返回 0 再推:`PYTHONPATH=. $PY site/publish_guard.py --range origin/v2-rebuild..HEAD`,然后 `PUBLISH=1 zsh site/publish.sh`。
+  4. 只有这样,泄露提交才不会进入公开历史。改写前不要在任何地方 `git push` 这个分支。
+- 命中的内容已经推送过(出现在 `git log origin/v2-rebuild` 里):删除提交同样不能撤回,它已经公开,fork 和缓存里可能都有。按泄露处理:评估泄露了什么,需要时向 GitHub 申请清除;是否强推改写公开历史由用户决定。
 - 确认是误报:手工运行 `PUBLISH=1 PUBLISH_GUARD=off zsh site/publish.sh`(定时任务永远不设这个变量),并把误报的写法记在这里,以后调整 `publish_guard.py` 的标记。
 - 私有词表(可选):`~/.hedge-fund/publish_guard_terms.txt`,一行一个字面量(账户号、精确金额等),`#` 开头是注释,少于 4 个字符的忽略。命中时不回显词表内容。
 

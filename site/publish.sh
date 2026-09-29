@@ -40,7 +40,7 @@ git commit -q -m "site: daily public signals $DATE"
 # another machine (or a manual push) may have moved the branch since the last run
 git pull -q --rebase --autostash origin v2-rebuild
 if ! guard --range origin/v2-rebuild..HEAD; then
-  blocked "推送已中止:待推送的提交里有疑似真实账户信息(见上)。提交留在本地未推送;把这些行移到私有仓库并提交修正后再推。"
+  blocked "推送已中止:待推送的提交里有疑似真实账户信息(见上,<提交号>:<文件>)。提交留在本地未推送;补一个删除提交不够(推送会带上全部提交),要改写本地未推送的历史,见 docs/RUNBOOK.md 第 10 节。"
 fi
 git push -q origin v2-rebuild
 echo "已推送 → Netlify 将自动部署"

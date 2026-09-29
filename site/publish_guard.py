@@ -5,7 +5,9 @@ This repository is a public GitHub fork, and `site/publish.sh` pushes the whole 
 not only `site/public`. So the guard scans what a push would make public:
 
   --staged        names and added lines of the index against HEAD (the site/public files just built)
-  --range A..B    names, added lines and commit messages of the commits a push would send
+  --range A..B    names, added lines and commit messages of the commits a push would send: every commit's
+                  own patch (a leak added in one commit and deleted in a later one is still pushed and stays
+                  readable by its hash), plus the net diff A..B for what merge commits resolve
   --files F...    whole files (fixtures and manual checks)
 
 Only added lines are scanned: text that is already public cannot be unpublished by blocking a push, and
@@ -32,7 +34,9 @@ CODE_EXT = (".py", ".sh", ".zsh", ".sql")          # code reads acct_* tables by
 # in 092f339 / bb19c72 and on the added lines of every commit since 2026-09-01 (docs, code, site/public):
 # the leaks hit, nothing else does except .env.example-style names, which are excluded below.
 _R = re.compile
-_REAL = r"(?:真实账户|真实持仓|moomoo|futu|富途|用户的(?:实盘|账户))"
+# "moomoo OpenD" is the public pages' data credit (quotes, not the account); a page is one long line, so the credit
+# can sit within 40 characters of an ordinary signed percentage.
+_REAL = r"(?:真实账户|真实持仓|moomoo(?!\s?OpenD)|futu(?!\s?OpenD)|富途|用户的(?:实盘|账户))"
 _SIGNED_PCT = r"[+\-−]\d[\d,.]*\s?%"
 CONTENT_MARKERS: list[tuple[str, list[re.Pattern], bool]] = [
     ("acct_ 表名", [_R(r"\bacct_[a-z][a-z0-9_]*")], False),
@@ -99,20 +103,22 @@ def scan_lines(path: str, lines: list[tuple[int, str]], terms: list[str] | None 
 def parse_diff(diff: str) -> dict[str, list[tuple[int, str]]]:
     """Added lines per file from `git diff -U0` output (binary files keep an empty list, so names still count)."""
     out: dict[str, list[tuple[int, str]]] = {}
-    path, n = None, 0
+    path, n, in_hunk = None, 0, False
     for raw in diff.splitlines():
         if raw.startswith("diff --git "):
             path = raw.split(" b/", 1)[1] if " b/" in raw else None
+            in_hunk = False
             if path is not None:
                 out.setdefault(path, [])
-        elif raw.startswith("+++ "):
+        elif raw.startswith("+++ ") and not in_hunk:     # inside a hunk, '+++ x' is an added line '++ x'
             if raw[4:] != "/dev/null":
                 path = raw[6:] if raw.startswith("+++ b/") else raw[4:]
                 out.setdefault(path, [])
         elif raw.startswith("@@"):
             m = re.search(r"\+(\d+)", raw)
             n = int(m.group(1)) if m else 0
-        elif raw.startswith("+") and path is not None:
+            in_hunk = True
+        elif raw.startswith("+") and in_hunk and path is not None:
             out[path].append((n, raw[1:]))
             n += 1
     return out
@@ -123,6 +129,41 @@ def scan_diff(diff: str, terms: list[str] | None = None) -> list[Hit]:
     for path, lines in parse_diff(diff).items():
         hits += scan_name(path) + scan_lines(path, lines, terms)
     return hits
+
+
+COMMIT_SEP = "\x00"                  # git prints --format=%x00%h as NUL + hash; no patch line starts with NUL
+
+
+def scan_log(log: str, terms: list[str] | None = None) -> list[Hit]:
+    """Per-commit patches from `git log -p -U0 --format=%x00%h A..B`; hits are reported as <commit>:<path>."""
+    hits, sha, chunk = [], "?", []
+
+    def flush():
+        for h in scan_diff("\n".join(chunk), terms):
+            h.path = f"{sha}:{h.path}"
+            hits.append(h)
+
+    for raw in log.splitlines():
+        if raw.startswith(COMMIT_SEP):
+            flush()
+            sha, chunk = raw[len(COMMIT_SEP):].strip() or "?", []
+        else:
+            chunk.append(raw)
+    flush()
+    return hits
+
+
+def scan_range(repo: str | None, rng: str, terms: list[str] | None = None) -> list[Hit]:
+    """Everything `git push` would send for A..B: each commit's own added lines and names, the net diff (merge
+    resolutions), and the commit messages. A net-diff hit already reported for some commit is not repeated."""
+    base, _, tip = rng.partition("..")
+    diff_args = ["-U0", "--no-color", "--no-ext-diff"]
+    hits = scan_log(_git(["log", "-p", "--no-merges", *diff_args, "--format=%x00%h", rng], repo), terms)
+    seen = {(h.path.split(":", 1)[1], h.marker, h.excerpt) for h in hits}
+    hits += [h for h in scan_diff(_git(["diff", *diff_args, base, tip or "HEAD"], repo), terms)
+             if (h.path, h.marker, h.excerpt) not in seen]
+    msgs = _git(["log", "--format=%h %B", rng], repo)
+    return hits + scan_lines("(提交说明)", list(enumerate(msgs.splitlines(), 1)), terms)
 
 
 def scan_files(paths: list[str], terms: list[str] | None = None) -> list[Hit]:
@@ -158,10 +199,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.staged:
             hits = scan_diff(_git(["diff", "--cached", "-U0", "--no-color", "--no-ext-diff"], args.repo), terms)
         else:
-            base, _, tip = args.range.partition("..")
-            hits = scan_diff(_git(["diff", "-U0", "--no-color", "--no-ext-diff", base, tip or "HEAD"], args.repo), terms)
-            msgs = _git(["log", "--format=%h %B", args.range], args.repo)
-            hits += scan_lines("(提交说明)", list(enumerate(msgs.splitlines(), 1)), terms)
+            hits = scan_range(args.repo, args.range, terms)
     except subprocess.CalledProcessError as exc:
         print(f"publish_guard: git 出错,按命中处理:{(exc.stderr or '').strip()[:200]}", file=sys.stderr)
         return 2

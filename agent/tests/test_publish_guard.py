@@ -48,6 +48,7 @@ CLEAN = [
     "影子书六条线照常记录(成本为零,单条规则的实盘外记录对 v3 有用)",
     "<h2>实盘:今日成交</h2>",
     "内部人书持有 5 个交易日",
+    J("数据 moomoo OpenD,判断由 Claude 生成</div></header><h2>长线 ", "+", "0.4%</h2>"),   # credit next to a number
 ]
 
 
@@ -94,6 +95,12 @@ def test_parse_diff_keeps_new_line_numbers_and_skips_removed_lines():
     assert pg.parse_diff(diff) == {"docs/a.md": [(3, "new one"), (4, "new two")], "site/public/x.png": []}
 
 
+def test_parse_diff_reads_an_added_line_that_starts_with_two_pluses_as_content():
+    diff = "\n".join(["diff --git a/docs/a.md b/docs/a.md", "--- a/docs/a.md", "+++ b/docs/a.md",
+                      "@@ -0,0 +1,2 @@", "+++ b/elsewhere.md", "+second"])
+    assert pg.parse_diff(diff) == {"docs/a.md": [(1, "++ b/elsewhere.md"), (2, "second")]}
+
+
 def _git(repo, *args):
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args], cwd=repo, check=True,
                    capture_output=True)
@@ -133,9 +140,41 @@ def test_range_mode_scans_outgoing_commits_and_their_messages(repo, tmp_path, ca
     assert pg.main(["--range", "no-such-ref..HEAD", "--repo", str(repo), "--terms", none]) == 2
 
 
+def test_range_mode_blocks_a_leak_that_a_later_commit_deletes(repo, tmp_path, capsys):
+    # git push sends every commit, so the leaking commit stays readable by its hash even though the net diff is clean
+    none = str(tmp_path / "no_terms.txt")
+    _git(repo, "tag", "pushed")
+    (repo / "notes.md").write_text(J("- 用户持有", " 25 ", "股,", "成本", "为零\n"), encoding="utf-8")
+    _git(repo, "add", "notes.md")
+    _git(repo, "commit", "-q", "-m", "add notes")
+    leak_sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=repo, capture_output=True,
+                              text=True, check=True).stdout.strip()
+    _git(repo, "rm", "-q", "notes.md")
+    _git(repo, "commit", "-q", "-m", "remove notes")
+    net = subprocess.run(["git", "diff", "pushed", "HEAD"], cwd=repo, capture_output=True, text=True).stdout
+    assert net == ""                                                   # the net diff alone would pass
+    assert pg.main(["--range", "pushed..HEAD", "--repo", str(repo), "--terms", none]) == 1
+    assert f"{leak_sha}:notes.md" in capsys.readouterr().out
+    # rewriting the unpushed history (what the runbook prescribes) clears it
+    _git(repo, "reset", "-q", "--hard", "pushed")
+    assert pg.main(["--range", "pushed..HEAD", "--repo", str(repo), "--terms", none]) == 0
+
+
+def test_range_mode_reports_a_leak_once_when_commit_and_net_diff_agree(repo, tmp_path, capsys):
+    none = str(tmp_path / "no_terms.txt")
+    _git(repo, "tag", "pushed")
+    (repo / "notes.md").write_text(J("用户", "想加仓\n"), encoding="utf-8")
+    _git(repo, "add", "notes.md")
+    _git(repo, "commit", "-q", "-m", "add notes")
+    assert pg.main(["--range", "pushed..HEAD", "--repo", str(repo), "--terms", none]) == 1
+    assert "发现 1 处" in capsys.readouterr().out
+
+
 def test_publish_sh_runs_the_guard_before_commit_and_before_push():
     src = open(os.path.join(ROOT, "site", "publish.sh"), encoding="utf-8").read()
     i_add, i_staged, i_commit = src.index("git add site/public"), src.index("guard --staged"), src.index("git commit")
     i_pull, i_range, i_push = src.index("git pull"), src.index("guard --range origin/v2-rebuild..HEAD"), src.index("git push")
     assert i_add < i_staged < i_commit < i_pull < i_range < i_push
     assert "blocked " in src[i_staged:i_commit] and "blocked " in src[i_range:i_push] and "exit 3" in src
+    # a deletion commit does not unpublish a pushed commit: the message must send the owner to rewrite history
+    assert "改写" in src[i_range:i_push] and "提交修正" not in src
