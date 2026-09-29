@@ -92,21 +92,40 @@ def _long_rows(d: dict, live_db) -> str:
             "回测(2017–2026,基本面 v2 数据)alpha2 +8.9%/年(t 1.57),多重检验校正后不显著,影子记录中。</p>")
 
 
-def _eval_progress(live_db) -> str:
-    """Distance to the pre-registered evaluation point per book (agent/config.yaml): no verdict before it."""
+CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
+
+
+def _eval_progress(live_db, config: str = CONFIG) -> str:
+    """Distance to the pre-registered evaluation point per book (agent/config.yaml): no verdict before it.
+
+    With `evaluate_from: YYYY-MM-DD` in the config (S47: the first run on corrected data) only lots
+    whose entry ORDER was planned on or after that day count; without it, every closed lot.
+    """
     try:
         import yaml
-        cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")))["evaluate_at"]
-        closed = dict(live_db.execute("SELECT book, count(*) FROM agent_lots WHERE status = 'closed' GROUP BY book").fetchall())
+        full = yaml.safe_load(open(config))
+        cfg, since = full["evaluate_at"], full.get("evaluate_from")
+        since = dt.date.fromisoformat(str(since)) if since else None
+        scope = " AND entry_order IN (SELECT client_order_id FROM agent_orders WHERE as_of >= ?)" if since else ""
+        args = [since] if since else []
+        closed = dict(live_db.execute(f"SELECT book, count(*) FROM agent_lots WHERE status = 'closed'{scope} GROUP BY book",
+                                      args).fetchall())
         started = dict(live_db.execute("SELECT book, started FROM agent_books").fetchall())
     except Exception:
         return ""
+    try:                                  # S47: entries on the backtest's timing; late entries and retries are counted apart
+        on_time = dict(live_db.execute(f"""SELECT book, count(*) FROM agent_lots WHERE status = 'closed' AND entry_kind = 'on_time'{scope}
+                                           GROUP BY book""", args).fetchall())
+    except Exception:                     # a ledger from before the columns were added
+        on_time = None
     parts = []
     for book, e in cfg.items():
         if not isinstance(e, dict):
             continue
-        parts.append(f"{book} 平仓 {closed.get(book, 0)}/{e['n_closed_lots']}(或 {e['or_date']},开始 {started.get(book, '—')})")
-    return "评估点(预注册,之前不做判决):" + " · ".join(parts) if parts else ""
+        timing = f",其中按时入场 {on_time.get(book, 0)}" if (book == "insider" and on_time is not None) else ""
+        parts.append(f"{book} 平仓 {closed.get(book, 0)}/{e['n_closed_lots']}{timing}(或 {e['or_date']},开始 {started.get(book, '—')})")
+    head = f"评估点(预注册,之前不做判决;只计 {since} 起下单的入场):" if since else "评估点(预注册,之前不做判决):"
+    return head + " · ".join(parts) if parts else ""
 
 
 def _paper_rows(live_db) -> str:

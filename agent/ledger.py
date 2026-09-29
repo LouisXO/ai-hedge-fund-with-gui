@@ -49,11 +49,13 @@ DDL = [
         client_order_id VARCHAR PRIMARY KEY, book VARCHAR, as_of DATE, ticker VARCHAR, side VARCHAR,
         qty INT, order_type VARCHAR, tif VARCHAR, limit_price DOUBLE, ref_close DOUBLE, reason VARCHAR,
         alpaca_id VARCHAR, status VARCHAR, submitted_at TIMESTAMP, filled_qty DOUBLE, filled_avg_px DOUBLE,
-        filled_at TIMESTAMP, model_px DOUBLE, dry_run BOOLEAN)""",
+        filled_at TIMESTAMP, model_px DOUBLE, dry_run BOOLEAN,
+        trigger_filing_day DATE, lag_sessions INT, entry_kind VARCHAR)""",
     """CREATE TABLE IF NOT EXISTS agent_lots (
         lot_id VARCHAR PRIMARY KEY, book VARCHAR, ticker VARCHAR, qty DOUBLE, entry_day DATE, entry_px DOUBLE,
         entry_model_px DOUBLE, hold_until DATE, exit_day DATE, exit_px DOUBLE, exit_model_px DOUBLE,
-        ret_pct DOUBLE, status VARCHAR, entry_order VARCHAR, exit_order VARCHAR)""",
+        ret_pct DOUBLE, status VARCHAR, entry_order VARCHAR, exit_order VARCHAR,
+        trigger_filing_day DATE, lag_sessions INT, entry_kind VARCHAR)""",
     """CREATE TABLE IF NOT EXISTS agent_book_nav (
         as_of DATE, book VARCHAR, cash_usd DOUBLE, market_value_usd DOUBLE, equity_usd DOUBLE, n_positions INT,
         account_equity_usd DOUBLE, PRIMARY KEY (as_of, book))""",
@@ -75,16 +77,32 @@ def connect(path: str = OPTRADAR_DB, read_only: bool = False, tries: int = 6, wa
 # columns added after the first deployment; DuckDB has no migration tool
 _ADD_COLUMNS = [("agent_picks", "limit_ref", "DOUBLE"), ("agent_picks", "spread_pct", "DOUBLE"),
                 ("agent_picks", "expected_net_pct", "DOUBLE"), ("agent_picks", "instrument", "VARCHAR")]
+# Insider entries, classified against the backtest's entry (S47): the filing day that qualified the
+# name, the sessions between it and the order's as_of (0 = the backtest's timing), and
+# entry_kind 'on_time' | 'late' | 'retry'. Written on the order, carried to the lot by sync_fills.
+# Rows from before 2026-09-29 and the other books keep NULL.
+_ADD_COLUMNS += [(table, col, typ) for table in ("agent_orders", "agent_lots")
+                 for col, typ in (("trigger_filing_day", "DATE"), ("lag_sessions", "INT"), ("entry_kind", "VARCHAR"))]
+
+
+def _columns(con, table: str) -> set[str]:
+    return {r[0] for r in con.execute(f"DESCRIBE {table}").fetchall()}
 
 
 def ensure_schema(con) -> None:
+    """Create the tables, then add the later columns that are missing, and check they are all there.
+
+    An ALTER that fails raises: sync_fills reads the insider classification columns, so a ledger
+    silently left without them would stop every book that evening at the first fill.
+    """
     for stmt in DDL:
         con.execute(stmt)
     for table, col, typ in _ADD_COLUMNS:
-        try:
+        if col not in _columns(con, table):
             con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
-        except Exception:
-            pass                      # already present
+    missing = [f"{table}.{col}" for table, col, _ in _ADD_COLUMNS if col not in _columns(con, table)]
+    if missing:
+        raise RuntimeError(f"ledger schema: columns still missing after ALTER: {', '.join(missing)}")
 
 
 def _insert(con, table: str, df: pd.DataFrame) -> int:

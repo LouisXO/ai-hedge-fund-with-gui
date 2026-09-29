@@ -85,13 +85,27 @@ def fundamentals(store: PanelStore) -> pd.DataFrame | None:
 
 
 def insider_flows(store: PanelStore, start: str) -> pd.DataFrame:
-    """(filing_date, ticker) -> n_buyers, buy_usd, sell_usd. Filing date is the only date used."""
+    """(filing_date, ticker) -> n_buyers, buy_usd, sell_usd. Filing date is the only date used.
+
+    A purchase (code P) counts, as a buyer and in dollars, only if its price lies within
+    [0.8 x low, 1.25 x high] of the bar of its transaction date, or of the nearest earlier session
+    when that day has none; with no bar at all it does not count (S47 addendum item 13: NCT filed
+    a buy at $0.40 on 2026-09-25 with the stock at $4.43; a foreign issuer's Form 4 is priced in
+    its own currency). The bar is never later than the filing date, so nothing after it is used.
+    """
     df = store.con.execute("""
+        WITH tx AS (
+            SELECT *, least(coalesce(trans_date, filing_date), filing_date) AS px_day
+            FROM insider_tx WHERE filing_date >= ? AND acq_disp IN ('A','D')),
+        priced AS (
+            SELECT tx.*, tx.price BETWEEN 0.8 * b.low AND 1.25 * b.high AS sane    -- NULL without a bar
+            FROM tx ASOF LEFT JOIN (SELECT ticker, trade_date, low, high FROM bars
+                                    WHERE low IS NOT NULL AND high IS NOT NULL) b
+              ON tx.ticker = b.ticker AND tx.px_day >= b.trade_date)
         SELECT filing_date, ticker,
-               count(DISTINCT CASE WHEN trans_code='P' THEN owner_name END) AS n_buyers,
-               sum(CASE WHEN trans_code='P' AND value_usd <= ? THEN value_usd ELSE 0 END) AS buy_usd,
+               count(DISTINCT CASE WHEN trans_code='P' AND sane THEN owner_name END) AS n_buyers,
+               sum(CASE WHEN trans_code='P' AND sane AND value_usd <= ? THEN value_usd ELSE 0 END) AS buy_usd,
                sum(CASE WHEN trans_code='S' AND value_usd <= ? THEN value_usd ELSE 0 END) AS sell_usd
-        FROM insider_tx WHERE filing_date >= ? AND acq_disp IN ('A','D')
-        GROUP BY 1, 2""", [MAX_TX_USD, MAX_TX_USD, start]).df()
+        FROM priced GROUP BY 1, 2""", [start, MAX_TX_USD, MAX_TX_USD]).df()
     df["date"] = pd.to_datetime(df["filing_date"])
     return df

@@ -19,6 +19,7 @@ def store(tmp_path):
                          "close": px, "adj_close": px, "volume": float(vol), "source": "test",
                          "fetched_at": pd.Timestamp.now()})
     s.upsert_bars(pd.DataFrame(rows))
+    listed(s, ["MICRO", "SMALLC", "MIDC", "BIGC"])
     s.con.execute("""CREATE TABLE IF NOT EXISTS spread_grid (bucket VARCHAR, year INT, n_obs INT,
                      median_spread_pct DOUBLE, p75_spread_pct DOUBLE, measured_at TIMESTAMP,
                      PRIMARY KEY (bucket, year))""")
@@ -30,11 +31,21 @@ def store(tmp_path):
     s.close()
 
 
+def listed(store, tickers):
+    """listing_status rows: the backtest's tradable mask (and so the live list) needs a listed name."""
+    store.insert("listing_status", pd.DataFrame([
+        {"symbol": t, "name": t, "exchange": "NYSE", "asset_type": "Stock", "ipo_date": pd.Timestamp("2010-01-04").date(),
+         "delisting_date": None, "status": "Active", "fetched_at": pd.Timestamp.now()} for t in tickers]))
+
+
+PX = {"MICRO": 5.0, "SMALLC": 20.0, "MIDC": 50.0, "BIGC": 100.0}     # the insiders pay the bar's price
+
+
 def insider(store, ticker, owners, usd, day="2026-09-17", code="P"):
     rows = [{"accession": f"{ticker}{i}", "ticker": ticker, "issuer_cik": "1",
              "filing_date": pd.Timestamp(day).date(), "trans_date": pd.Timestamp(day).date(),
              "owner_name": f"OWNER{i}", "relationship": "isOfficer", "officer_title": "CEO",
-             "trans_code": code, "acq_disp": "A", "shares": usd / owners / 10.0, "price": 10.0,
+             "trans_code": code, "acq_disp": "A", "shares": usd / owners / PX[ticker], "price": PX[ticker],
              "value_usd": usd / owners, "shares_after": 0.0, "source": "test",
              "fetched_at": pd.Timestamp.now()} for i in range(owners)]
     store.insert("insider_tx", pd.DataFrame(rows))

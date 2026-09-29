@@ -272,7 +272,11 @@ def sync_fills(con, broker, calendar: list[dt.date]) -> dict:
         if side == "buy":
             hold = BOOKS[book]["hold_days"]
             hold_until = _sessions_after(calendar, fill_day, hold) if hold else None
-            con.execute("""INSERT OR REPLACE INTO agent_lots VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, NULL, 'open', ?, NULL)""",
+            # by column name (the table grows by ALTER); the entry classification comes from the order row
+            con.execute("""INSERT OR REPLACE INTO agent_lots (lot_id, book, ticker, qty, entry_day, entry_px, hold_until, status,
+                                                              entry_order, trigger_filing_day, lag_sessions, entry_kind)
+                           SELECT ?, ?, ?, ?, ?, ?, ?, 'open', client_order_id, trigger_filing_day, lag_sessions, entry_kind
+                           FROM agent_orders WHERE client_order_id = ?""",
                         [f"{book}|{ticker}|{fill_day.isoformat()}", book, ticker, fq, fill_day, fpx, hold_until, coid])
             con.execute("UPDATE agent_books SET cash_usd = cash_usd - ?, updated = ? WHERE book = ?",
                         [fq * fpx, pd.Timestamp.now(), book])
@@ -388,24 +392,45 @@ def blocking_orders(rows: list[tuple]) -> tuple[set[str], set[str]]:
     return skip, retry
 
 
-def insider_targets(store: PanelStore, day: pd.Timestamp, con, window: int = 2) -> tuple[list[str], set[str]]:
-    """The last two days' qualifying filings, minus names this book bought or is buying in the last 8 days.
+def insider_targets(store: PanelStore, day: pd.Timestamp, con, sessions: list[dt.date],
+                    window: int = 2) -> tuple[list[str], set[str], dict[str, dict]]:
+    """The qualifying filings of the last two SESSIONS, minus names this book bought or is buying in the last 8 days.
 
-    Two days, not one: the 06:00 Form 4 job loads EDGAR's index for the previous day, so a
-    filing made on D reaches the panel on D+1 and would be missed by a one-day window. The
-    same filing therefore shows up two evenings in a row; `blocking_orders` keeps that from
-    buying twice while still retrying an entry the broker left unfilled. Returns (tickers, retries).
+    A name qualifies as in the backtest: on one filing day by itself (signals_insider.candidates).
+    Two sessions, not one: a filing EDGAR accepts after the 16:10 PT run is loaded by the 06:00
+    Form 4 job, so a filing made on D can reach the panel on D+1 and would be missed by a one-day
+    window; counted in sessions, Monday's window still holds Friday. The same filing therefore
+    shows up two evenings in a row; `blocking_orders` keeps that from buying twice while still
+    retrying an entry the broker left unfilled — over three sessions, so a late entry is retried too.
+    Returns (tickers, retries, {ticker: trigger_filing_day, lag_sessions, entry_kind}); the third
+    is recorded on the order for the evaluation and decides nothing here.
     """
-    df = signals_insider.candidates(store, day, window)
-    if df.empty:
-        return [], set()
-    df = df[df["eligible"]]
     rows = con.execute("""SELECT ticker, status, filled_qty FROM agent_orders
                           WHERE book = 'insider' AND side = 'buy' AND dry_run = FALSE AND as_of >= ?""",
                        [(day - pd.Timedelta(days=8)).date()]).fetchall()
     skip, retry = blocking_orders(rows)
-    names = [t for t in df.sort_values("buy_usd", ascending=False)["ticker"] if t not in skip]
-    return names, {t for t in names if t in retry}
+    # the one retry (S36b) holds for a late entry too: its filing day is a session further back (owner, S47 addendum d)
+    df = signals_insider.candidates(store, day, window, sessions, longer={t: window + 1 for t in retry})
+    if df.empty:
+        return [], set(), {}
+    df = df[df["eligible"] & ~df["ticker"].isin(skip)].sort_values("buy_usd", ascending=False)
+    names = list(df["ticker"])
+    retries = {t for t in names if t in retry}
+    info = {r.ticker: {"trigger_filing_day": r.trigger_filing_day, "lag_sessions": int(r.lag_sessions),
+                       "entry_kind": signals_insider.entry_kind(int(r.lag_sessions), r.ticker in retries)}
+            for r in df.itertuples()}
+    return names, retries, info
+
+
+def tag_insider_entries(orders: list[dict], retries: set[str], info: dict[str, dict]) -> list[dict]:
+    """Mark the insider book's buys: a retry keeps its own reason (S36b), every entry its classification."""
+    for o in orders:
+        if o["side"] != "buy":
+            continue
+        if o["ticker"] in retries:
+            o["reason"] = "entry_retry"
+        o.update(info.get(o["ticker"], {}))
+    return orders
 
 
 # ---------------------------------------------------------------- main -----------------
@@ -490,15 +515,14 @@ def main() -> int:
                     elif book == "core":
                         ranked, keep, scored, retries = [CORE_TICKER], {CORE_TICKER}, True, set()
                     else:
-                        (ranked, retries), keep, scored = insider_targets(store, day, con), set(), True
+                        ranked, retries, entry_info = insider_targets(store, day, con, calendar)
+                        keep, scored = set(), True
                     ranked = entry_candidates(ranked)     # class shares: not entered for now (S47 addendum)
                     spreads = {t: market.spread_pct(t, day) for t in ranked if t in market.close.columns}
                     book_plans = plan_book(book, cfg, lots, ranked, keep, day.date(), next_session, ref_close, spreads,
                                            books[book]["cash_usd"], blocked | others, scored, tif, frozen=blocked)
-                    if book == "insider":
-                        for o in book_plans:              # a retry of an entry the broker left unfilled: tagged, evaluated separately
-                            if o["side"] == "buy" and o["ticker"] in retries:
-                                o["reason"] = "entry_retry"
+                    if book == "insider":                 # retries and late entries: tagged, evaluated separately
+                        tag_insider_entries(book_plans, retries, entry_info)
                     plans += book_plans
                     targets_dbg[book] = {"n_ranked": len(ranked), "n_keep": len(keep), "scored": scored,
                                          "top": ranked[:10]}
