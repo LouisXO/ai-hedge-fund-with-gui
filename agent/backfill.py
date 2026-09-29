@@ -157,6 +157,57 @@ def backfill_index(store: PanelStore, start: str = "2012-01-01") -> int:
     return store.upsert_index(pd.concat(frames, ignore_index=True))
 
 
+# Research-only factor ETFs for the S45 D3 attribution (momentum MTUM/SPMO, value VLUE, quality QUAL,
+# low vol USMV, small value AVUV/IJS/VBR/IWN, small growth IWO). Kept apart from INDEX_SYMBOLS on
+# purpose (S48): backfill_index runs inside execute.py and daily.py, and one throttled research
+# download must never cost SPY its close. backfill_factor_etfs is run by hand or by the weekly job
+# only; the index audit keeps checking SPY/IWM/QQQ/^VIX. AVUV starts 2019-09: regressions that use
+# it cover a shorter window and must say so.
+FACTOR_ETFS = ("MTUM", "VLUE", "QUAL", "USMV", "AVUV", "IJS", "VBR", "IWN", "IWO", "SPMO")
+
+
+def backfill_factor_etfs(store: PanelStore | None = None, start: str = "2012-01-01",
+                         download=None, end: str | None = None) -> dict:
+    """Download FACTOR_ETFS daily bars and upsert them into index_daily.
+
+    Downloads first, then opens the panel only for the write (when no store is passed), so the
+    write lock is held for seconds, not for the download. A symbol with no rows keeps whatever
+    is stored. Returns {"rows": n, "symbols": {sym: n_rows}, "missing": [...]}.
+    Manual use:
+      python -c "from agent.backfill import backfill_factor_etfs; print(backfill_factor_etfs())"
+    """
+    download = download or _download
+    # Same cut as backfill_bars: while the session is open yfinance returns today's in-progress bar
+    # as a daily row, which would sit in index_daily as a close until the next run. Stop at
+    # yesterday (yf's end is exclusive) unless today's session is over.
+    end = end or (dt.date.today() + dt.timedelta(days=1 if session_closed() else 0)).isoformat()
+    raw = download(list(FACTOR_ETFS), start, end)
+    frames, per_symbol, missing = [], {}, []
+    now = pd.Timestamp.now()
+    for sym in FACTOR_ETFS:
+        sub = _frame(raw, sym) if raw is not None and not raw.empty else pd.DataFrame()
+        if sub.empty:
+            missing.append(sym)
+            continue
+        sub = sub.reset_index().rename(columns={"Date": "trade_date"})
+        sub.insert(0, "symbol", sym)
+        sub["trade_date"] = pd.to_datetime(sub["trade_date"]).dt.date
+        sub["source"] = SOURCE
+        sub["fetched_at"] = now
+        per_symbol[sym] = int(len(sub))
+        frames.append(sub[["symbol", "trade_date", "open", "high", "low", "close", "adj_close",
+                           "source", "fetched_at"]])
+    if not frames:
+        return {"rows": 0, "symbols": {}, "missing": missing}
+    df = pd.concat(frames, ignore_index=True)
+    if store is not None:
+        n = store.upsert_index(df)
+    else:
+        with PanelStore() as st:
+            n = st.upsert_index(df)
+    return {"rows": n, "symbols": per_symbol, "missing": missing}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["bars", "index"])

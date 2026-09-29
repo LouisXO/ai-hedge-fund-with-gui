@@ -76,6 +76,7 @@ def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str],
 
 
 def event_stats(ev: pd.DataFrame, fwd: pd.DataFrame, mkt: pd.Series, horizon: int, label: str) -> dict:
+    from agent.s8_insider import overlap_robust_t     # the same overlap-robust t as S8's event_stats
     rows = []
     for d, g in ev.groupby("date"):
         if d not in fwd.index or pd.isna(mkt.get(d, np.nan)):
@@ -92,7 +93,9 @@ def event_stats(ev: pd.DataFrame, fwd: pd.DataFrame, mkt: pd.Series, horizon: in
     by_year = df["abn"].groupby(df.index.year).mean()
     return {"label": label, "horizon": horizon, "n_events": int(df["n"].sum()), "n_dates": int(len(df)),
             "mean_abn_pct": float(x.mean()), "median_abn_pct": float(np.median(x)),
-            "t_nw": newey_west_t(x, lag=max(horizon // 5, 1)), "boot_ci95": [boot["lo"], boot["hi"]],
+            "t_nw": newey_west_t(x, lag=max(horizon // 5, 1)),
+            **overlap_robust_t(x, fwd.index.get_indexer(df.index), horizon),       # S48: t_nw_h, t_nonoverlap
+            "boot_ci95": [boot["lo"], boot["hi"]],
             "hit_rate": float((x > 0).mean()), "share_years_positive": float((by_year > 0).mean()),
             "first_half": float(df["abn"].iloc[: len(df) // 2].mean()),
             "second_half": float(df["abn"].iloc[len(df) // 2:].mean())}
