@@ -6,7 +6,8 @@ Rules come straight from what S11-S13 measured, not from taste:
   (>= 2 distinct insiders that day) or large (>= $250k that day), the two
   cuts that showed an edge (S11). The test is the backtest's own
   (agent/events/insider.py over agent/books/data.insider_flows, single
-  trades above $50M ignored), so the live list cannot drift from it;
+  trades above $50M ignored, a purchase priced off that day's market not
+  counted), so the live list cannot drift from it;
 - the window is counted in TRADING days, so Monday's run still sees
   Friday's filings (S47, 2026-09-28: until then the window was 2 calendar
   days merged into one test — 8% of the entries were names the backtest
