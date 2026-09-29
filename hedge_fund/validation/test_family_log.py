@@ -100,4 +100,4 @@ def test_base_book_dsr_reads_the_nav_and_panel_and_renders(tmp_path):
     assert abs(d["t_nw"] / d["t_iid"] - 1) < 0.5                  # iid data: NW and iid t are close
     text = render(holm([{"variant": "base", "report": "r.json", "t": 1.46, "alpha2_ann_pct": 8.1, "n_trades": 10}]), d)
     assert "PSR(0) = " in text and "DSR range " in text and "Not computed" not in text
-    assert "S47 restatement" in text                               # the ledger row and this NAV are different sources
+    assert "latest restatement" in text                            # the ledger row and this NAV are different sources
