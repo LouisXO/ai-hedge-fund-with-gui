@@ -63,7 +63,13 @@ def triggers(events: pd.DataFrame, days: list[dt.date]) -> pd.DataFrame:
 
 
 def entry_kind(lag_sessions: int, retry: bool) -> str:
-    """How an entry relates to the backtest's: evaluated separately, never used to choose names."""
+    """How an entry relates to the backtest's; for the evaluation, never used to choose names.
+
+    on_time  the filing day is the order's as_of: bought at the next open, as the backtest does
+    late     the filing reached the panel after that evening's run, the entry is a session behind
+    retry    an order for the name ended unfilled in the last 8 days (execute.blocking_orders),
+             whatever the lag: the backtest would have been holding the name already
+    """
     return "retry" if retry else "on_time" if lag_sessions == 0 else "late"
 
 
