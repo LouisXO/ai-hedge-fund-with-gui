@@ -17,7 +17,7 @@ from hedge_fund.features.panel import PanelStore
 BUCKETS = [-np.inf, 3e6, 2e7, 1e8, np.inf]
 LABELS = ["micro", "small", "mid", "large"]
 MAX_TX_USD = 50e6          # a single open-market insider trade above this is a parsing error, not a signal
-OVERRIDE_DAYS = 400        # shares_override reaches back this far from the newest filing, no further
+OVERRIDE_DAYS = 120        # shares_override reaches rows filed this many days before its as_of, none earlier or after
 
 
 @dataclass
@@ -76,13 +76,17 @@ def fundamentals(store: PanelStore) -> pd.DataFrame | None:
     # XBRL feed cannot see; their current count from yfinance stands in (not point-in-time — a share
     # count moves a few % a year, the price is what moves the ratio). Audit S28, 2026-09-22.
     df.loc[df["shares"] <= 1000, "shares"] = np.nan             # 0 / 1 / negative counts are XBRL noise (FOX, HOOD, EL...)
-    # S47 补充 5: only where the count is missing, and only on rows filed within OVERRIDE_DAYS of the newest
-    # filing in the table. Was: every row of the ticker, so a count checked in 2026 set the market cap of
-    # 2017 in a backtest, and replaced counts that were fine.
+    # S47b 1 (replaces S47 补充 5's 400 days from the newest filing): only where the count is missing or
+    # flagged (shares_flag not empty), and only on rows filed within OVERRIDE_DAYS before the override's
+    # as_of — none after it, none older. A backtest day can still see a count up to OVERRIDE_DAYS newer
+    # than itself on those rows; every other row, and every unflagged count, is as built.
     try:
-        ov = store.con.execute("SELECT ticker, shares FROM shares_override").df().set_index("ticker")["shares"]
-        m = df["ticker"].map(ov)
-        use = m.notna() & df["shares"].isna() & (df["filed"] >= df["filed"].max() - pd.Timedelta(days=OVERRIDE_DAYS))
+        ov = store.con.execute("SELECT ticker, shares, as_of FROM shares_override").df()
+        ov = ov.drop_duplicates("ticker", keep="last").set_index("ticker")
+        m, asof = df["ticker"].map(ov["shares"]), pd.to_datetime(df["ticker"].map(ov["as_of"]))
+        flagged = df["shares_flag"].fillna("").ne("") if "shares_flag" in df else False
+        use = (m.notna() & (df["shares"].isna() | flagged)
+               & (df["filed"] <= asof) & (df["filed"] >= asof - pd.Timedelta(days=OVERRIDE_DAYS)))
         df.loc[use, "shares"] = m[use]
     except Exception:
         pass
