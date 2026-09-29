@@ -174,3 +174,23 @@ def test_market_cap_cross_check_flags_names_off_by_more_than_30pct():
     off, missing = audit.mcap_vs_moomoo(ours, close, ref)
     assert sorted(off) == ["GMRS", "TSM"] and missing == ["NEW"]
     assert off["TSM"] == pytest.approx(25.9 / 5.19)
+
+
+def test_command_line_dry_run_writes_nothing_and_a_run_writes(tmp_path, monkeypatch, capsys):
+    path = tmp_path / "panel.db"
+    with PanelStore(path) as s:
+        fund = pd.DataFrame({"ticker": ["GMRS", "TSM"], "shares": [np.nan, 25.9e9], "shares_flag": ["mismatch", ""],
+                             "filed": pd.to_datetime(["2026-08-12", "2026-04-16"])})
+        s.con.execute("CREATE TABLE fundamentals_pit AS SELECT * FROM fund")
+    monkeypatch.setattr(M, "PanelStore", lambda *a, **k: PanelStore(path, **k))
+    fake = lambda host, port: type("C", (FakeQuotes,), {"close": lambda self: None})(unknown={"GONE"})
+    assert M.main(["--dry-run", "--tickers", "GMRS,TSM", "GONE"], client_factory=fake) == 0
+    out = capsys.readouterr().out
+    assert "targets 3, answered 2, usable 2" in out and "skip GONE" in out and "dry run" in out
+    with PanelStore(path, read_only=True) as s:
+        assert "shares_override" not in s.con.execute("SHOW TABLES").df()["name"].tolist()
+    assert M.main(["--tickers", "GMRS", "TSM"], client_factory=fake) == 0
+    with PanelStore(path, read_only=True) as s:
+        got = s.con.execute("SELECT * FROM shares_override").df().set_index("ticker")
+    assert got.loc["GMRS", "shares"] == 54.0e6 and got.loc["TSM", "xbrl_shares"] == 25.9e9
+    assert (got["as_of"] == pd.Timestamp(dt.date.today())).all()

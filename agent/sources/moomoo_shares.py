@@ -112,7 +112,7 @@ def fetch(client, tickers: Iterable[str], batch: int = BATCH, max_req: int = MAX
         out = pd.DataFrame(columns=cols)
     else:
         snap = pd.concat(frames, ignore_index=True)
-        out = snap.assign(ticker=snap["code"].map(back))[cols]
+        out = snap.assign(ticker=snap["code"].map(back))[cols].dropna(subset=["ticker"])
     out = out.reset_index(drop=True)
     out.attrs["failed"] = failed
     return out
@@ -186,19 +186,19 @@ def write_overrides(store: PanelStore, rows: pd.DataFrame) -> int:
     return len(new)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None, client_factory=MoomooQuotes) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--dry-run", action="store_true", help="fetch and print, write nothing")
     ap.add_argument("--tickers", nargs="+", default=None, help="instead of the review list + top 60 (A B or A,B)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=11111)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     with PanelStore(read_only=True) as store:          # no write lock while moomoo is being asked
         tickers = (sorted({t.strip().upper() for a in args.tickers for t in a.split(",") if t.strip()})
                    if args.tickers else default_targets(store))
         xbrl = xbrl_counts(store, tickers)
     as_of = dt.date.today()
-    client = MoomooQuotes(args.host, args.port)
+    client = client_factory(args.host, args.port)
     try:
         snap = fetch(client, tickers)
     finally:
