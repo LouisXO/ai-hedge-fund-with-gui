@@ -41,7 +41,12 @@ from hedge_fund.features.panel import PanelStore
 
 URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
 TAGS = {
-    "us-gaap": ["NetIncomeLoss", "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",
+    # 2026-09-28 (S47): ProfitLoss and NetIncomeLossAvailableToCommonStockholdersBasic are fallbacks for companies
+    # that stopped tagging NetIncomeLoss; MinorityInterest and the redeemable variant turn "equity including
+    # noncontrolling interest" into the parent's equity for companies that only tag the total (PG, UNH, CAT ...).
+    "us-gaap": ["NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic",
+                "MinorityInterest", "RedeemableNoncontrollingInterestEquityCarryingAmount",
+                "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",
                 "SalesRevenueNet", "GrossProfit", "CostOfRevenue", "CostOfGoodsAndServicesSold",
                 "CostOfGoodsSold", "CostOfServices",
                 "OperatingIncomeLoss", "NetCashProvidedByUsedInOperatingActivities", "Assets",
