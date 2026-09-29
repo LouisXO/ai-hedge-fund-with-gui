@@ -149,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
                             WHERE dry_run = FALSE AND as_of >= current_date - 9""").df()
     auct = con.execute("SELECT * FROM agent_auction_nav WHERE book = 'long' ORDER BY as_of").df()
     capital = float(con.execute("SELECT alloc_usd FROM agent_books WHERE book = 'long'").fetchone()[0])   # S48: not a constant
+    con.close()                                  # no ledger lock held through the replay and the list recomputation
     if "equity_auction_tr" not in auct:                                  # before the S48 columns: price NAV only
         auct["equity_auction_tr"] = auct["equity_auction"]
     auct["equity_auction_tr"] = auct["equity_auction_tr"].fillna(auct["equity_auction"])
@@ -213,11 +214,11 @@ def main(argv: list[str] | None = None) -> int:
                            f"前 30 重合最低 {lo}/30({worst[0]}),前 60 平均 {np.mean(ov60):.0f}/60;不一致来自事后修订的数据", min_top30=lo))
         # insider book: that evening's orders vs the rule (S48; drift covered the long book only)
         try:
-            con = duckdb.connect(args.db, read_only=True)
+            icon = duckdb.connect(args.db, read_only=True)     # a short read of its own, opened only for this check
             try:
-                c = insider_check(con, store, pd.Timestamp(str(since)).date() if since else None)
+                c = insider_check(icon, store, pd.Timestamp(str(since)).date() if since else None)
             finally:
-                con.close()
+                icon.close()
             if c:
                 out.append(c)
         except Exception as exc:                                     # never let this check stop the others

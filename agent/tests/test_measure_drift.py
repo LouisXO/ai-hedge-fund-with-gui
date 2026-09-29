@@ -46,3 +46,44 @@ def test_shadow_capital_comes_from_the_ledger(tmp_path):
     con.execute("INSERT INTO agent_books VALUES ('long', 45000, 45000, 30, '2026-09-21', now())")
     assert shadow_v2.long_capital(con) == 45000.0
     con.close()
+
+
+def test_the_ledger_is_closed_before_the_replay_starts(tmp_path, monkeypatch):
+    path = str(tmp_path / "t.db")
+    con = ledger.connect(path)
+    ledger.ensure_schema(con)
+    con.execute("INSERT INTO agent_books VALUES ('long', 60000, 60000, 30, '2026-09-21', now())")
+    con.execute("CREATE TABLE agent_auction_nav (as_of DATE, book VARCHAR, equity_sim DOUBLE, adj_cum DOUBLE, equity_auction DOUBLE, n_fills INT)")
+    con.close()
+    opened = []
+
+    class Conn:
+        def __init__(self, p, read_only=True):
+            import duckdb
+            self.c, self.closed = duckdb.connect(p, read_only=read_only), False
+            opened.append(self)
+
+        def execute(self, *a):
+            return self.c.execute(*a)
+
+        def close(self):
+            self.closed = True
+            self.c.close()
+
+    class Stop(Exception):
+        pass
+
+    class Store:
+        def __init__(self, read_only=True):
+            pass
+
+        def __enter__(self):
+            assert opened and all(c.closed for c in opened)       # the replay and the list recomputation hold no ledger lock
+            raise Stop
+
+        def __exit__(self, *a):
+            return False
+    monkeypatch.setattr(drift, "duckdb", type("M", (), {"connect": staticmethod(lambda p, read_only=True: Conn(p, read_only))}))
+    monkeypatch.setattr(drift, "PanelStore", Store)
+    with pytest.raises(Stop):
+        drift.main(["--db", path, "--out", str(tmp_path / "d.json"), "--auction", str(tmp_path / "a.json")])
