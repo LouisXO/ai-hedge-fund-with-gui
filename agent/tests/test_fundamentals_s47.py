@@ -82,6 +82,23 @@ def test_a_reported_quarter_is_preferred_to_a_derived_one():
     assert F.quarterly_flows(f, "ni", [NI])["ni"].tolist() == [10, 21]
 
 
+def test_four_quarters_add_up_to_the_year_as_reported():
+    # the quarter's own fact (+37) disagrees with nine months less six months (-37): Q4 absorbs it
+    f = facts(year_to_date(1, NI, 2024, [142, 248, 211, 83])
+              + [flow(1, NI, "2024-07-01", "2024-09-30", 37, "10-Q", "2024-11-01")])
+    q = F.quarterly_flows(f, "ni", [NI])
+    assert q["ni"].tolist() == [142, 106, 37, 83 - 142 - 106 - 37]
+    t = F.ttm_flows(f, "ni", [NI]).set_index("period_end")["ni_ttm"]
+    assert t[pd.Timestamp("2024-12-31")] == 83
+
+
+def test_q4_falls_back_to_annual_less_nine_months():
+    # no first quarter on file (the company listed in the spring): only FY - 9M gives the fourth
+    f = facts(year_to_date(1, CFO, 2024, [10, 30, 60, 100])[1:])
+    q = F.quarterly_flows(f, "cfo", [CFO]).set_index("period_end")["cfo"]
+    assert q.to_dict() == {pd.Timestamp("2024-09-30").date(): 30, pd.Timestamp("2024-12-31").date(): 40}
+
+
 def test_a_derived_quarter_waits_for_both_of_its_filings():
     # the 6-month fact is public in August, the Q1 fact it is differenced against only in September
     f = facts(year_to_date(1, CFO, 2024, [10, 30, 60, 100], ["2024-09-15", "2024-08-01", "2024-11-01", "2025-02-20"]))

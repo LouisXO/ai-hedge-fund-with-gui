@@ -124,12 +124,15 @@ def _single_quarters(f: pd.DataFrame) -> pd.DataFrame:
     pair = pair[(pair["period_end"] - pair["period_end_prev"]).dt.days.between(*QUARTER)]
     diff = pd.DataFrame({"cik": pair["cik"], "period_end": pair["period_end"],
                          "filed": pair[["filed", "filed_prev"]].max(axis=1), "val": pair["val"] - pair["val_prev"],
-                         "q_start": pair["period_end_prev"] + pd.Timedelta(days=1), "_how": 1})
-    sq = pd.concat([direct, diff[cols]], ignore_index=True)
+                         "q_start": pair["period_end_prev"] + pd.Timedelta(days=1),
+                         "_how": np.where(pair["days"] >= YEAR[0], 3, 1)})[cols]
+    sq = pd.concat([direct, diff[diff["_how"] == 1]], ignore_index=True)
     sq = sq.sort_values(["filed", "_how"], kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
-    # no nine-month fact: Q4 = annual - the three quarters inside that fiscal year (all must already be known)
-    a = _annual(f).merge(sq[["cik", "period_end"]], on=["cik", "period_end"], how="left", indicator=True)
-    a = a[a["_merge"] == "left_only"].drop(columns="_merge")
+    # Q4 = annual - the three quarters inside that fiscal year (all must already be known), so that the four
+    # add up to the year as reported even when a quarter's own fact disagrees with the year-to-date
+    # ones (UHAL 2025-12: +$37.0M for the quarter, nine months less six months is -$37.0M).
+    # Annual - nine months only when the three are not all there.
+    a = _annual(f)
     inside = a.merge(sq, on="cik", suffixes=("", "_q"))
     inside = inside[(inside["period_end_q"] > inside["period_start"]) & (inside["period_end_q"] < inside["period_end"])]
     three = inside.groupby(["cik", "period_end"], as_index=False).agg(
@@ -137,7 +140,8 @@ def _single_quarters(f: pd.DataFrame) -> pd.DataFrame:
     a = a.merge(three[three["n"] == 3], on=["cik", "period_end"])
     q4 = pd.DataFrame({"cik": a["cik"], "period_end": a["period_end"], "filed": a[["filed", "filed_q"]].max(axis=1),
                        "val": a["val"] - a["val_q"], "q_start": a["last"] + pd.Timedelta(days=1), "_how": 2})
-    sq = pd.concat([sq, q4[cols]], ignore_index=True)
+    sq = pd.concat([sq, q4[cols], diff[diff["_how"] == 3]], ignore_index=True)
+    sq = sq.sort_values(["filed", "_how"], kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
     return sq.sort_values(["cik", "period_end"]).drop(columns="_how").reset_index(drop=True)
 
 
