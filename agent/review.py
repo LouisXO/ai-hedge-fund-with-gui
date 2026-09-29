@@ -51,10 +51,12 @@ SITE = "https://optradar.tail5b470b.ts.net"
 LESSONS = os.path.join(OUT_DIR, "lessons.jsonl")
 OPT_CODE = re.compile(r"^US\.([A-Z.]+?)(\d{6})([CP])(\d+)$")
 BIG_SIGMA, BIG_ABS, SD_WIN, VETO_WIN = 3.0, 5.0, 60, 5
-# One lot's day loss that needs a look: the 1st percentile of one-day returns in the tradable pond
-# (panel.db bars 2016-01 to 2026-09, close >= $2, dollar volume >= $1M, 8.4M stock-days: -9.31%;
-# computed 2026-09-29, S48). A descriptive tail of the names the books hold, not a backtest statistic.
-LOT_DAY_TAIL_PCT = -9.3
+# One lot's day loss that needs a look (a data error, an offering, a fraud): -20%. The 1st percentile of
+# one-day returns in the tradable pond (panel.db bars 2016-01 to 2026-09, close >= $2, dollar volume >= $1M,
+# 8.4M stock-days: -9.31%; computed 2026-09-29, S48) fires on most days with ~42 lots (4 of the first 6),
+# so a needs-action line would be noise; moves between the two stay in paper_big_move (info).
+LOT_DAY_TAIL_PCT = -20.0
+MISSED_STATUS = {"open": "持有中", "closed": "已结束", "no data": "无数据", "retried_filled": "已重试成交"}   # auction_basis.json keys
 # Rule classes (S48, loop #7): only "action" and "real" go into lessons.jsonl.
 #   action  something to fix or check today (rejected order, lots vs broker mismatch, market entry, tail loss)
 #   sim     known simulator behaviour already explained (S27 fill after the open, S36 unfilled limits): counted
@@ -315,7 +317,7 @@ def paper_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float
         flag("paper_reconcile", f"账本对券商持仓不一致 {len(rec)} 条:" + ";".join(str(m) for m in rec[:3]), "action")
     tail = [p for p in out["positions"] if p["day_ret"] is not None and p["day_ret"] <= LOT_DAY_TAIL_PCT]
     if tail:
-        flag("paper_lot_tail", f"单个持仓当日跌幅超过股票池 1% 分位({LOT_DAY_TAIL_PCT:.1f}%):"
+        flag("paper_lot_tail", f"单个持仓当日跌幅超过 {-LOT_DAY_TAIL_PCT:.0f}%:"
              + ", ".join(f"{p['book']} {p['ticker']} {p['day_ret']:+.1f}%" + ("(有新闻)" if p["news"] else "(无新闻)") for p in tail), "action")
     mkt_in = [o for o in out["orders"] if any(t.startswith("入场用了市价单") for t in o["tags"])]
     if mkt_in:
@@ -693,7 +695,7 @@ def record_lessons(day: dt.date, flags: list[dict]) -> dict[str, int]:
     return counts
 
 
-RULE_NAMES = {"paper_rejected": "模拟盘订单被拒", "paper_reconcile": "账本对券商持仓不一致", "paper_lot_tail": "单个持仓当日跌幅超过股票池 1% 分位",
+RULE_NAMES = {"paper_rejected": "模拟盘订单被拒", "paper_reconcile": "账本对券商持仓不一致", "paper_lot_tail": "单个持仓单日跌幅超过 20%",
               "paper_unfilled": "模拟盘未成交", "paper_exec_gap": "执行偏差 > 0.5%", "paper_insider_limit": "内部人限价入场(旧规则,2026-09-28 作废)", "paper_market_entry": "市价入场", "paper_big_move": "持仓大动",
               "real_overtrading": "实盘当日 ≥ 5 笔", "real_buy_after_jump": "实盘大动后追买(S25)", "real_short_dte": "实盘买临期期权", "real_0dte": "实盘买当日到期期权",
               "real_otm_lottery": "实盘买深虚值", "real_buy_high": "实盘买在日高附近", "real_sell_low": "实盘卖在日低附近",
@@ -733,7 +735,7 @@ def auction_block(rep: dict) -> str:
     gap = f"成交价平均比开盘竞价价贵 {f['mean_gap_pct']:+.2f}%/边(中位 {f['median_gap_pct']:+.2f}%,{f['with_cross']} 笔)。" if f.get("mean_gap_pct") is not None else ""
     ms = a.get("missed", [])
     mrows = "".join(f"<tr><td><b>{esc(m['ticker'])}</b></td><td>{esc(m['entry_day'])}</td><td>{'—' if m['entry_cross'] is None else format(m['entry_cross'], '.2f')}</td>"
-                    f"<td>{esc(m['exit_day'] or '—')}</td><td>{esc(m['status'])}</td><td>{pct(m['ret_pct'] if m['ret_pct'] is not None else m.get('mark_pct'))}</td></tr>" for m in ms)
+                    f"<td>{esc(m['exit_day'] or '—')}</td><td>{esc(MISSED_STATUS.get(m['status'], m['status']))}</td><td>{pct(m['ret_pct'] if m['ret_pct'] is not None else m.get('mark_pct'))}</td></tr>" for m in ms)
     sm = a.get("missed_summary", {})
     return (f"<p class='muted'>模拟器按开盘后的卖一成交;真实账户的开盘单按开盘竞价价成交(S27b)。竞价口径 = 每笔成交按当天开盘竞价价重新记账。{gap}"
             "评估点按竞价口径判断,模拟器口径作为保守下限。</p>"

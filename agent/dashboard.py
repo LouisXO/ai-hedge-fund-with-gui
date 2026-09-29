@@ -35,6 +35,8 @@ VALID = "/Users/louis/hedge-fund/site-data/validation"
 EVAL_JSON = os.path.join(AGENT_OUT, "evaluate.json")
 BOOK_LABEL = {"long": "长线综合因子", "insider": "内部人短线", "core": "SPY 核心仓"}
 RULE_NAMES = {"paper_unfilled": "模拟盘未成交", "paper_exec_gap": "执行偏差 > 0.5%", "paper_insider_limit": "内部人限价入场",
+              "paper_rejected": "模拟盘订单被拒", "paper_reconcile": "账本对券商持仓不一致", "paper_lot_tail": "单个持仓单日跌幅超过 20%",
+              "paper_market_entry": "市价入场",
               "real_overtrading": "实盘当日 ≥ 5 笔", "real_buy_after_jump": "大动后追买", "real_short_dte": "买临期期权", "real_0dte": "买当日到期期权",
               "real_otm_lottery": "买深虚值", "real_buy_high": "买在日高附近", "real_sell_low": "卖在日低附近", "real_vs_insiders": "逆内部人买入",
               "real_add_same_day": "同一合约当日加仓"}
