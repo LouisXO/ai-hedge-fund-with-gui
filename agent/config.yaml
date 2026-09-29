@@ -12,3 +12,7 @@ evaluate_at:
     n_closed_lots: 200        # the backtest's per-trade sd is ~8%; 200 trades give a 1.1% standard error on the mean
     or_date: 2027-06-30
   metric: "alpha2 (SPY + size) of the paper NAV vs the same-window backtest; execution gap = mean fill vs model open"
+
+# S47 (2026-09-29): the data correction took effect with the 2026-09-29 list (first fills at the 09-30 open).
+# Evaluation counts only lots whose entry order's as_of is on or after this date (read by agent/brief.py).
+evaluate_from: 2026-09-29

@@ -13,7 +13,7 @@ strategy: (1) an implementation error, (2) execution, (3) the rules not working.
   fills       share of the last 5 sessions' orders that filled
   exec gap    mean fill vs opening cross, against the 0.6%/side the simulator basis assumes
   week        the book's last 5-session return inside the backtest's distribution of 5-session
-              returns (site-data/validation/s44_nav.csv); outside the central 95% is flagged —
+              returns (site-data/validation/s47_base_nav.csv); outside the central 95% is flagged —
               which by construction happens one week in twenty, so it is a note, not an alarm
 
 Output: out/agent/drift.json, shown by agent.health. Usage: python -m agent.drift
@@ -36,7 +36,7 @@ from hedge_fund.features.panel import PanelStore
 
 DB = "/Users/louis/optradar/optradar.db"
 OUT = "/Users/louis/optradar/out/agent/drift.json"
-NAV_REF = "/Users/louis/hedge-fund/site-data/validation/s44_nav.csv"
+NAV_REF = "/Users/louis/hedge-fund/site-data/validation/s47_base_nav.csv"   # the long book restated on the corrected data (S47)
 PAPER_START = "2026-09-21"           # the first traded list; fills at the 09-22 open
 CAPITAL = 60_000.0
 

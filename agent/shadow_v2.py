@@ -35,7 +35,7 @@ from hedge_fund.validation.stats import newey_west_t
 
 DB = "/Users/louis/optradar/optradar.db"
 OUT = "/Users/louis/optradar/out/agent/shadow_v2.json"
-START = "2026-09-25"          # the first list; first fills at the 2026-09-28 open
+START = "2026-09-29"          # restarted with the S47 data correction (was 2026-09-25); first fills at the 2026-09-30 open
 CAPITAL = 60_000.0
 NAMES = {"v1c": "v1 对照", "floor2": "+ $2 下限", "jump5": "+ 5 日大动不进", "cap20": "+ 行业上限 20%", "clusters": "两簇", "bundle": "v2 规则包"}
 
