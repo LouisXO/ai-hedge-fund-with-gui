@@ -251,7 +251,9 @@ def paper_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float
     orders = con.execute("""SELECT book, ticker, side, qty, order_type, tif, limit_price, ref_close, reason, status, filled_qty,
                                    filled_avg_px, filled_at, model_px FROM agent_orders
                             WHERE dry_run = FALSE AND (as_of = ? OR CAST(filled_at AS DATE) = ?) ORDER BY book, side, ticker""", [prev, day]).fetchall()
-    lots = con.execute("SELECT book, ticker, qty, entry_day, entry_px, entry_model_px, hold_until FROM agent_lots WHERE status = 'open'").fetchall()
+    # the lots held at the day's close (same as status = 'open' today; a rerun of an earlier day sees that day's holdings)
+    lots = con.execute("""SELECT book, ticker, qty, entry_day, entry_px, entry_model_px, hold_until FROM agent_lots
+                          WHERE entry_day <= ? AND (status = 'open' OR exit_day > ?)""", [day, day]).fetchall()
     tickers = sorted({o[1] for o in orders} | {l[1] for l in lots})
     hist = bars(store, tickers, day - dt.timedelta(days=120), day)
     spy = store.index_series("SPY", "adj_close")
