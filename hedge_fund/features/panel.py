@@ -14,6 +14,8 @@ members on day D are those listed on the latest eff_date <= D.
 """
 from __future__ import annotations
 
+import sys
+import time
 from pathlib import Path
 
 import duckdb
@@ -81,12 +83,40 @@ DDL = [
 BAR_COLS = ["open", "high", "low", "close", "adj_close", "volume"]
 
 
+# DuckDB allows one writing process per file, and while it writes no other process can open the file at
+# all, read-only included. Every job opens panel.db through PanelStore, so a job that finds it locked
+# waits for the other one (as agent/ledger.connect does for optradar.db) instead of failing the step.
+LOCK_WAIT_S = 300.0                 # the trading jobs can afford 5 minutes; a longer hold is a bug to fix
+LOCK_STEP_S = 10.0
+
+
+def connect_with_retry(path: Path | str, read_only: bool = False, wait: float = LOCK_WAIT_S,
+                       step: float = LOCK_STEP_S):
+    """duckdb.connect that retries a lock conflict every `step` seconds for up to `wait` seconds.
+
+    Each wait is printed to stderr (the job logs keep it next to the step that waited). Any other
+    error, or a lock still held after `wait`, raises as before.
+    """
+    waited = 0.0
+    while True:
+        try:
+            return duckdb.connect(str(path), read_only=read_only)
+        except duckdb.IOException as exc:
+            if "lock" not in str(exc).lower() or waited >= wait:
+                raise
+            print(f"panel: {Path(path).name} is locked by another process; waiting {step:.0f} s "
+                  f"({waited:.0f} of {wait:.0f} s so far): {str(exc)[:200]}", file=sys.stderr, flush=True)
+            time.sleep(step)
+            waited += step
+
+
 class PanelStore:
-    def __init__(self, path: Path | str = PANEL_DB, read_only: bool = False) -> None:
+    def __init__(self, path: Path | str = PANEL_DB, read_only: bool = False,
+                 lock_wait: float = LOCK_WAIT_S, lock_step: float = LOCK_STEP_S) -> None:
         self.path = Path(path)
         if not read_only:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.con = duckdb.connect(str(self.path), read_only=read_only)
+        self.con = connect_with_retry(self.path, read_only=read_only, wait=lock_wait, step=lock_step)
         if not read_only:
             for stmt in DDL:
                 self.con.execute(stmt)
