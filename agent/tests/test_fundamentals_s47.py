@@ -1,14 +1,19 @@
 """S47 data corrections: share counts, entity mapping, parent equity, year-to-date flows. Temp DuckDB, no network."""
+import duckdb
 import numpy as np
 import pandas as pd
 import pytest
 
 from agent.books import fundamentals as F
+from agent.books.data import fundamentals as read_fundamentals
+from agent.books.factors import latest_before
 from agent.sources.sec_xbrl import DDL as XBRL_DDL
 from hedge_fund.features.panel import PanelStore
 
 CFO, NI, EQ = "NetCashProvidedByUsedInOperatingActivities", "NetIncomeLoss", "StockholdersEquity"
 EQ_NCI = "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
+MI, RNCI, PL = "MinorityInterest", "RedeemableNoncontrollingInterestEquityCarryingAmount", "ProfitLoss"
+REV, RFC = "Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"
 DEI, BS, WD = "EntityCommonStockSharesOutstanding", "CommonStockSharesOutstanding", "WeightedAverageNumberOfDilutedSharesOutstanding"
 
 
@@ -166,10 +171,62 @@ def test_period_that_ends_after_its_filing_is_ignored(store):
     assert set(df["filed"]) == {pd.Timestamp("2026-08-05")} and df["shares"].tolist() == [5.4e6]
 
 
-def test_annual_value_is_not_the_ttm_when_the_year_has_quarters():
+def test_first_10k_is_the_ttm():
+    # listed mid-year: one 10-Q, then the first 10-K; last year's quarters were never filed (S47 补充 6)
     rows = [flow(1, NI, "2024-01-01", "2024-03-31", 10, "10-Q", "2024-05-01"),
             flow(1, NI, "2024-01-01", "2024-12-31", 100, "10-K", "2025-02-20")]
+    t = F.ttm_flows(facts(rows), "ni", [NI])
+    assert t[["period_end", "filed", "ni_ttm"]].values.tolist() == [[pd.Timestamp("2024-12-31"), pd.Timestamp("2025-02-20"), 100]]
+
+
+def test_broken_chain_takes_the_year_plus_this_year_to_date_less_last_years():
+    # VSNT: a new 10-Q filer. Fiscal 2025 from the 10-K; 2025's quarters exist only as comparatives of 2026.
+    rows = [flow(1, NI, "2025-01-01", "2025-12-31", 930, "10-K", "2026-02-20"),
+            flow(1, NI, "2026-01-01", "2026-03-31", 200, "10-Q", "2026-05-01"),
+            flow(1, NI, "2025-01-01", "2025-03-31", 250, "10-Q", "2026-05-01"),
+            flow(1, NI, "2026-01-01", "2026-06-30", 497, "10-Q", "2026-08-01"),
+            flow(1, NI, "2025-01-01", "2025-06-30", 669, "10-Q", "2026-08-01")]
+    t = F.ttm_flows(facts(rows), "ni", [NI]).set_index("period_end")
+    assert t.loc[pd.Timestamp("2026-03-31"), "ni_ttm"] == 930 + 200 - 250
+    assert t.loc[pd.Timestamp("2026-06-30"), "ni_ttm"] == 930 + 497 - 669            # was: 930, two quarters behind
+    assert t.loc[pd.Timestamp("2026-06-30"), "filed"] == pd.Timestamp("2026-08-01")
+    # not a year to date: a quarter that starts mid-year is not bridged
+    assert F.ttm_flows(facts(rows[:1] + [flow(1, NI, "2026-04-01", "2026-06-30", 297, "10-Q", "2026-08-01"),
+                                         flow(1, NI, "2025-04-01", "2025-06-30", 419, "10-Q", "2026-08-01")]),
+                       "ni", [NI])["period_end"].tolist() == [pd.Timestamp("2025-12-31")]
+
+
+def test_quarters_that_span_more_than_a_year_are_not_a_ttm():
+    # four chained 16-week quarters are 448 days: not a year
+    ends = ["2025-04-23", "2025-08-13", "2025-12-03", "2026-03-25"]
+    starts = ["2025-01-01", "2025-04-24", "2025-08-14", "2025-12-04"]
+    rows = [flow(1, NI, s, e, 10, "10-Q", "2026-05-01") for s, e in zip(starts, ends)]
+    assert F.quarterly_flows(facts(rows), "ni", [NI])["ni"].tolist() == [10, 10, 10, 10]
     assert F.ttm_flows(facts(rows), "ni", [NI]).empty
+
+
+def test_a_10k_quarter_that_equals_the_year_is_the_year():
+    # TSCO: the 10-K tags the fourth quarter's dates on the year's $1,096M
+    rows = [flow(1, NI, "2024-12-29", "2025-03-29", 180, "10-Q", "2025-04-24"),
+            flow(1, NI, "2025-03-30", "2025-06-28", 303, "10-Q", "2025-07-24"),
+            flow(1, NI, "2025-06-29", "2025-09-27", 264, "10-Q", "2025-10-23"),
+            flow(1, NI, "2025-09-28", "2025-12-27", 1096, "10-K", "2026-02-19"),
+            flow(1, NI, "2024-12-29", "2025-12-27", 1096, "10-K", "2026-02-19")]
+    q = F.quarterly_flows(facts(rows), "ni", [NI])
+    assert q["ni"].tolist() == [180, 303, 264, 1096 - 180 - 303 - 264]
+    t = F.ttm_flows(facts(rows), "ni", [NI]).set_index("period_end")["ni_ttm"]
+    assert t[pd.Timestamp("2025-12-27")] == 1096                                      # was 1096 + 180 + 303 + 264
+    # in a 10-Q the same coincidence is a real quarter
+    rows[3] = flow(1, NI, "2025-09-28", "2025-12-27", 1096, "10-Q", "2026-02-19")
+    assert F.quarterly_flows(facts(rows), "ni", [NI])["ni"].tolist()[-1] == 1096
+
+
+def test_zero_in_the_preferred_revenue_tag_does_not_hide_the_other():
+    # FLS: Revenues = 0 next to RevenueFromContract... = 4,729 in the same 10-K
+    rows = [flow(1, REV, "2025-01-01", "2025-12-31", 0, "10-K", "2026-02-20"),
+            flow(1, RFC, "2025-01-01", "2025-12-31", 4729, "10-K", "2026-02-20")]
+    assert F.ttm_flows(facts(rows), "rev", [REV, RFC])["rev_ttm"].tolist() == [4729]
+    assert F.ttm_flows(facts(rows[:1]), "rev", [REV, RFC])["rev_ttm"].tolist() == [0]    # a zero alone stands
 
 
 # -- build: shares -----------------------------------------------------------
@@ -240,14 +297,93 @@ def test_newer_of_the_two_instant_counts_is_used(store):
     assert r["shares"] == 110e6 and r["shares_asof"] == pd.Timestamp("2025-06-30")
 
 
+def test_counts_of_an_earlier_period_are_not_compared(store):
+    # NVDA's 10:1 split: the 10-K balance sheet is pre-split, the next 10-Q is post-split on both counts
+    rows = [instant(1, BS, "2024-01-28", 2.464e9, "10-K", "2024-02-21"),
+            instant(1, DEI, "2024-08-23", 24.53e9, "10-Q", "2024-08-28"),
+            flow(1, WD, "2024-04-29", "2024-07-28", 24.85e9, "10-Q", "2024-08-28")]
+    load(store, rows, [("SPLIT", 1, "2024q3", 5)])
+    r = row(F.build(store), "SPLIT", "2024-08-28")
+    assert r["shares"] == 24.53e9 and r["shares_flag"] == ""                  # was: missing, "mismatch"
+
+
+def test_a_single_count_of_the_period_is_used_and_listed_when_an_older_one_disagrees(store):
+    # MCHB: the cover-page count is from before the merger, 330 days old; the 10-Q's weighted count is current
+    rows = [instant(1, DEI, "2025-09-15", 18.9e6, "10-K", "2025-09-20"),
+            flow(1, WD, "2026-04-01", "2026-06-30", 222.45e6, "10-Q", "2026-08-11"),
+            instant(1, "Assets", "2026-06-30", 4e9, "10-Q", "2026-08-11")]
+    load(store, rows, [("MCHB", 1, "2026q3", 5)])
+    df = F.factor_inputs(store)
+    r = row(df, "MCHB", "2026-08-11")
+    assert r["shares"] == 222.45e6 and r["shares_flag"] == "unconfirmed"
+    assert pd.read_csv(F.review_path(store))["ticker"].tolist() == ["MCHB"]
+
+
+def test_two_counts_that_agree_outvote_the_third(store):
+    rows = [instant(1, DEI, "2026-07-31", 65.9e6, "10-Q", "2026-08-07"),               # HG: one class on the cover page
+            instant(1, BS, "2026-06-30", 98.6e6, "10-Q", "2026-08-07"),
+            flow(1, WD, "2026-04-01", "2026-06-30", 101.1e6, "10-Q", "2026-08-07"),
+            instant(2, DEI, "2026-07-31", 100e6, "10-Q", "2026-08-07"),                # cover page and weighted agree
+            instant(2, BS, "2026-06-30", 300e6, "10-Q", "2026-08-07"),
+            flow(2, WD, "2026-04-01", "2026-06-30", 102e6, "10-Q", "2026-08-07"),
+            instant(3, DEI, "2026-07-31", 10e6, "10-Q", "2026-08-07"),                 # none agree
+            instant(3, BS, "2026-06-30", 30e6, "10-Q", "2026-08-07"),
+            flow(3, WD, "2026-04-01", "2026-06-30", 90e6, "10-Q", "2026-08-07")]
+    load(store, rows, [("HG", 1, "2026q3", 5), ("TWO", 2, "2026q3", 5), ("NONE", 3, "2026q3", 5)])
+    df = F.build(store).set_index("ticker")
+    assert df.loc["HG", "shares"] == 98.6e6 and df.loc["HG", "shares_flag"] == ""
+    assert df.loc["TWO", "shares"] == 100e6 and df.loc["TWO", "shares_flag"] == ""
+    assert pd.isna(df.loc["NONE", "shares"]) and df.loc["NONE", "shares_flag"] == "mismatch"
+
+
+def test_a_count_of_one_is_not_a_source(store):
+    rows = [instant(1, DEI, "2026-07-31", 1, "10-Q", "2026-08-07"),                    # XBRL noise on the cover page
+            instant(1, BS, "2026-06-30", 50e6, "10-Q", "2026-08-07"),
+            flow(1, WD, "2026-04-01", "2026-06-30", 0, "10-Q", "2026-08-07")]
+    load(store, rows, [("ONE", 1, "2026q3", 5)])
+    r = row(F.build(store), "ONE", "2026-08-07")
+    assert r["shares"] == 50e6 and r["shares_flag"] == "" and pd.isna(r["shares_dei"])
+
+
+def test_foreign_filer_with_an_instant_count_is_scored(store):
+    # S47 补充 7: the ADS ratio is taken as 1 (a known limitation); only weighted-only filers are left out
+    rows = [instant(1, DEI, "2026-03-31", 1.86e9, "20-F", "2026-04-28"),
+            flow(1, WD, "2025-01-01", "2025-12-31", 1.9e9, "20-F", "2026-04-28")]
+    load(store, rows, [("ADR", 1, "2026q2", 5)])
+    r = row(F.build(store), "ADR", "2026-04-28")
+    assert r["shares"] == 1.86e9 and r["shares_flag"] == ""
+
+
 # -- build: equity, entity mapping, visibility -------------------------------
 
-def test_equity_is_the_parents_only(store):
-    rows = [instant(1, EQ_NCI, "2026-03-31", 10.7e9, "10-Q", "2026-05-07"), instant(1, "Assets", "2026-03-31", 19e9, "10-Q", "2026-05-07"),
-            instant(2, EQ_NCI, "2026-03-31", 5e9, "10-Q", "2026-05-07"), instant(2, EQ, "2026-03-31", 4e9, "10-Q", "2026-05-07")]
-    load(store, rows, [("NCI", 1, "2026q2", 5), ("BOTH", 2, "2026q2", 5)])
-    df = F.build(store).set_index("ticker")
-    assert pd.isna(df.loc["NCI", "equity"]) and df.loc["BOTH", "equity"] == 4e9
+def test_equity_is_the_parents(store):
+    d, f = "2026-03-31", "2026-05-07"
+    rows = [instant(1, EQ_NCI, d, 10.7e9, "10-Q", f), instant(1, MI, d, 7.0e9, "10-Q", f), instant(1, RNCI, d, 0.5e9, "10-Q", f),
+            instant(2, EQ_NCI, d, 5e9, "10-Q", f), instant(2, EQ, d, 4e9, "10-Q", f),                    # the parent's is reported
+            instant(3, EQ_NCI, d, 6e9, "10-Q", f),                                                         # no NCI tag: 0
+            instant(4, EQ, "2015-06-30", 58e9, "10-Q", "2015-08-01"), instant(4, EQ_NCI, d, 100e9, "10-Q", f),
+            instant(4, MI, d, 2e9, "10-Q", f),                                                            # UNH: parent tag stale
+            instant(5, EQ_NCI, d, 9e9, "10-Q", f), instant(5, MI, "2025-06-30", 1e9, "10-K", "2025-08-01")]  # NCI of another period
+    load(store, rows, [(t, c, "2026q2", 5) for t, c in (("XIFR", 1), ("BOTH", 2), ("PG", 3), ("UNH", 4), ("OLDNCI", 5))])
+    df = F.build(store)
+    latest = df.sort_values("filed").drop_duplicates("ticker", keep="last").set_index("ticker")["equity"]
+    assert latest.to_dict() == {"XIFR": 3.2e9, "BOTH": 4e9, "PG": 6e9, "UNH": 98e9, "OLDNCI": 9e9}
+    assert row(df, "UNH", "2015-08-01")["equity"] == 58e9
+    assert not set(F.HELPERS) & set(df.columns)
+
+
+def test_net_income_falls_back_to_a_fresh_tag_only(store):
+    rows = [flow(1, NI, "2022-01-01", "2022-12-31", 14.7e6, "20-F", "2023-04-20"),     # EDRY: NetIncomeLoss dropped after 2022
+            flow(1, PL, "2022-01-01", "2022-12-31", 15.0e6, "20-F", "2023-04-20"),
+            flow(1, PL, "2025-01-01", "2025-12-31", -3.1e6, "20-F", "2026-04-20"),
+            flow(2, NI, "2025-01-01", "2025-12-31", 50e6, "10-K", "2026-02-20"),         # both fresh: NetIncomeLoss
+            flow(2, PL, "2025-01-01", "2025-12-31", 55e6, "10-K", "2026-02-20")]
+    load(store, rows, [("EDRY", 1, "2026q2", 5), ("BOTH", 2, "2026q1", 5)])
+    df = F.build(store)
+    assert row(df, "EDRY", "2023-04-20")["ni_ttm"] == 14.7e6
+    assert row(df, "EDRY", "2026-04-20")["ni_ttm"] == -3.1e6                           # not blocked by the 2022 value
+    assert row(df, "BOTH", "2026-02-20")["ni_ttm"] == 50e6
+    assert not [c for c in df.columns if c.startswith("ni_ttm") and c != "ni_ttm"]
 
 
 def test_symbol_stays_with_its_last_owner_when_the_quarter_has_no_record(store):
@@ -307,3 +443,108 @@ def test_top_list_check_names_capped_book_to_market_and_old_share_facts():
     at_cap, old, cap = top_list_suspects(fs, f, day)
     assert at_cap == ["T001"] and old == ["T003"]
     assert 0.5 < cap <= 5.0
+
+
+def test_latest_symbol_is_the_one_with_most_filings(store):
+    # SLNH (15 Form 4s) and its preferred SLNHP (5) in 2026q2; the 2026q3 10-Q has no issuer_seen row yet
+    rows = [instant(1, DEI, "2026-08-10", 244.6e6, "10-Q", "2026-08-13"), instant(1, "Assets", "2026-06-30", 1e9, "10-Q", "2026-08-13")]
+    load(store, rows, [("SLNH", 1, "2026q2", 15), ("SLNHP", 1, "2026q2", 5)])
+    df = F.build(store)
+    assert df["ticker"].tolist() == ["SLNH"]                                        # was SLNHP, the last alphabetically
+
+
+def test_on_a_tie_the_previous_owner_keeps_the_symbol(store):
+    # BH 2022q2: the owner (CIK 9) and a stray CIK (1) with one filing each
+    rows = [instant(9, "Assets", "2022-06-30", 2e9, "10-Q", "2022-08-05"), instant(1, "Assets", "2022-03-31", 1e8, "10-Q", "2022-05-10")]
+    load(store, rows, [("BH", 9, "2022q1", 3), ("BH", 9, "2022q2", 1), ("BH", 1, "2022q2", 1)])
+    df = F.build(store)
+    assert df[["ticker", "cik"]].values.tolist() == [["BH", 9]]
+
+
+def test_symbol_owner_is_carried_for_at_most_four_quarters(store):
+    # NIO: CIK 1 held the symbol in 2015q1; CIK 2 files under it from 2019 with no Form 4 until 2026q1
+    rows = [instant(2, "Assets", "2019-03-31", 5e9, "20-F", "2019-04-02"), instant(2, "Assets", "2025-12-31", 9e9, "20-F", "2026-04-08"),
+            instant(1, "Assets", "2015-03-31", 1e8, "10-Q", "2015-05-10"), instant(1, "Assets", "2015-12-31", 1e8, "10-K", "2016-03-10")]
+    load(store, rows, [("NIO", 1, "2015q1", 2), ("NIO", 2, "2026q1", 4)])
+    df = F.build(store)
+    assert set(df[df["cik"] == 2]["filed"]) == {pd.Timestamp("2019-04-02"), pd.Timestamp("2026-04-08")}   # was: 2026 only
+    assert set(df[df["cik"] == 1]["filed"]) == {pd.Timestamp("2015-05-10"), pd.Timestamp("2016-03-10")}   # within 4 quarters: kept
+
+
+def test_dates_outside_1990_to_the_filing_do_not_stop_the_build(store):
+    load(store, [instant(1, "Assets", "2024-06-30", 2e9, "10-Q", "2024-08-01")], [("A", 1, "2024q3", 5)])
+    for end in ("3024-06-30", "0202-06-30"):                  # beyond datetime64[ns]: the whole build used to fail
+        store.con.execute(f"INSERT INTO xbrl_facts (cik, ns, tag, unit, period_start, period_end, is_instant, val, accn, form, filed) "
+                          f"VALUES (1, 'us-gaap', 'Assets', 'USD', DATE '{end}', DATE '{end}', TRUE, 1e9, 'x{end}', '10-Q', DATE '2024-08-01')")
+    assert F.build(store)["assets"].tolist() == [2e9]
+
+
+# -- factor_inputs: replace, guard, read path -----------------------------------
+
+def two_names():
+    return [instant(1, DEI, "2026-07-31", 50e6, "10-Q", "2026-08-07"), instant(1, EQ, "2026-06-30", 1e9, "10-Q", "2026-08-07"),
+            instant(1, "Assets", "2026-06-30", 3e9, "10-Q", "2026-08-07"),
+            instant(2, DEI, "2026-07-31", 80e6, "10-Q", "2026-08-07"), instant(2, EQ, "2026-06-30", 2e9, "10-Q", "2026-08-07"),
+            instant(2, "Assets", "2026-06-30", 5e9, "10-Q", "2026-08-07")]
+
+
+def test_factor_inputs_refuses_a_table_with_much_less_coverage(store):
+    load(store, two_names(), [("A", 1, "2026q3", 5), ("B", 2, "2026q3", 5)])
+    F.factor_inputs(store)
+    store.con.execute(f"DELETE FROM xbrl_facts WHERE cik = 2 AND tag IN ('{DEI}', '{EQ}')")     # a partial refresh
+    with pytest.raises(RuntimeError, match="not replaced"):
+        F.factor_inputs(store)
+    n = store.con.execute("SELECT count(*) FROM fundamentals_pit WHERE shares IS NOT NULL AND equity IS NOT NULL").fetchone()[0]
+    assert n == 2                                                                         # the old table stands
+    F.factor_inputs(store, force=True)
+    assert store.con.execute("SELECT count(shares), count(equity) FROM fundamentals_pit").fetchone() == (1, 1)
+
+
+class _FailingCreate:
+    """A connection whose table replacement fails (disk full, killed process)."""
+    def __init__(self, con):
+        self._con = con
+
+    def __getattr__(self, k):
+        return getattr(self._con, k)
+
+    def execute(self, sql, *a):
+        if sql.startswith("CREATE OR REPLACE TABLE fundamentals_pit"):
+            raise duckdb.IOException("disk full")
+        return self._con.execute(sql, *a)
+
+
+def test_a_failed_replacement_keeps_the_old_table_and_review_list(store, monkeypatch):
+    load(store, two_names(), [("A", 1, "2026q3", 5), ("B", 2, "2026q3", 5)])
+    F.factor_inputs(store)
+    before = store.con.execute("SELECT * FROM fundamentals_pit").df()
+    F.review_path(store).write_text("was\n")
+    store.con.execute(f"INSERT INTO xbrl_facts (cik, ns, tag, unit, period_start, period_end, is_instant, val, accn, form, filed) "
+                      f"VALUES (3, 'us-gaap', '{BS}', 'shares', DATE '2026-06-30', DATE '2026-06-30', TRUE, 9e6, 'x', '10-Q', DATE '2026-08-07')")
+    monkeypatch.setattr(store, "con", _FailingCreate(store.con))
+    with pytest.raises(duckdb.IOException):
+        F.factor_inputs(store)
+    pd.testing.assert_frame_equal(store.con.execute("SELECT * FROM fundamentals_pit").df(), before)
+    assert F.review_path(store).read_text() == "was\n"                                   # written only after the table
+
+
+def test_rebuild_is_deterministic_and_the_books_can_read_the_table(store):
+    rows = two_names() + year_to_date(1, CFO, 2025, [10, 30, 60, 100]) + [
+        flow(3, WD, "2025-01-01", "2025-12-31", 3.4e8, "20-F", "2026-04-28"), instant(3, "Assets", "2025-12-31", 5e9, "20-F", "2026-04-28")]
+    load(store, rows, [("A", 1, "2026q3", 5), ("B", 2, "2026q3", 5), ("ADR", 3, "2026q2", 5)])
+    first = F.factor_inputs(store)
+    pd.testing.assert_frame_equal(first, F.factor_inputs(store))
+    fund = read_fundamentals(store)
+    assert {"shares_flag", "shares_asof"} <= set(fund.columns)
+    f = latest_before(fund, pd.Timestamp("2026-09-25"))
+    f = f.where(f["equity"] > 0.05 * f["assets"])                                        # what factor_scores does
+    assert f.loc["A", "shares"] == 50e6 and pd.isna(f.loc["ADR", "shares"])
+
+
+def test_override_fills_only_missing_recent_counts(store):
+    fund = pd.DataFrame({"ticker": ["V", "V", "V", "X"], "shares": [np.nan, np.nan, 2.0e9, np.nan],
+                         "filed": pd.to_datetime(["2018-01-30", "2026-07-28", "2026-08-01", "2026-08-01"])})
+    store.con.execute("CREATE TABLE fundamentals_pit AS SELECT * FROM fund")
+    store.con.execute("CREATE TABLE shares_override AS SELECT 'V' AS ticker, 1.88e9 AS shares, DATE '2026-09-22' AS as_of")
+    got = read_fundamentals(store)["shares"].tolist()
+    assert np.isnan(got[0]) and got[1:3] == [1.88e9, 2.0e9] and np.isnan(got[3])      # 2018 stays, XBRL's count stays
