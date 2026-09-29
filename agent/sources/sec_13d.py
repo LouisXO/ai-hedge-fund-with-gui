@@ -29,8 +29,10 @@ import urllib.request
 
 import pandas as pd
 
+from agent.sources.sec_daily_form4 import record_run
 from agent.sources.sec_form4 import user_agent
 from hedge_fund.features.panel import PanelStore
+from hedge_fund.paths import PANEL_DB
 
 EFTS = "https://efts.sec.gov/LATEST/search-index"
 PAGE = 100
@@ -74,12 +76,18 @@ def parse_hit(hit: dict) -> dict | None:
             "filers": "; ".join(filers)[:500]}
 
 
-def search(form: str, start: dt.date, end: dt.date, ua: str) -> list[dict]:
+def search(form: str, start: dt.date, end: dt.date, ua: str, log: dict | None = None) -> list[dict]:
+    """Every hit of one form in [start, end]. log (optional) counts the pages asked for and keeps the ones
+    that could not be fetched: a short list must not be mistaken for a quiet week."""
     out, frm = [], 0
     while True:
         d = _get_json({"q": '"13D"', "forms": form, "dateRange": "custom", "startdt": start.isoformat(),
                        "enddt": end.isoformat(), "from": frm}, ua)
+        if log is not None:
+            log["requests"] = log.get("requests", 0) + 1
         if not d:
+            if log is not None:
+                log.setdefault("errors", []).append(f"{form} {start}..{end} from {frm}: no answer after 4 tries")
             break
         hits = d.get("hits", {}).get("hits", [])
         for h in hits:
@@ -120,11 +128,13 @@ def _upsert(store: PanelStore, rows: list[dict]) -> int:
     return len(df)
 
 
-def load(store: PanelStore, start: dt.date, end: dt.date, quiet: bool = False, workers: int = 4) -> dict:
-    """Quarter windows (under EFTS's 10,000-hit cap), fetched in parallel, inserted per quarter."""
+def load(start: dt.date, end: dt.date, quiet: bool = False, workers: int = 4, path=PANEL_DB) -> dict:
+    """Quarter windows (under EFTS's 10,000-hit cap), fetched in parallel with panel.db closed, then written
+    in one short write connection together with the run's row in fetch_runs (S48: a run used to hold
+    panel.db's write lock for the whole download)."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
+    started = pd.Timestamp.now()
     ua = user_agent()
-    store.con.execute(DDL)
     windows = []
     cur = start
     while cur <= end:
@@ -133,21 +143,31 @@ def load(store: PanelStore, start: dt.date, end: dt.date, quiet: bool = False, w
         cur = nxt + dt.timedelta(days=1)
 
     def one(w):
-        rows = []
+        rows, log = [], {"requests": 0, "errors": []}
         for form in FORMS:
-            rows += search(form, w[0], w[1], ua)
-        return w, rows
+            rows += search(form, w[0], w[1], ua, log)
+        return w, rows, log
 
-    stats = {"rows": 0, "initial": 0, "with_ticker": 0}
+    rows_all, n_requests, errors = [], 0, []
     with ThreadPoolExecutor(max_workers=workers) as ex:
         for fut in as_completed([ex.submit(one, w) for w in windows]):
-            w, rows = fut.result()
-            n = _upsert(store, rows)
-            stats["rows"] += n
-            stats["initial"] += sum(1 for r in rows if not r["is_amendment"])
+            w, rows, log = fut.result()
+            rows_all += rows
+            n_requests += log["requests"]
+            errors += log["errors"]
             if not quiet:
-                print(f"  {w[0]} → {w[1]}: {n} rows", flush=True)
-    stats["with_ticker"] = store.con.execute("SELECT count(*) FROM sch13d WHERE ticker IS NOT NULL AND NOT is_amendment").fetchone()[0]
+                print(f"  {w[0]} → {w[1]}: {len(rows)} rows fetched", flush=True)
+    status = "failed" if errors else "ok"
+    stats = {"rows": 0, "initial": sum(1 for r in rows_all if not r["is_amendment"]), "with_ticker": 0,
+             "status": status, "reason": "; ".join(errors[:3])[:500] or None}
+    with PanelStore(path) as store:
+        store.con.execute(DDL)
+        stats["rows"] = _upsert(store, rows_all)
+        stats["with_ticker"] = store.con.execute(
+            "SELECT count(*) FROM sch13d WHERE ticker IS NOT NULL AND NOT is_amendment").fetchone()[0]
+        record_run(store.con, {"source": "sch13d", "started_at": started, "finished_at": pd.Timestamp.now(),
+                               "status": status, "n_requests": n_requests, "n_failed": len(errors),
+                               "n_items": len(rows_all), "n_rows": stats["rows"], "reason": stats["reason"]})
     return stats
 
 
@@ -159,9 +179,9 @@ def main() -> int:
     args = ap.parse_args()
     today = dt.date.today()
     start = dt.date.fromisoformat(args.start) if args.cmd == "backfill" else today - dt.timedelta(days=args.days)
-    with PanelStore() as store:
-        print(load(store, start, today, quiet=args.cmd == "update"))
-    return 0
+    stats = load(start, today, quiet=args.cmd == "update")
+    print(stats)
+    return 1 if stats["status"] == "failed" else 0
 
 
 if __name__ == "__main__":

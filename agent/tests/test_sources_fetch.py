@@ -135,3 +135,61 @@ def test_main_prints_a_start_marker_and_exits_1_on_a_failed_run(panel, monkeypat
     assert f4.main() == 1
     out = capsys.readouterr().out.splitlines()
     assert out[0].startswith("=== form4 realtime ") and out[0].endswith(" ===")
+
+
+# ---- sec_13d and av_news: same shape (fetch with panel.db closed, write once, one fetch_runs row) ----
+
+from agent.sources import av_news, sec_13d                                # noqa: E402
+
+
+def hit13d(acc, name="ACME CORP  (ACME)  (CIK 0000005555)"):
+    return {"_id": f"{acc}:d.xml", "_source": {"display_names": [name, "Fund LP  (CIK 0000009999)"],
+                                               "form": "SCHEDULE 13D", "file_date": "2026-09-28"}}
+
+
+def test_13d_update_fetches_with_panel_closed_and_logs_a_failed_page(panel, monkeypatch):
+    monkeypatch.setattr(sec_13d, "PanelStore", Tracked)
+    monkeypatch.setattr(sec_13d, "user_agent", lambda: "test")
+    monkeypatch.setattr(sec_13d, "PAUSE", 0)
+    down = set()
+
+    def fake_get(params, ua):
+        assert Tracked.open == 0, "panel.db connection held during a download"
+        if params["forms"] in down:
+            return None
+        hits = [hit13d("0000009999-26-000001")] if params["forms"] == "SCHEDULE 13D" else []
+        return {"hits": {"hits": hits, "total": {"value": len(hits)}}}
+
+    monkeypatch.setattr(sec_13d, "_get_json", fake_get)
+    st = sec_13d.load(dt.date(2026, 9, 24), TODAY, quiet=True, path=panel)
+    assert st["status"] == "ok" and st["rows"] == 1 and st["initial"] == 1
+    down.add("SC 13D")
+    st = sec_13d.load(dt.date(2026, 9, 24), TODAY, quiet=True, path=panel)
+    assert st["status"] == "failed" and "SC 13D" in st["reason"] and st["rows"] == 1     # what came back is kept
+    assert [(r[0], r[1], r[2], r[3]) for r in runs(panel)] == [("sch13d", "ok", 2, 0), ("sch13d", "failed", 2, 1)]
+    with PanelStore(panel, read_only=True) as s:
+        assert s.con.execute("SELECT ticker, subject_cik FROM sch13d").fetchall() == [("ACME", "0000005555")]
+
+
+def test_av_news_fetches_with_panel_closed_and_logs_an_error(panel, monkeypatch, tmp_path):
+    monkeypatch.setattr(av_news, "PanelStore", Tracked)
+    monkeypatch.setattr(av_news, "QUOTA_PATH", tmp_path / "av_quota.json")
+    art = {"url": "https://x/1", "time_published": "20260929T100000", "overall_sentiment_score": 0.2,
+           "source_domain": "x", "ticker_sentiment": [{"ticker": "AAPL", "relevance_score": "0.5",
+                                                       "ticker_sentiment_score": "0.3"}]}
+
+    def ok(frm, to):
+        assert Tracked.open == 0, "panel.db connection held during a download"
+        return {"feed": [art]}
+
+    st = av_news.crawl(hours=24, max_calls=2, path=panel, fetch_fn=ok)
+    assert st["status"] == "ok" and st["rows"] == 1 and st["articles"] == 1
+
+    def throttled(frm, to):
+        raise RuntimeError("{'Information': 'rate limit'}")
+
+    st = av_news.crawl(hours=24, max_calls=2, path=panel, fetch_fn=throttled)
+    assert st["status"] == "failed" and "rate limit" in st["reason"]
+    assert [(r[0], r[1], r[4], r[5]) for r in runs(panel)] == [("av_news", "ok", 1, 1), ("av_news", "failed", 0, 0)]
+    with PanelStore(panel, read_only=True) as s:
+        assert s.con.execute("SELECT n_articles, n_rows FROM news_fetch_log").fetchall() == [(1, 1)]

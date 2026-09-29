@@ -22,6 +22,7 @@ import datetime as dt
 import json
 import os
 import ssl
+import time
 import urllib.parse
 import urllib.request
 
@@ -33,8 +34,9 @@ try:
 except Exception:                                    # system CAs are fine on Homebrew python
     _CTX = None
 
+from agent.sources.sec_daily_form4 import record_run
 from hedge_fund.features.panel import PanelStore
-from hedge_fund.paths import AGENT_DIR
+from hedge_fund.paths import AGENT_DIR, PANEL_DB
 
 ENV_PATH = "/Users/louis/optradar/.env"
 QUOTA_PATH = AGENT_DIR / "av_quota.json"
@@ -103,28 +105,50 @@ def rows_from(feed: list[dict], universe: set[str]) -> list[dict]:
     return out
 
 
-def crawl(store: PanelStore, hours: int = 24, max_calls: int = 2) -> dict:
+def crawl(hours: int = 24, max_calls: int = 2, path=PANEL_DB, fetch_fn=None) -> dict:
+    """Members over a short read-only connection, the calls with panel.db closed, then one write of the
+    rows, the window log and the run's row in fetch_runs (S48: the write lock was held across the calls)."""
+    fetch_fn = fetch_fn or fetch
+    started = pd.Timestamp.now()
     left = min(budget_left(), max_calls)
     if left <= 0:
-        return {"skipped": "no AV quota left today", "used_today": _quota()["used"]}
-    members = {t for _, m in store.membership_changes() for t in m}
+        out = {"skipped": "no AV quota left today", "used_today": _quota()["used"], "status": "skipped"}
+        with PanelStore(path) as store:
+            record_run(store.con, {"source": "av_news", "started_at": started, "finished_at": pd.Timestamp.now(),
+                                   "status": "skipped", "n_requests": 0, "n_failed": 0, "n_items": 0, "n_rows": 0,
+                                   "reason": out["skipped"]})
+        return out
+    with PanelStore(path, read_only=True) as store:
+        members = {t for _, m in store.membership_changes() for t in m}
     to = dt.datetime.now()
     frm = to - dt.timedelta(hours=hours)
-    total_rows, articles, truncated = 0, 0, False
+    frames, windows, articles, truncated, n_calls, error = [], [], 0, False, 0, None
     for _ in range(left):
-        body = fetch(frm, to)
+        n_calls += 1
+        try:
+            body = fetch_fn(frm, to)
+        except Exception as exc:                  # an HTTP error, a throttle note instead of a feed, a bad answer
+            error = f"{type(exc).__name__}: {str(exc)[:300]}"
+            break
         feed = body["feed"]
         articles += len(feed)
         truncated = len(feed) >= 1000
-        total_rows += store.insert("news_sentiment", pd.DataFrame(rows_from(feed, members)))
-        store.insert("news_fetch_log", pd.DataFrame([{"window_from": frm, "window_to": to,
-                                                      "n_articles": len(feed), "n_rows": total_rows,
-                                                      "truncated": truncated, "fetched_at": pd.Timestamp.now()}]))
+        frames.append(pd.DataFrame(rows_from(feed, members)))
+        windows.append({"window_from": frm, "window_to": to, "n_articles": len(feed),
+                        "n_rows": sum(len(f) for f in frames), "truncated": truncated,
+                        "fetched_at": pd.Timestamp.now()})
         if not truncated:
             break
         to = pd.to_datetime(feed[-1]["time_published"], format="%Y%m%dT%H%M%S").to_pydatetime()
+    status = "failed" if error else "ok"
+    with PanelStore(path) as store:
+        total_rows = sum(store.insert("news_sentiment", f) for f in frames)
+        store.insert("news_fetch_log", pd.DataFrame(windows))
+        record_run(store.con, {"source": "av_news", "started_at": started, "finished_at": pd.Timestamp.now(),
+                               "status": status, "n_requests": n_calls, "n_failed": int(error is not None),
+                               "n_items": articles, "n_rows": total_rows, "reason": error})
     return {"articles": articles, "rows": total_rows, "truncated": truncated,
-            "quota_used_today": _quota()["used"]}
+            "quota_used_today": _quota()["used"], "status": status, "reason": error}
 
 
 def main() -> int:
@@ -132,8 +156,13 @@ def main() -> int:
     ap.add_argument("--hours", type=int, default=24)
     ap.add_argument("--max-calls", type=int, default=2)
     args = ap.parse_args()
-    with PanelStore() as store:
-        print(crawl(store, args.hours, args.max_calls))
+    # start marker: this job logs to collect.log with no wrapper script; agent.health reads this line
+    print(f"=== news {time.strftime('%a %b %d %H:%M:%S %Z %Y')} ===", flush=True)
+    stats = crawl(args.hours, args.max_calls)
+    print(stats)
+    if stats["status"] == "failed":
+        print(f"news fetch failed: {stats['reason']}")
+        return 1
     return 0
 
 
