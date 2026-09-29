@@ -21,6 +21,11 @@ MAX_TX_USD = 50e6          # a single open-market insider trade above this is a 
 OVERRIDE_DAYS = 120        # a share-count override reaches rows filed up to this many days before its as_of, none earlier or after
 SPLIT_MOVE = 1.4           # adj_close/close moving more than this between a row's filing and the override's as_of: a split between
 OVERRIDE_TABLES = ("shares_override", "shares_override_log")   # the current row per ticker, and every row it ever had
+# Multi-class companies whose moomoo count is only the listed classes while the others carry the same
+# economics (S47b, 2026-09-29): their moomoo rows are ignored here and they are not fetched; XBRL's total stands.
+MOOMOO_KEEP_OURS = {
+    "CWEN": "moomoo 121.2M = listed classes A + C; B and D (held by the sponsor, same economics) make the XBRL total 205.3M",
+}
 
 
 @dataclass
@@ -108,8 +113,13 @@ def share_overrides(store: PanelStore) -> pd.DataFrame:
     shares_override_log (every row agent.sources.moomoo_shares wrote, and the rows it found there). On the
     same (ticker, as_of) the shares_override row wins: a row fixed by hand there is what stands."""
     have = _tables(store)
-    parts = [store.con.execute(f"SELECT ticker, CAST(as_of AS DATE) AS as_of, shares FROM {t}").df()
-             for t in OVERRIDE_TABLES if t in have]
+    keep = ", ".join(f"'{t}'" for t in MOOMOO_KEEP_OURS) or "''"
+
+    def rows(t: str) -> pd.DataFrame:
+        cols = set(store.con.execute("SELECT column_name FROM information_schema.columns WHERE table_name = ?", [t]).df()["column_name"])
+        where = f" WHERE NOT (source = 'moomoo_snapshot' AND ticker IN ({keep}))" if "source" in cols else ""
+        return store.con.execute(f"SELECT ticker, CAST(as_of AS DATE) AS as_of, shares FROM {t}{where}").df()
+    parts = [rows(t) for t in OVERRIDE_TABLES if t in have]
     cols = ["ticker", "as_of", "shares"]
     ov = pd.concat(parts, ignore_index=True)[cols] if parts else pd.DataFrame(columns=cols)
     ov["as_of"] = pd.to_datetime(ov["as_of"]).astype("datetime64[ns]")

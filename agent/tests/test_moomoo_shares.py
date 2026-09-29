@@ -325,3 +325,15 @@ def test_default_targets_add_the_hand_checked_names(store, monkeypatch, tmp_path
     store.con.execute(OV_DDL)
     store.con.execute("INSERT INTO shares_override VALUES ('V', 1.877e9, 'yfinance_current', DATE '2026-09-22', NULL)")
     assert M.default_targets(store) == ["AAPL", "GMRS", "MU", "V"]
+
+
+def test_a_multi_class_name_on_the_keep_list_keeps_our_count_and_is_not_fetched(store):
+    # CWEN 2026-09-29: moomoo counts the listed classes A + C only (121.2M); XBRL's 205.3M is all four
+    fund = pd.DataFrame({"ticker": ["CWEN", "VPG"], "shares": [205267917.0, 13310.0], "shares_flag": ["unconfirmed"] * 2,
+                         "filed": pd.to_datetime(["2026-08-05"] * 2)})
+    store.con.execute("CREATE TABLE fundamentals_pit AS SELECT * FROM fund")
+    M.write_overrides(store, moomoo_rows(dt.date(2026, 9, 29), CWEN=121174960.0, VPG=13320430.0))
+    got = read_fundamentals(store).set_index("ticker")["shares"]
+    assert got["CWEN"] == 205267917.0 and got["VPG"] == 13320430.0          # VPG's thousands-unit count is fixed
+    assert M.select_targets(pd.DataFrame({"ticker": ["CWEN"], "shares_flag": ["unconfirmed"]}),
+                            pd.Series({"CWEN": 5e7}), top=["CWEN", "AAPL"]) == ["AAPL"]

@@ -17,7 +17,8 @@ shares_override_log keeps every (ticker, as_of) row, including the ones shares_o
 (the fundamentals rows take the earliest override after their filing from either table).
 A count here replaces a hand-checked one only on filings after the snapshot. The 1% check only
 catches issued_shares and total_market_val out of step, not a count of one class of a multi-class
-company (ERIE, BRK.B, V): check the printed "> 30%" list before the first write. A disputed count
+company (ERIE, BRK.B, V; CWEN on 2026-09-29, now in agent.books.data.MOOMOO_KEEP_OURS, which drops its
+moomoo rows and its fetch): check the printed "> 30%" list after each run. A disputed count
 is fixed by a manual row with the snapshot's as_of (on the same date shares_override wins over the
 log, and a rerun of the fetch keeps it); nothing here stops the next day's fetch for that name.
 Daily order: after the 16:10 list (the top 60 it fetches is the last bar's) and before the audit,
@@ -151,10 +152,12 @@ def override_rows(snap: pd.DataFrame, xbrl, as_of: dt.date, tol: float = MCAP_TO
 
 
 def select_targets(review: pd.DataFrame, adv: pd.Series, top: Iterable[str], checked: Iterable[str] = ()) -> list[str]:
-    """The review list's flagged names with 20-day dollar volume >= ADV_MIN, plus `top`, plus `checked`."""
+    """The review list's flagged names with 20-day dollar volume >= ADV_MIN, plus `top`, plus `checked`,
+    less the multi-class names whose count we keep (agent.books.data.MOOMOO_KEEP_OURS)."""
+    from agent.books.data import MOOMOO_KEEP_OURS
     flagged = review.loc[review["shares_flag"].fillna("").isin(REVIEW_FLAGS), "ticker"]
     liquid = [t for t in flagged if adv.get(t, 0) >= ADV_MIN]
-    return sorted(set(liquid) | set(top) | set(checked))
+    return sorted((set(liquid) | set(top) | set(checked)) - set(MOOMOO_KEEP_OURS))
 
 
 def hand_checked(store: PanelStore) -> list[str]:
