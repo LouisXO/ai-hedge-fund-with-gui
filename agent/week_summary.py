@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import os
 import sys
 
@@ -28,6 +29,27 @@ import site_theme  # noqa: E402
 OUT = "/Users/louis/optradar/out"
 DB = "/Users/louis/optradar/optradar.db"
 START, END, PREV = "2026-09-21", "2026-09-25", "2026-09-18"
+# The week's orders by their state at the end of END, not today's: filled means filled on or before END; an order
+# for the session after END (as_of = END), or one filled later, was still working on Friday ('pending').
+# A filled order can read 'expired' later, so the fill decides, not the status.
+ORDERS_AS_OF_END = """SELECT book, CASE WHEN coalesce(filled_qty, 0) > 0 AND CAST(filled_at AS DATE) <= CAST(? AS DATE) THEN 'filled'
+                                        WHEN coalesce(filled_qty, 0) > 0 OR as_of >= CAST(? AS DATE) THEN 'pending'
+                                        WHEN status IN ('expired', 'canceled', 'rejected', 'done_for_day', 'replaced') THEN status
+                                        ELSE 'pending' END, count(*)
+                      FROM o.agent_orders WHERE dry_run = FALSE AND as_of <= CAST(? AS DATE) GROUP BY ALL"""
+
+AUCTION = os.path.join(OUT, "agent", "auction_basis.json")
+
+
+def week_gap(path: str, book: str) -> tuple[float | None, int]:
+    """(mean gap to the opening cross in % per side, fills) of `book` on fills up to END, from auction_basis.json."""
+    try:
+        rows = json.load(open(path)).get("fill_rows", [])
+    except Exception:
+        return None, 0
+    g = [r["gap_pct"] for r in rows if r.get("book") == book and r.get("gap_pct") is not None and str(r.get("day")) <= END]
+    return (sum(g) / len(g) if g else None), len(g)
+
 
 EXPERIMENTS = [  # id, question, result, verdict (ok = adopted, no = rejected, wait = deferred)
     ("S33", "负面事件(大跌、增发等)做入场否决", "被否决的名字没有显著跑输;长线「5 日内大动不进」有点用但没过直接检验", "no", "不采用"),
@@ -77,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--date", default="2026-09-26")
     ap.add_argument("--db", default=DB, help="the ledger (a copy, for a test run)")
     ap.add_argument("--out", default=OUT)
+    ap.add_argument("--auction", default=AUCTION, help="auction_basis.json (fill_rows: the gap to the opening cross)")
     args = ap.parse_args(argv)
     end = dt.date.fromisoformat(END)
     con = duckdb.connect(str(AGENT_DIR / "panel.db"), read_only=True)
@@ -85,8 +108,7 @@ def main(argv: list[str] | None = None) -> int:
     lots = con.execute("""SELECT l.ticker, l.qty, l.entry_px, b.close, (b.close / l.entry_px - 1) * 100, l.qty * (b.close - l.entry_px)
                           FROM o.agent_lots l JOIN bars b ON b.ticker = l.ticker AND b.trade_date = ?
                           WHERE l.book = 'long' AND l.status = 'open' ORDER BY 6""", [END]).fetchall()
-    orders = con.execute("""SELECT book, CASE WHEN coalesce(filled_qty, 0) > 0 THEN 'filled' ELSE status END, count(*)
-                            FROM o.agent_orders WHERE as_of <= ? GROUP BY ALL""", [END]).fetchall()   # the week's orders; a filled order can read 'expired' later
+    orders = con.execute(ORDERS_AS_OF_END, [END, END, END]).fetchall()
     real = con.execute("SELECT date, max(total_assets) FROM o.acct_nav WHERE date >= ? AND date <= ? GROUP BY 1 ORDER BY 1", [PREV, END]).fetchall()
     alloc = dict(con.execute("SELECT book, alloc_usd FROM o.agent_books").fetchall())     # S48: not constants
     con.close()
@@ -114,7 +136,10 @@ def main(argv: list[str] | None = None) -> int:
         since = f"{x['base_day']}" if x else "—"
         bench = f"SPY {x['bench']['SPY']:+.2f}% · QQQ {x['bench']['QQQ']:+.2f}%" if x and x["bench"]["SPY"] is not None else "—"
         ex = f"{x['exposure_avg_pct']:.0f}%" if x and x["exposure_avg_pct"] is not None else "—"
-        drag = ("<br><span class='muted'>模拟器按开盘后卖一成交(约 +0.6%/边),这本书 5 个交易日换一次仓:模拟器口径很可能大幅低于竞价口径</span>"
+        mg, ng = week_gap(args.auction, b)
+        drag = (f"<br><span class='muted'>模拟器按开盘后卖一成交(这本书到 {END} 实测 "
+                + ("还没有" if mg is None else f"{mg:+.2f}%/边,{ng} 笔,样本很小")
+                + "),这本书 5 个交易日换一次仓:模拟器口径很可能大幅低于竞价口径</span>"
                 if b == "insider" else "")
         rows += (f"<tr><td>{name[b]}{drag}</td><td class='num'>${alloc[b]:,.0f}</td><td class='num'>{since}</td><td class='num'>${sim:,.0f}</td>"
                  f"<td class='num'>{pct((sim / alloc[b] - 1) * 100)}</td>"
@@ -162,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
 <div><p class='muted'>跌幅最大 5 只</p><div class='tbl'><table>{head}{lot_tbl(worst)}</table></div></div>
 <div><p class='muted'>涨幅最大 5 只</p><div class='tbl'><table>{head}{lot_tbl(best)}</table></div></div>
 </div>
-<p><b>内部人书</b> 共下单 {sum(ins.values())} 张:成交 {ins.get('filled', 0)},未成交过期 {ins.get('expired', 0)},周一待成交 {ins.get('accepted', 0)}。
+<p><b>内部人书</b> 共下单 {sum(ins.values())} 张:成交 {ins.get('filled', 0)},未成交过期 {ins.get('expired', 0)},周一待成交 {ins.get('pending', 0)}(均为 {END} 收盘时的状态)。
 没成交的都是头两天的 OPG 单(S36);改 DAY 单之后 9/25 的两张(GSHD、OFIX)全部成交。<b>SPY 核心</b> 9/25 建仓,成交价比开盘竞价还低一点。</p>
 <p><b>实盘</b> {real_txt}。实盘的逐笔分析在每天的复盘页。</p>
 <h2>二、实验({len(EXPERIMENTS)} 个,全部先预注册再跑)</h2>

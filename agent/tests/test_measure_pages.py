@@ -87,8 +87,45 @@ def test_week_summary_reads_allocations_and_measures_from_each_books_start(tmp_p
     con.close()
     monkeypatch.setattr(week_summary, "AGENT_DIR", tmp_path)
     monkeypatch.setattr(week_summary, "PanelStore", lambda read_only=True: PanelStore(panel, read_only=True))
-    assert week_summary.main(["--db", db, "--out", str(tmp_path)]) == 0
+    assert week_summary.main(["--db", db, "--out", str(tmp_path), "--auction", str(tmp_path / "none.json")]) == 0
     html = (tmp_path / "weekly" / "2026-09-26-第一周总结.html").read_text()
     assert "$75,000" in html                                       # the allocations' sum, not 1e5
     assert "SPY +2.97%" in html                                    # long: 09-21 close (101) -> 104 on adj_close; not from 09-18, not raw close
     assert "占亏损股票合计亏损的 100%" in html                        # A is the only loser: its loss over the losers' sum
+
+
+def test_week_orders_are_counted_by_their_state_at_the_end_of_the_week(tmp_path):
+    import duckdb
+    from agent import ledger, week_summary
+    db = str(tmp_path / "o.db")
+    con = ledger.connect(db)
+    ledger.ensure_schema(con)
+    con.execute("""INSERT INTO agent_orders (client_order_id, book, as_of, ticker, side, qty, status, filled_qty, filled_at, dry_run) VALUES
+                   ('a', 'insider', '2026-09-22', 'A', 'buy', 1, 'expired', 1, '2026-09-23 09:30', FALSE),   -- filled, reads expired later
+                   ('b', 'insider', '2026-09-23', 'B', 'buy', 1, 'expired', 0, NULL, FALSE),
+                   ('c', 'insider', '2026-09-25', 'C', 'buy', 1, 'filled', 1, '2026-09-28 09:30', FALSE),    -- filled on Monday
+                   ('d', 'insider', '2026-09-25', 'D', 'buy', 1, 'expired', 0, NULL, FALSE),                 -- expired on Monday
+                   ('e', 'insider', '2026-09-24', 'E', 'buy', 1, 'filled', 1, '2026-09-25 09:30', TRUE),     -- dry run
+                   ('f', 'insider', '2026-09-28', 'F', 'buy', 1, 'filled', 1, '2026-09-29 09:30', FALSE)""")  # after the week
+    con.close()
+    m = duckdb.connect()
+    m.execute(f"ATTACH '{db}' AS o (READ_ONLY)")
+    got = {s: n for b, s, n in m.execute(week_summary.ORDERS_AS_OF_END, ["2026-09-25"] * 3).fetchall()}
+    m.close()
+    assert got == {"filled": 1, "expired": 1, "pending": 2}
+
+
+def test_the_insider_cost_note_uses_the_books_own_gap(tmp_path):
+    import json
+    from agent import week_summary
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2] / "site"))
+    import build_paper
+    fills = [{"book": "long", "gap": 0.5}, {"book": "insider", "gap": 1.0}, {"book": "insider", "gap": 1.4}, {"book": "insider", "gap": None}]
+    assert build_paper.book_gap(fills, "insider") == (pytest.approx(1.2), 2)
+    assert build_paper.book_gap(fills, "core") == (None, 0)
+    p = tmp_path / "a.json"
+    p.write_text(json.dumps({"fill_rows": [{"book": "insider", "day": "2026-09-25", "gap_pct": 1.0},
+                                           {"book": "insider", "day": "2026-09-28", "gap_pct": 3.0},    # after the week
+                                           {"book": "long", "day": "2026-09-22", "gap_pct": 0.5}]}))
+    assert week_summary.week_gap(str(p), "insider") == (1.0, 1)
+    assert week_summary.week_gap(str(tmp_path / "missing.json"), "insider") == (None, 0)

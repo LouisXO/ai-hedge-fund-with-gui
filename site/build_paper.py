@@ -46,6 +46,12 @@ def pc(v, nd=2) -> str:
     return f"<span class='{'pos' if v > 0 else 'neg' if v < 0 else ''}'>{v:+.{nd}f}%</span>"
 
 
+def book_gap(fills: list[dict], book: str) -> tuple[float | None, int]:
+    """(mean gap to the opening cross in % per side, number of fills) for one book; None before any comparable fill."""
+    g = [f["gap"] for f in fills if f["book"] == book and f["gap"] is not None]
+    return (sum(g) / len(g) if g else None), len(g)
+
+
 def collect() -> dict:
     con = ledger.connect(read_only=True)
     try:
@@ -281,8 +287,9 @@ def page(d: dict, private: bool = False) -> str:
             continue
         r, bm = x["ret"], x["bench"]
         ex = "—" if x["exposure_avg_pct"] is None else f"{x['exposure_avg_pct']:.0f}%"
-        drag = (T("模拟器按开盘后卖一成交(实测约 +0.6%/边),这本书约 5 个交易日换一次仓,模拟器口径很可能大幅低于竞价口径(S45 按买入一侧实测估计每年约 20–31 个百分点;卖出一侧还没有实测)。",
-                  "The simulator fills at the first ask after the open (measured about +0.6% per side) and this book turns over every five sessions, so its simulator NAV very likely runs far below the auction basis (S45 estimate from the buy side only: about 20–31 points a year).")
+        mg, ng = book_gap(d["fills"], b)
+        drag = (T(f"模拟器按开盘后卖一成交(这本书实测 {'还没有' if mg is None else f'{mg:+.2f}%/边,{ng} 笔,样本很小'}),这本书约 5 个交易日换一次仓,模拟器口径很可能大幅低于竞价口径(S45 按买入一侧实测估计每年约 20–31 个百分点;卖出一侧还没有实测)。",
+                  f"The simulator fills at the first ask after the open (this book measured {'nothing yet' if mg is None else f'{mg:+.2f}% per side over {ng} fills, a small sample'}) and this book turns over every five sessions, so its simulator NAV very likely runs far below the auction basis (S45 estimate from the buy side only: about 20–31 points a year).")
                 if b == "insider" else "")
         cards.append(f"<div class='card'><div class='k'>{T(zh, en)} · {T('自', 'since')} {x['base_day']} {T('收盘', 'close')}</div><div class='v'>{pc(r['sim_tr'])}</div>"
                      f"<div class='s'>{T('模拟器口径,含分红', 'simulator basis, with dividends')} · {T('竞价口径', 'auction basis')} {pc(r['auction_tr'])}</div>"
