@@ -13,7 +13,8 @@ Checks
                 shares x price within [50M, 10T]); staleness of the latest filing; TTM built from 4
                 quarters; spot checks of 10 large names against hand-known magnitudes
   prices        no non-positive prices; adj/close ratio piecewise-constant (splits only); no
-                >10x day-to-day jumps in adj_close without a matching raw jump; source overlap
+                >10x day-to-day jumps in adj_close without a matching raw jump; no change of the
+                adjustment basis between rows of different fetches; source overlap
                 agreement (yfinance vs alpaca same date); gaps vs the SPY calendar
   index         SPY/IWM/QQQ/^VIX continuity, last date = last session
   insider       value_usd = shares x price; filing_date >= trans_date; ticker present in bars;
@@ -124,6 +125,15 @@ def audit_prices(store, rep: Report):
     jumps = q("""SELECT ticker, trade_date, adj_close / lag(adj_close) OVER (PARTITION BY ticker ORDER BY trade_date) AS j
                  FROM bars WHERE trade_date >= '2017-01-01' QUALIFY j > 10 OR j < 0.1""").df()
     rep.add("prices", "day-to-day adj jumps > 10x", "PASS" if len(jumps) < 50 else "WARN", f"{len(jumps)} e.g. {jumps.head(4).values.tolist()}")
+    # one symbol, one adjustment basis: two adjacent rows from different fetches whose adj/close differs by more
+    # than 0.05%, where the older row kept the basis of its own fetch day. The check above cannot see it: a
+    # dividend is under 3% and a split over 40%. The vendor's own ex-dates are not counted (2026-09-28, S47).
+    from agent.sources.alpaca_bars import adjustment_breaks
+    br = adjustment_breaks(store.con, "2016-01-01")
+    n_kind = br.groupby("kind").size().to_dict()
+    rep.add("prices", "adjustment basis breaks between fetches", "PASS" if br.empty else "FAIL",
+            f"{len(br)} rows in {br['ticker'].nunique()} names (factor drops {n_kind.get('drop', 0)}, false jumps "
+            f"{n_kind.get('jump', 0)}) e.g. {br['ticker'].unique()[:6].tolist()}")
     src = q("SELECT source, count(*), min(trade_date), max(trade_date) FROM bars GROUP BY 1").fetchall()
     rep.add("prices", "sources", "PASS", str(src))
     last = q("SELECT max(trade_date) FROM bars").fetchone()[0]
