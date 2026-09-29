@@ -58,3 +58,37 @@ def test_progress_shows_counts_only():
     html = dashboard.progress_html(p)
     assert "平仓 3/100" in html and "按时入场 4" in html and "内部人 买 7/10" in html
     assert "alpha" not in html.lower() and "t " not in html.replace("target", "")
+
+
+def test_week_summary_reads_allocations_and_measures_from_each_books_start(tmp_path, monkeypatch):
+    from agent import ledger, week_summary
+    from hedge_fund.features.panel import PanelStore
+    panel = tmp_path / "panel.db"
+    with PanelStore(panel) as st:
+        for sym, px in (("SPY", [100, 101, 102, 103, 104]), ("QQQ", [50, 50, 51, 51, 52]), ("IWM", [20, 20, 20, 20, 20])):
+            for d, p in zip(["2026-09-18", "2026-09-21", "2026-09-22", "2026-09-24", "2026-09-25"], px):
+                st.con.execute("INSERT INTO index_daily VALUES (?, ?, ?, ?, ?, ?, ?, 'y', now())", [sym, d, p, p, p, p + 1, p])   # raw close != adj
+        st.con.execute("INSERT INTO bars VALUES ('A', '2026-09-25', 9, 9, 9, 9, 9, 1, 'alpaca', now()), ('B', '2026-09-25', 21, 21, 21, 21, 21, 1, 'alpaca', now())")
+    db = str(tmp_path / "o.db")
+    con = ledger.connect(db)
+    ledger.ensure_schema(con)
+    con.execute("CREATE TABLE acct_nav (date DATE, total_assets DOUBLE)")
+    for b, a in (("long", 50000.0), ("insider", 20000.0), ("core", 5000.0)):
+        con.execute("INSERT INTO agent_books VALUES (?, ?, ?, 1, '2026-09-21', now())", [b, a, a])
+        for d in ("2026-09-18", "2026-09-21", "2026-09-22", "2026-09-24", "2026-09-25"):
+            eq = a if (d < "2026-09-24" or b != "long") else a * 1.01
+            con.execute("INSERT INTO agent_book_nav VALUES (?, ?, 0, 0, ?, 0, NULL)", [d, b, eq])
+    con.execute("""INSERT INTO agent_orders (client_order_id, book, as_of, ticker, side, qty, status, filled_qty, filled_at, dry_run)
+                   VALUES ('l', 'long', '2026-09-21', 'A', 'buy', 1, 'filled', 1, '2026-09-22 09:30', FALSE),
+                          ('i', 'insider', '2026-09-22', 'B', 'buy', 1, 'filled', 1, '2026-09-24 09:30', FALSE),
+                          ('c', 'core', '2026-09-24', 'SPY', 'buy', 1, 'filled', 1, '2026-09-25 09:30', FALSE)""")
+    con.execute("""INSERT INTO agent_lots (lot_id, book, ticker, qty, entry_day, entry_px, status) VALUES
+                   ('1', 'long', 'A', 100, '2026-09-22', 10, 'open'), ('2', 'long', 'B', 100, '2026-09-22', 20, 'open')""")
+    con.close()
+    monkeypatch.setattr(week_summary, "AGENT_DIR", tmp_path)
+    monkeypatch.setattr(week_summary, "PanelStore", lambda read_only=True: PanelStore(panel, read_only=True))
+    assert week_summary.main(["--db", db, "--out", str(tmp_path)]) == 0
+    html = (tmp_path / "weekly" / "2026-09-26-第一周总结.html").read_text()
+    assert "$75,000" in html                                       # the allocations' sum, not 1e5
+    assert "SPY +2.97%" in html                                    # long: 09-21 close (101) -> 104 on adj_close; not from 09-18, not raw close
+    assert "占亏损股票合计亏损的 100%" in html                        # A is the only loser: its loss over the losers' sum
