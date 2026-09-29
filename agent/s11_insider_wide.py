@@ -52,11 +52,12 @@ def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str],
     can hold it, since that needs a bar and ADV, and the audit counts the first kind.
 
     S47b (2026-09-29), agent/books/segments.py:
-    - a reused or relisted ticker whose bars are split (SE, WOLF, VAL, DOW) is two columns: the pseudo
-      ticker ('SE@2007') gets the interval(s) that ended before the current one started, the real ticker the
-      rest. A caller whose frame has no pseudo column (bars not split) gets the real ticker without the old
-      intervals: the old security's days are simply not in its frame. `splits`: agent.books.segments.
-      load_splits of the same table, passed by a caller that already has it.
+    - a reused or relisted ticker whose bars are split (SE, WOLF, VAL, DOW) is two columns: when the pseudo
+      ticker ('SE@2007') is in `tickers` it gets the interval(s) that ended before the current one started,
+      the real ticker the rest; a pseudo ticker asked for alone still gets its intervals. A caller whose
+      frame has no pseudo column (bars not split: s11-s13, the audit) keeps them on the real ticker, as
+      before S47b, since its frame holds the old security's bars under that name. `splits`:
+      agent.books.segments.load_splits of the same table, passed by a caller that already has it.
     - a listing row matches a ticker in either spelling of a class share ('BRK-B' row, 'BRK.B' bars); when
       both spellings are in `tickers`, only the row's own spelling gets it, so one security is never two
       listed columns.
@@ -68,9 +69,12 @@ def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str],
         splits = segments.load_splits(store, table, listing=ls)
     route = segments.routes(splits)
     col = {t: i for i, t in enumerate(tickers)}
-    by_key: dict[str, list[str]] = {}
+    by_key: dict[str, list[str]] = {}                        # spelling -> the bars tickers that may take a row
     for t in tickers:
         by_key.setdefault(segments.spelling(t), []).append(t)
+    for t, (p, _) in route.items():                          # a pseudo ticker asked for without its real one
+        if p in col and t not in by_key.get(segments.spelling(t), []):
+            by_key.setdefault(segments.spelling(t), []).append(t)
     ls = ls[ls["symbol"].map(segments.spelling).isin(set(by_key))]
     day = dates.to_numpy()
     arr = np.zeros((len(dates), len(tickers)), dtype=bool)
@@ -79,12 +83,11 @@ def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str],
         if status != "Active" and pd.notna(delist):
             on &= day <= pd.Timestamp(delist).to_datetime64()
         same = by_key[segments.spelling(sym)]
-        for t in [sym] if sym in col else same:
-            if t in route and status != "Active" and pd.notna(delist) and delist < route[t][1]:
+        for t in [sym] if sym in same else same:
+            if t in route and route[t][0] in col and status != "Active" and pd.notna(delist) and delist < route[t][1]:
                 t = route[t][0]                              # an interval of the old security: its pseudo ticker
-                if t not in col:
-                    continue
-            arr[on, col[t]] = True
+            if t in col:
+                arr[on, col[t]] = True
     return pd.DataFrame(arr, index=dates, columns=tickers)
 
 

@@ -123,4 +123,4 @@ def insider_flows(store: PanelStore, start: str) -> pd.DataFrame:
                sum(CASE WHEN trans_code='S' AND value_usd <= ? THEN value_usd ELSE 0 END) AS sell_usd
         FROM priced GROUP BY 1, 2""", [start, MAX_TX_USD, MAX_TX_USD]).df()
     df["date"] = pd.to_datetime(df["filing_date"])
-    return df
+    return segments.split_events(df, segments.load_splits(store))   # S47b item 2: the old security's filings, its pseudo ticker

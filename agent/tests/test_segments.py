@@ -65,6 +65,24 @@ def test_the_exception_needs_both_a_short_gap_and_a_close_that_carries_on(new_st
     assert split_points(sm, facts(X=("2015-01-02", 40.0, after)), SESSIONS).loc["X", "split"], why
 
 
+def test_the_cutoff_is_the_new_securitys_first_trade_and_filler_is_the_old_ones():
+    # SE: Spectra's last price, zero volume, to 2017-10-19; Sea's first trade 10-20 (review 2026-09-29)
+    sm = seams(listing(("SE", "Delisted", "2007-01-03", "2017-07-10"), ("SE", "Active", "2017-10-20", None)))
+    f = facts(SE=("2012-11-27", 40.68, 16.26)).assign(first_traded=pd.Timestamp("2017-10-20"))
+    assert split_points(sm, f, SESSIONS).loc["SE", "cutoff"] == pd.Timestamp("2017-10-20")
+    f["first_traded"] = pd.Timestamp("2017-10-11")                       # real when-issued trading stays
+    assert split_points(sm, f, SESSIONS).loc["SE", "cutoff"] == pd.Timestamp("2017-10-11")
+
+
+def test_a_jump_between_the_rows_is_two_securities_even_when_the_ends_match():
+    # GPOR: the new stock's first trade falls on the old row's last day, so both ends are the new price
+    sm = seams(listing(("GPOR", "Delisted", "1999-03-03", "2021-05-18"), ("GPOR", "Active", "2021-05-19", None)))
+    f = facts(GPOR=("2015-01-02", 72.95, 68.01))
+    assert not split_points(sm, f, SESSIONS).loc["GPOR", "split"]        # without the day-move test: one security
+    assert split_points(sm, f.assign(seam_move=526.5), SESSIONS).loc["GPOR", "split"]
+    assert not split_points(sm, f.assign(seam_move=0.29), SESSIONS).loc["GPOR", "split"]
+
+
 def test_no_split_without_bars_before_the_when_issued_days_or_without_an_earlier_end():
     sm = seams(listing(("NEWCO", "Delisted", "1990-01-02", "2005-01-03"), ("NEWCO", "Active", "2020-06-01", None),
                        ("OKE", "Active", "1985-07-01", None), ("OKE", "Delisted", "1985-07-01", "2026-09-14"),
@@ -100,6 +118,19 @@ def test_fundamentals_filed_before_the_new_listing_are_the_old_securitys():
     sp = pd.DataFrame({"pseudo": ["SE@2007"], "new_start": [pd.Timestamp("2017-10-20")]}, index=["SE"])
     df = pd.DataFrame({"ticker": ["SE", "SE", "AAA"], "filed": ["2017-05-01", "2018-03-01", "2017-05-01"]})
     assert segments.split_fundamentals(df, sp)["ticker"].tolist() == ["SE@2007", "SE", "AAA"]
+
+
+def test_events_before_the_cutoff_are_the_old_securitys():
+    sp = pd.DataFrame({"pseudo": ["SE@2007"], "cutoff": [pd.Timestamp("2017-10-20")]}, index=["SE"])
+    ev = pd.DataFrame({"ticker": ["SE", "SE", "AAA"], "date": pd.to_datetime(["2017-03-01", "2017-10-20", "2017-03-01"])})
+    assert segments.split_events(ev, sp)["ticker"].tolist() == ["SE@2007", "SE", "AAA"]
+
+
+def test_the_exact_spelling_wins_when_two_listing_symbols_match_one_bars_ticker():
+    f = pd.DataFrame({"ticker": ["X.B", "X.B", "Y"], "symbol": ["X-B", "X.B", "Y"], "first_bar": pd.Timestamp("2015-01-02")})
+    for order in (f, f.iloc[::-1]):
+        got = segments._prefer_exact(order).set_index("ticker")["symbol"]
+        assert got.to_dict() == {"X.B": "X.B", "Y": "Y"}
 
 
 # -- on a panel ---------------------------------------------------------------
@@ -138,8 +169,10 @@ def test_listing_mask_gives_the_pseudo_the_old_interval_and_the_ticker_the_new(s
     m = listed_mask(store, DAYS, ["WOLF", "WOLF@1993"], extra=NONE)
     assert m.loc[:"2025-09-26", "WOLF@1993"].all() and not m.loc["2025-09-29":, "WOLF@1993"].any()
     assert not m.loc[:"2025-09-26", "WOLF"].any() and m.loc["2025-09-29":, "WOLF"].all()
-    # a caller whose bars are not split: the ticker is the current security only
-    assert listed_mask(store, DAYS, ["WOLF"], extra=NONE)["WOLF"].tolist() == (DAYS >= "2025-09-29").tolist()
+    # a caller whose bars are not split (s11-s13, the audit): the old interval stays on the ticker, as before
+    assert listed_mask(store, DAYS, ["WOLF"], extra=NONE)["WOLF"].all()
+    alone = listed_mask(store, DAYS, ["WOLF@1993"], extra=NONE)["WOLF@1993"]  # an event list with the pseudo only
+    assert alone.tolist() == (DAYS <= "2025-09-26").tolist()
 
 
 def test_a_redomicile_keeps_one_column_and_both_intervals(store):
@@ -148,6 +181,52 @@ def test_a_redomicile_keeps_one_column_and_both_intervals(store):
     assert segments.load_splits(store, extra=NONE).empty
     m = listed_mask(store, DAYS, ["RDM"], extra=NONE)["RDM"]
     assert m.loc[:"2025-09-26"].all() and not m.loc["2025-09-29"] and m.loc["2025-09-30":].all()
+
+
+def test_zero_volume_filler_at_the_old_price_is_never_the_new_tickers_start(store):
+    # SE-like: the old stock trades to 2026-01-30, zero-volume filler at its last price to 03-13, the new one from 03-16
+    days = pd.bdate_range("2025-06-02", "2026-06-30")
+    put_listing(store, ("SE", "Delisted", "2007-01-03", "2026-01-30"), ("SE", "Active", "2026-03-16", None))
+    put_bars(store, "SE", days[days <= "2026-01-30"], 40.68)
+    put_bars(store, "SE", days[(days > "2026-01-30") & (days < "2026-03-16")], 40.68, vol=0)
+    put_bars(store, "SE", days[days >= "2026-03-16"], 16.26 + 0.01 * np.arange((days >= "2026-03-16").sum()))
+    sp = segments.load_splits(store, extra=NONE)
+    assert sp.loc["SE", "cutoff"] == pd.Timestamp("2026-03-16")         # was 03-01, 15 days of filler before it
+    f = segments.split_bars({"close": store.bars_wide("close"), "vol": store.bars_wide("volume")}, sp)
+    se = f["close"]["SE"].dropna()
+    assert se.index[0] == pd.Timestamp("2026-03-16") and (f["vol"]["SE"].dropna() > 0).all()
+    assert np.log(se).diff().abs().max() < 0.01                          # no jump from the old price
+    assert (f["close"].loc["2026-02-02":"2026-03-13", "SE@2007"] == 40.68).all()
+
+
+def test_a_halted_stock_filled_at_its_last_price_is_not_the_reorganised_one(store):
+    # BTU-like: last trade 2.07, then zero-volume 2.07 to the old end; the new stock at 27.25 the next session
+    put_listing(store, ("BTU", "Delisted", "2001-05-22", "2025-12-31"), ("BTU", "Active", "2026-01-02", None))
+    put_bars(store, "BTU", DAYS[DAYS <= "2025-08-29"], 2.07)
+    put_bars(store, "BTU", DAYS[(DAYS > "2025-08-29") & (DAYS <= "2025-12-31")], 2.07, vol=0)
+    put_bars(store, "BTU", DAYS[DAYS >= "2026-01-02"], 27.25)
+    r = segments.load_splits(store, extra=NONE, all_seams=True).loc["BTU"]
+    assert r["close_before"] == 2.07 and r["close_after"] == 27.25 and r["gap_sessions"] == 0
+    assert r["split"] and r["cutoff"] == pd.Timestamp("2026-01-02")
+
+
+def test_the_new_stocks_first_trade_inside_the_old_interval_still_splits(store):
+    # GPOR-like: zero-volume 0.1383 up to the old end's eve, the new stock trades 72.95 on the old end itself
+    put_listing(store, ("GPOR", "Delisted", "1999-03-03", "2026-05-18"), ("GPOR", "Active", "2026-05-19", None))
+    put_bars(store, "GPOR", DAYS[DAYS <= "2026-04-24"], 0.1383)
+    put_bars(store, "GPOR", DAYS[(DAYS > "2026-04-24") & (DAYS < "2026-05-18")], 0.1383, vol=0)
+    put_bars(store, "GPOR", DAYS[DAYS >= "2026-05-18"], np.r_[72.95, np.full((DAYS >= "2026-05-19").sum(), 68.01)])
+    r = segments.load_splits(store, extra=NONE, all_seams=True).loc["GPOR"]
+    assert r["close_before"] == 72.95 and r["close_after"] == 68.01     # the ends alone say one security
+    assert r["seam_move"] > 500 and r["split"]
+
+
+def test_load_splits_prefers_the_bars_own_spelling(store):
+    put_listing(store, ("XB-B", "Delisted", "1990-01-02", "2020-06-30"), ("XB-B", "Active", "2021-06-01", None),
+                ("XB.B", "Delisted", "1995-01-03", "2024-06-28"), ("XB.B", "Active", "2025-06-02", None))
+    put_bars(store, "XB.B", pd.bdate_range("2018-01-02", "2026-09-28"), 10.0)
+    sp = segments.load_splits(store, extra=NONE)
+    assert sp.index.tolist() == ["XB.B"] and sp.loc["XB.B", "symbol"] == "XB.B" and sp.loc["XB.B", "pseudo"] == "XB.B@1995"
 
 
 def test_class_share_spellings_match_and_one_security_is_never_two_columns(store):
@@ -238,12 +317,51 @@ def test_market_factors_and_the_live_list_work_with_a_pseudo_ticker(store, monke
     assert days[-1] == m.adj.index[-1]
 
 
-def test_a_pseudo_ticker_listed_on_the_last_bar_stops_the_market(store, monkeypatch):
+def test_an_insider_event_of_the_old_security_is_a_target_of_its_pseudo_ticker(store, monkeypatch):
+    from agent.events.insider import InsiderBuys
     monkeypatch.setattr(segments, "supplement", lambda path=None: NONE)
-    put_listing(store, ("ZZ", "Delisted", "2001-01-02", "2026-09-28"), ("ZZ", "Active", "2026-10-05", None))
-    put_bars(store, "ZZ", DAYS, 10.0)
+    _panel(store)
+    for owner, day in (("A", "2026-01-12"), ("B", "2026-01-12"), ("A", "2026-06-15"), ("B", "2026-06-15")):
+        px = store.con.execute("SELECT close FROM bars WHERE ticker = 'SE' AND trade_date = ?", [day]).fetchone()[0]
+        store.insert("insider_tx", pd.DataFrame([{
+            "accession": f"{owner}-{day}", "ticker": "SE", "issuer_cik": "1", "filing_date": pd.Timestamp(day).date(),
+            "trans_date": pd.Timestamp(day).date(), "owner_name": owner, "relationship": "isDirector", "officer_title": "",
+            "trans_code": "P", "acq_disp": "A", "shares": 5e4 / px, "price": px, "value_usd": 50_000.0, "shares_after": 0.0,
+            "source": "test", "fetched_at": pd.Timestamp("2026-09-28")}]))
+    ev = InsiderBuys().events(store, "2025-06-01", "2026-09-28")
+    assert ev.set_index("date")["ticker"].to_dict() == {pd.Timestamp("2026-01-12"): "SE@2007", pd.Timestamp("2026-06-15"): "SE"}
+    m = data.load_market(store, "2026-01-02")
+    line = InsiderBuys()
+    line.spec = line.spec.__class__(**{**line.spec.__dict__, "adv_floor": 1e6, "adv_ceiling": np.inf})
+    tg = line.targets(m, ev, "2026-01-02", "2026-09-28")
+    assert tg[pd.Timestamp("2026-01-12")] == ["SE@2007"] and tg[pd.Timestamp("2026-06-15")] == ["SE"]
+
+
+def _bare_market(store):
     store.upsert_index(pd.DataFrame({"symbol": "SPY", "trade_date": [d.date() for d in DAYS], "open": 1.0, "high": 1.0,
                                      "low": 1.0, "close": 1.0, "adj_close": 1.0, "source": "t", "fetched_at": pd.Timestamp("2026-09-28")}))
     store.con.execute("CREATE TABLE spread_grid (bucket VARCHAR, year INT, median_spread_pct DOUBLE)")
+
+
+def test_a_listing_that_starts_after_the_last_bar_is_no_seam_yet(store, monkeypatch):
+    # ZZ: the old row runs to the last bar, the vendor already has the new one from 2026-10-05
+    monkeypatch.setattr(segments, "supplement", lambda path=None: NONE)
+    put_listing(store, ("ZZ", "Delisted", "2001-01-02", "2026-09-28"), ("ZZ", "Active", "2026-10-05", None))
+    put_bars(store, "ZZ", DAYS, 10.0)
+    _bare_market(store)
+    assert segments.load_splits(store, all_seams=True).empty
+    m = data.load_market(store, "2026-06-01")
+    assert "ZZ@2001" not in m.adj.columns and m.listed.iloc[-1]["ZZ"]
+
+
+def test_a_pseudo_ticker_listed_on_the_last_bar_stops_the_market(store, monkeypatch):
+    # the last guard: a split whose old interval reaches the last bar (load_splits no longer makes one)
+    monkeypatch.setattr(segments, "supplement", lambda path=None: NONE)
+    put_listing(store, ("ZZ", "Delisted", "2001-01-02", "2026-09-28"), ("ZZ", "Active", "2026-10-05", None))
+    put_bars(store, "ZZ", DAYS, 10.0)
+    _bare_market(store)
+    ls = segments.listing_rows(store, extra=NONE)
+    forced = split_points(seams(ls), facts(ZZ=("2025-06-02", 10.0, np.nan)), SESSIONS)
+    monkeypatch.setattr(segments, "load_splits", lambda *a, **k: forced)
     with pytest.raises(RuntimeError, match=r"pseudo tickers listed on 2026-09-28: \['ZZ@2001'\]"):
         data.load_market(store, "2026-06-01")
