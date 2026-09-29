@@ -189,13 +189,25 @@ def test_orphans_at_the_broker_are_claimed_and_their_fills_booked(con):
 
 
 def test_a_not_sent_order_the_broker_did_get_after_all_is_claimed(con):
-    fb = FakeBroker({client_id("long", AS_OF, "AAA", "buy"): "timeout_lost"})
-    send_orders(con, fb, [_order("long", "AAA", "buy", 5, limit=10.3)], submit=True)
+    """The row keeps what the plan wrote: a late insider retry stays a late retry, and so does its lot."""
+    coid = client_id("insider", AS_OF, "AAA", "buy")
+    fb = FakeBroker({coid: "timeout_lost"})
+    o = {**_order("insider", "AAA", "buy", 5, limit=10.3), "reason": "entry_retry",
+         "trigger_filing_day": dt.date(2026, 9, 24), "lag_sessions": 1, "entry_kind": "late"}
+    send_orders(con, fb, [o], submit=True)
     assert con.execute("SELECT status FROM agent_orders").fetchone()[0] == NOT_SENT
     fb.script.clear()
-    fb.submit("AAA", "buy", 5, "limit", "day", client_id("long", AS_OF, "AAA", "buy"), 10.3)   # it arrived late
-    assert [r["ticker"] for r in claim_orphans(con, fb.orders_since(None))] == ["AAA"]
-    assert con.execute("SELECT status, alpaca_id FROM agent_orders").fetchone() == ("claimed", f"id-{client_id('long', AS_OF, 'AAA', 'buy')}")
+    fb.submit("AAA", "buy", 5, "limit", "day", coid, 10.3)                   # it arrived late
+    claimed = claim_orphans(con, fb.orders_since(None))
+    assert [(r["ticker"], r["reason"], r["status"]) for r in claimed] == [("AAA", "entry_retry", "claimed")]
+    assert con.execute("""SELECT status, alpaca_id, reason, ref_close, trigger_filing_day, lag_sessions, entry_kind,
+                                 applied_qty FROM agent_orders""").fetchone() == \
+        ("claimed", f"id-{coid}", "entry_retry", 10.0, dt.date(2026, 9, 24), 1, "late", 0)
+    fb.fill(coid, 5, 10.1)
+    sync_fills(con, fb, CAL)
+    assert con.execute("SELECT ticker, trigger_filing_day, lag_sessions, entry_kind FROM agent_lots").fetchone() == \
+        ("AAA", dt.date(2026, 9, 24), 1, "late")
+    assert con.execute("SELECT status, reason FROM agent_orders").fetchone() == ("filled", "entry_retry")
 
 
 # ---------------------------------------------------------------- fills by increment -

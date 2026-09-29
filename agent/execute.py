@@ -590,24 +590,34 @@ def cap_orders(plans: list[dict], n: int = MAX_ORDERS_PER_RUN) -> list[dict]:
 
 def claim_orphans(con, broker_orders: list[dict]) -> list[dict]:
     """Orders the broker has under this system's ids (book|date|ticker|side) that the ledger does not (or holds as
-    not_sent): a run that died between a POST and its ledger write left them. Each is written with status
-    'claimed' and applied_qty 0, so the sync that follows books its fills. Returns the claimed rows."""
-    known = {r[0]: r[1] for r in con.execute("SELECT client_order_id, status FROM agent_orders WHERE dry_run = FALSE").fetchall()}
-    rows = []
+    not_sent): a run that died between a POST and its ledger write left them. Each gets status 'claimed' and
+    applied_qty 0, so the sync that follows books its fills. A not_sent row is updated in place and keeps what the
+    plan wrote (reason, ref_close, the insider entry classification that its lot inherits); an order the ledger
+    lacks is inserted with reason 'claimed'. Returns the claimed rows."""
+    known = {r[0]: (r[1], r[2]) for r in con.execute(
+        "SELECT client_order_id, status, reason FROM agent_orders WHERE dry_run = FALSE").fetchall()}
+    rows, claimed = [], []
     for o in broker_orders:
         coid = o.get("client_order_id")
         p = parse_client_id(coid)
-        if p is None or (coid in known and known[coid] != NOT_SENT):
+        if p is None or (coid in known and known[coid][0] != NOT_SENT):
             continue
         sub = o.get("submitted_at") or o.get("created_at")
+        sub = _et_naive(sub) if sub else None
+        if coid in known:
+            con.execute("""UPDATE agent_orders SET alpaca_id = ?, status = ?, submitted_at = coalesce(?, submitted_at),
+                                  applied_qty = 0, applied_notional = 0 WHERE client_order_id = ?""",
+                        [o.get("id"), CLAIMED, sub, coid])
+            claimed.append({"client_order_id": coid, **p, "reason": known[coid][1], "alpaca_id": o.get("id"),
+                            "status": CLAIMED})
+            continue
         rows.append({"client_order_id": coid, **p, "qty": int(float(o.get("qty") or 0)), "order_type": o.get("type"),
                      "tif": o.get("time_in_force"), "limit_price": float(o["limit_price"]) if o.get("limit_price") else None,
                      "ref_close": None, "reason": "claimed", "alpaca_id": o.get("id"), "status": CLAIMED,
-                     "submitted_at": _et_naive(sub) if sub else None, "dry_run": False,
-                     "applied_qty": 0.0, "applied_notional": 0.0})
+                     "submitted_at": sub, "dry_run": False, "applied_qty": 0.0, "applied_notional": 0.0})
     if rows:
         ledger._insert(con, "agent_orders", pd.DataFrame(rows))
-    return rows
+    return claimed + rows
 
 
 def submit_and_record(con, broker, o: dict) -> dict:
