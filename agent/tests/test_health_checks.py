@@ -62,7 +62,9 @@ def test_each_job_reads_only_its_own_latest_run(logs):
 
 def test_counters_and_field_names_are_not_failures():
     assert health.section_failures(["bars: {'failed_symbols': 0, 'n_batches_failed': 0}",
-                                    "  [10/10] rows 5 symbols with data 5 failed 0", "0 failed"]) == ("ok", "")
+                                    "  [10/10] rows 5 symbols with data 5 failed 0", "0 failed",
+                                    "{'allowed': 20, 'queue': 2959, 'ok': 20, 'failed': 0, 'rows': 673}"]) == ("ok", "")
+    assert health.section_failures(["{'ok': 18, 'failed': 2}"])[0] == "warn"
     assert health.section_failures(["  XYZ failed: HTTP 500"])[0] == "warn"
     assert health.section_failures(["Traceback (most recent call last):", "  File x"]) == \
         ("warn", "日志里有 1 处 Traceback(程序出错)")

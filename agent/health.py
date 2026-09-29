@@ -63,7 +63,7 @@ LATE_MIN = 30
 LATE_MAX_MIN = 12 * 60        # a start more than 12 hours after the schedule is taken as a manual run, not a late one
 FAILED_RE = re.compile(r"\bFAILED\b")                        # a book-feeding step (agent/bin/*.sh) failed
 SOFT_FAIL_RE = re.compile(r"\b[Ff]ailed\b")                  # any other step
-ZERO_FAIL_RE = re.compile(r"\bfailed:?\s+0\b|\b0 failed\b")   # progress counters ("... failed 0")
+ZERO_FAIL_RE = re.compile(r"\bfailed['\"]?:?\s*0\b|\b0 failed\b")   # progress counters ("... failed 0", "'failed': 0")
 # Lines never read as a failure of the run they sit in. health's own report ('[bad ] name: detail', 'health: ...')
 # lands in the same logs and quotes the failure lines it found: read back, one FAILED would stay red forever
 # and spread to every job sharing the log. yfinance prints the next ones for long-delisted names on every brief;
