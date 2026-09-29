@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from agent.books import segments
 from agent.s11_insider_wide import listed_mask
 from hedge_fund.features.panel import PanelStore
 
@@ -52,9 +53,17 @@ def load_market(store: PanelStore, start: str, lookback_days: int = 400) -> Mark
     lb = (pd.Timestamp(start) - pd.Timedelta(days=lookback_days)).date().isoformat()
     close, adj = store.bars_wide("close", start=lb), store.bars_wide("adj_close", start=lb)
     opn, vol = store.bars_wide("open", start=lb), store.bars_wide("volume", start=lb)
+    # S47b item 2: a reused ticker's bars before its current listing are another security's ('SE@2007')
+    splits = segments.load_splits(store)
+    f = segments.split_bars({"close": close, "adj": adj, "open": opn, "vol": vol}, splits)
+    close, adj, opn, vol = f["close"], f["adj"], f["open"], f["vol"]
     adj_open = opn * (adj / close)
     adv20 = (close * vol).rolling(20).mean()
-    listed = listed_mask(store, adj.index, list(adj.columns))
+    listed = listed_mask(store, adj.index, list(adj.columns), splits=splits)
+    pseudo = [c for c in listed.columns if segments.is_pseudo(c)]
+    if len(listed) and pseudo and listed.iloc[-1][pseudo].any():     # live lists are built on the last bar
+        raise RuntimeError(f"pseudo tickers listed on {listed.index[-1].date()}: "
+                           f"{listed.iloc[-1][pseudo][lambda s: s].index.tolist()}")
     spy = store.index_series("SPY", "adj_close").reindex(adj.index).ffill()
     grid = store.con.execute("SELECT bucket, year, median_spread_pct FROM spread_grid").df()
     spread = {(r.bucket, int(r.year)): float(r.median_spread_pct) for r in grid.itertuples()}
@@ -71,6 +80,7 @@ def fundamentals(store: PanelStore) -> pd.DataFrame | None:
         df = store.con.execute("SELECT * FROM fundamentals_pit").df()
     except Exception:
         return None
+    df = segments.split_fundamentals(df, segments.load_splits(store))   # S47b item 2: filed before a reused ticker's listing
     df["filed"] = pd.to_datetime(df["filed"])
     # shares_override: a few names report every share count per class (V, BRK.B, STZ, ERIE), which the
     # XBRL feed cannot see; their current count from yfinance stands in (not point-in-time — a share
@@ -113,4 +123,4 @@ def insider_flows(store: PanelStore, start: str) -> pd.DataFrame:
                sum(CASE WHEN trans_code='S' AND value_usd <= ? THEN value_usd ELSE 0 END) AS sell_usd
         FROM priced GROUP BY 1, 2""", [start, MAX_TX_USD, MAX_TX_USD]).df()
     df["date"] = pd.to_datetime(df["filing_date"])
-    return df
+    return segments.split_events(df, segments.load_splits(store))   # S47b item 2: the old security's filings, its pseudo ticker

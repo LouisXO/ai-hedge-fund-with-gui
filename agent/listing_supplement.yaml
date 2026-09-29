@@ -1,0 +1,15 @@
+# Listing rows the vendor's list (listing_status, Alpha Vantage LISTING_STATUS) lacks for a common stock the
+# broker trades (docs/AGENT_PLAN.md S47b item 3). Read by agent.books.segments.supplement(): the listing mask
+# adds each row as an Active listing from ipo_date, and agent.sources.alpaca_bars.universe() fetches its bars
+# when a Form 4 issuer carries the symbol.
+#
+# Hand-checked, one row per listing, never computed. Every row says where the date comes from and when it was
+# checked; a row whose date is not yet confirmed says so in `note`. Class shares are not added here: the
+# insider line does not buy them (S47 addendum item 10) and their listing rows exist under the hyphen spelling.
+rows:
+  - symbol: NRG
+    ipo_date: 2003-12-05
+    exchange: NYSE
+    source: "SEC EDGAR filing history of NRG Energy, Inc. (CIK 1013871): listed on the NYSE since emerging from bankruptcy in December 2003"
+    checked: 2026-09-29
+    note: "ipo_date to be verified against the exchange's listing record; the vendor's list has no NRG row at all"
