@@ -68,6 +68,54 @@ def test_counters_and_field_names_are_not_failures():
         ("warn", "日志里有 1 处 Traceback(程序出错)")
 
 
+def test_health_does_not_read_its_own_report_back(tmp_path):
+    # 09-28's execute really failed; health printed that into the log after it and after the next day's runs,
+    # which themselves went fine. Neither later run may inherit the FAILED line quoted in health's report.
+    log = tmp_path / "execute.log"
+    log.write_text("=== execute Mon Sep 28 16:10:02 PDT 2026 AGENT_EXEC=on ===\nexecute FAILED (exit 1)\n"
+                   "[bad ] 16:10 下单: 最近一次运行(09-28 16:10)关键步骤失败:execute FAILED (exit 1)\n"
+                   "health: bad (1 bad, 0 warn, 40 checks)\n"
+                   "=== postclose Tue Sep 29 13:25:03 PDT 2026 ===\n[SYNC] bar 2026-09-29 ok\n"
+                   "[bad ] 16:10 下单: 最近一次运行(09-28 16:10)关键步骤失败:execute FAILED (exit 1)\n"
+                   "[warn] 13:25 收盘后: 1 个非关键步骤失败:daily archive failed (non-fatal)\n"
+                   "health: bad (1 bad, 1 warn, 40 checks)\n"
+                   "=== execute Tue Sep 29 16:10:02 PDT 2026 AGENT_EXEC=on ===\n[SUBMITTED] bar 2026-09-29 ok\n"
+                   "[bad ] 13:25 收盘后: 最近一次运行(09-29 13:25)关键步骤失败:[bad ] 16:10 下单: execute FAILED\n")
+    for label in ("com.louis.agent.postclose", "com.louis.agent.execute"):
+        assert health.run_findings(label, str(log), range(0, 5), {}) == [], label
+    assert health.section_failures(["[warn] x: Traceback in failed step", "health: warn (0 bad, 1 warn)"]) == ("ok", "")
+
+
+def test_yfinance_delisted_noise_is_not_a_failure():
+    brief = ["50 Failed downloads:", "1 Failed download:",
+             "Failed to get ticker 'PX' reason: Failed to perform, curl: (27) . See https://curl.se/libcurl/c/libcurl-errors.html",
+             "Cookie/crumb fetch failed (RequestException), continuing without crumb",
+             "['RDC', 'AET']: possibly delisted; no timezone found",
+             "['BEN', 'ATI']: OperationalError('unable to open database file')",
+             "$VRSN: possibly delisted; no price data found  (1d 2026-09-19 -> 2026-09-29)",
+             "agent: panel refresh failed, scoring on the existing panel: No objects to concatenate"]
+    assert health.section_failures(brief) == ("ok", "")
+    # the brief's own steps still count
+    assert health.section_failures(brief + ["site publish failed (non-fatal)"]) == \
+        ("warn", "1 个非关键步骤失败:site publish failed (non-fatal)")
+    assert health.section_failures(brief + ["agent: compute failed: IO Error: Could not set lock"])[0] == "warn"
+
+
+def test_late_start_across_midnight_belongs_to_the_evening_before():
+    t = dt.datetime(2026, 9, 30, 0, 30)                                      # Wednesday 00:30
+    assert health.scheduled_before(t, 16, 10, range(0, 5)) == dt.datetime(2026, 9, 29, 16, 10)
+    assert health.scheduled_before(dt.datetime(2026, 9, 26, 7, 0), 6, 0, range(0, 5)) == dt.datetime(2026, 9, 25, 6, 0)
+
+
+def test_late_start_findings(tmp_path):
+    log = tmp_path / "execute.log"
+    log.write_text("=== execute Wed Sep 30 00:30:00 PDT 2026 AGENT_EXEC=on ===\n[SUBMITTED] ok\n")
+    assert health.run_findings("com.louis.agent.execute", str(log), range(0, 5), {}) == \
+        [("warn", "09-30 00:30 才启动,比计划的 09-29 16:10 晚 500 分钟(电脑在睡眠或没插电?)")]
+    log.write_text("=== postclose Wed Sep 30 10:00:00 PDT 2026 ===\n")      # a manual run in the morning: not late
+    assert health.run_findings("com.louis.agent.postclose", str(log), range(0, 5), {}) == []
+
+
 def test_check_jobs_folds_the_log_into_the_job_row(logs, monkeypatch):
     listing = "\n".join(f"-\t0\t{label}" for label in logs)
     monkeypatch.setattr(health.subprocess, "run", lambda *a, **k: types.SimpleNamespace(stdout=listing))
@@ -104,6 +152,25 @@ def test_exec_record(tmp_path):
                       ({"status": "ok"}, "ok"), ([], "ok"), (["short 100"], "bad"), (42, "warn")):
         write_exec(tmp_path, day, cash_check=cc)
         assert health.check_exec(TUE_EVE, str(tmp_path))["level"] == level, cc
+    # agent.execute's format (S48 package A): ok None = not checked; its own order states for a failed POST
+    for cc, level, part in (
+            ({"books_cash": 100.0, "broker_cash": 100.0, "diff": 0.0, "orders_in_flight": 0, "ok": True}, "ok", "现金核对通过"),
+            ({"books_cash": 100.0, "broker_cash": 90.0, "diff": -10.0, "orders_in_flight": 0, "ok": False}, "bad", "现金核对不通过"),
+            ({"books_cash": 100.0, "broker_cash": 90.0, "diff": None, "orders_in_flight": 2, "ok": None}, "warn",
+             "现金核对没做:有 2 张订单在途"),
+            ({"books_cash": 100.0, "broker_cash": None, "diff": None, "orders_in_flight": 0, "ok": None}, "warn",
+             "现金核对没做:拿不到券商的现金数")):
+        write_exec(tmp_path, day, cash_check=cc)
+        r = health.check_exec(TUE_EVE, str(tmp_path))
+        assert r["level"] == level and part in r["detail"], (cc, r)
+    write_exec(tmp_path, day, orders=[{"ticker": "AAA", "status": "submit_unknown"}, {"ticker": "BBB", "status": "not_sent"},
+                                      {"ticker": "CCC", "status": "rejected"}, {"ticker": "DDD", "status": "filled"}],
+               not_attempted=["long|2026-09-29|EEE|buy"])
+    r = health.check_exec(TUE_EVE, str(tmp_path))
+    assert r["level"] == "bad"
+    for part in ("1 张订单被券商拒绝:CCC", "1 张订单没发出去", "1 张订单不知道有没有到券商", "1 张订单没有尝试发送"):
+        assert part in r["detail"], part
+    assert "DDD" not in r["detail"]
     write_exec(tmp_path, day, started_at="2026-09-29T16:55:00")
     r = health.check_exec(TUE_EVE, str(tmp_path))
     assert r["level"] == "warn" and "比 16:10 晚 45 分钟" in r["detail"]
@@ -142,7 +209,7 @@ def test_fetch_runs(tmp_path):
     add_run(db, "form4_realtime", dt.datetime(2026, 9, 28, 16, 11), "ok", 0, 0)
     rt, daily = health.check_fetch_runs(TUE_EVE, db)
     assert (rt["level"], daily["level"]) == ("bad", "ok")
-    assert rt["detail"] == "2026-09-29 没有抓取记录(任务没运行,或在写入之前出错)"
+    assert rt["detail"].startswith("2026-09-29 的抓取记录还没有写入(记录在运行结束时写")
     assert daily["detail"] == "2026-09-29 06:05 正常,900 份申报,新增 40 行"
     monday = health.check_fetch_runs(dt.datetime(2026, 9, 29, 9, 0), db)[0]          # next morning: last night's run
     assert (monday["level"], monday["detail"]) == ("ok", "2026-09-28 16:11 正常,当天没有新申报")

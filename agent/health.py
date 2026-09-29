@@ -13,6 +13,9 @@ latest run is read from its log (a FAILED line from a book-feeding step is bad, 
 Tracebacks warn, a start more than 30 minutes after the schedule warns); the evening's exec_<date>.json
 must exist in submit mode with no rejected order, an empty reconcile and a passing cash check; and the
 Form 4 fetches must have logged an ok run in panel.fetch_runs (so "no filings" and "fetch failed" differ).
+health's own report lines and yfinance's delisted-ticker noise in the same logs are not read as failures; an
+order the broker may not have (not_sent, submit_unknown, not attempted) is bad like a rejected one; a cash
+check that was not run (ok None: orders in flight or no broker cash) warns.
 
 Usage: python -m agent.health [--no-notify] [--no-llm-probe]
 """
@@ -57,10 +60,25 @@ RUN_START = {
 }
 OTHER_RUN_STARTS = {f"{OUT}/cron.log": [r"^=== weekly"]}      # jobs not in RUN_START that write to a shared log
 LATE_MIN = 30
+LATE_MAX_MIN = 12 * 60        # a start more than 12 hours after the schedule is taken as a manual run, not a late one
 FAILED_RE = re.compile(r"\bFAILED\b")                        # a book-feeding step (agent/bin/*.sh) failed
 SOFT_FAIL_RE = re.compile(r"\b[Ff]ailed\b")                  # any other step
 ZERO_FAIL_RE = re.compile(r"\bfailed:?\s+0\b|\b0 failed\b")   # progress counters ("... failed 0")
+# Lines never read as a failure of the run they sit in. health's own report ('[bad ] name: detail', 'health: ...')
+# lands in the same logs and quotes the failure lines it found: read back, one FAILED would stay red forever
+# and spread to every job sharing the log. yfinance prints the next ones for long-delisted names on every brief;
+# the brief's yfinance bar top-up is best effort by design (agent/daily.py: the after-close Alpaca update holds
+# the bar, and a stale panel shows in the data checks below).
+IGNORE_RE = re.compile(r"^(?:\[(?:bad |warn|ok  )\] |health: "
+                       r"|\d+ Failed downloads?:|Failed to get ticker\b|Cookie/crumb fetch failed\b"
+                       r"|\[['\"][^\]]*\]: |\$\S+: possibly delisted"
+                       r"|agent: panel refresh failed, scoring on the existing panel)")
 EXEC_DUE, EXEC_GRACE_MIN = (16, 10), 30
+ORDER_PROBLEMS = [  # exec_<date>.json order status (error*/rejected* folded into 'rejected') -> what it means
+    ("rejected", "被券商拒绝"),
+    ("not_sent", "没发出去(券商那边没有这张单,重跑会再发)"),
+    ("submit_unknown", "不知道有没有到券商(发送和查询都失败,下次同步再查)"),
+]
 FETCH_CHECKS = [  # fetch_runs.source, name, scheduled start, minutes before a missing run counts, level if missing/failed
     ("form4_realtime", "Form 4 实时抓取(16:10,内部人书当晚的信号)", (16, 10), 30, "bad"),
     ("form4_daily", "Form 4 每日索引(06:00)", (6, 0), 60, "warn"),
@@ -167,9 +185,11 @@ def last_run_section(lines: list[str], start_re: str, stop_res: list[str]) -> tu
 
 def section_failures(lines: list[str]) -> tuple[str, str]:
     """(level, detail): a FAILED line (a book-feeding step in agent/bin/*.sh) is bad; any other 'failed' line
-    or a Traceback is a warning. Progress counters such as 'failed 0' are not failures."""
-    hard = [line.strip() for line in lines if FAILED_RE.search(line)]
-    soft = [line.strip() for line in lines if not FAILED_RE.search(line) and SOFT_FAIL_RE.search(ZERO_FAIL_RE.sub("", line))]
+    or a Traceback is a warning. Progress counters such as 'failed 0', health's own report lines and yfinance's
+    delisted-ticker noise are not failures."""
+    lines = [line.strip() for line in lines if not IGNORE_RE.match(line.strip())]
+    hard = [line for line in lines if FAILED_RE.search(line)]
+    soft = [line for line in lines if not FAILED_RE.search(line) and SOFT_FAIL_RE.search(ZERO_FAIL_RE.sub("", line))]
     tracebacks = sum(1 for line in lines if line.lstrip().startswith("Traceback"))
     if hard:
         return "bad", f"关键步骤失败:{hard[0][:90]}" + (f" 等 {len(hard)} 行" if len(hard) > 1 else "")
@@ -178,6 +198,19 @@ def section_failures(lines: list[str]) -> tuple[str, str]:
     if tracebacks:
         return "warn", f"日志里有 {tracebacks} 处 Traceback(程序出错)"
     return "ok", ""
+
+
+def scheduled_before(t: dt.datetime, hh: int, mm: int, days) -> dt.datetime | None:
+    """The latest scheduled start at or before t: a 16:10 run that only started at 00:30 belongs to the evening
+    before (a start the next morning is then 8 hours late, not 16 hours early)."""
+    s = t.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    if s > t:
+        s -= dt.timedelta(days=1)
+    for _ in range(7):
+        if s.weekday() in days:
+            return s
+        s -= dt.timedelta(days=1)
+    return None
 
 
 def run_findings(label: str, log: str | None, days, cache: dict) -> list[tuple[str, str]]:
@@ -195,10 +228,12 @@ def run_findings(label: str, log: str | None, days, cache: dict) -> list[tuple[s
     level, text = section_failures(lines)
     if level != "ok":
         out.append((level, f"最近一次运行({when}){text}"))
-    if t and days is not None and t.weekday() in days:
-        late = (t - t.replace(hour=hh, minute=mm, second=0)).total_seconds() / 60
-        if late > LATE_MIN:
-            out.append(("warn", f"{when} 才启动,比计划的 {hh:02d}:{mm:02d} 晚 {late:.0f} 分钟(电脑在睡眠或没插电?)"))
+    sched = scheduled_before(t, hh, mm, days) if t and days is not None else None
+    if sched is not None:
+        late = (t - sched).total_seconds() / 60
+        if LATE_MIN < late <= LATE_MAX_MIN:
+            planned = f"{hh:02d}:{mm:02d}" if sched.date() == t.date() else f"{sched:%m-%d %H:%M}"
+            out.append(("warn", f"{when} 才启动,比计划的 {planned} 晚 {late:.0f} 分钟(电脑在睡眠或没插电?)"))
     return out
 
 
@@ -257,15 +292,27 @@ def check_exec(now: dt.datetime, out_dir: str = f"{OUT}/agent") -> dict:
     if j.get("skipped_reason"):
         bad.append(f"没有计划订单:{j['skipped_reason']}")
     orders = j.get("orders") or []
-    rejected = [o for o in orders if str(o.get("status") or "").lower().startswith(("error", "rejected"))]
-    if rejected:
-        bad.append(f"{len(rejected)} 张订单被券商拒绝:{', '.join(str(o.get('ticker')) for o in rejected[:5])}")
+    by_state = {}
+    for o in orders:
+        s = str(o.get("status") or "").lower()
+        key = "rejected" if s.startswith(("error", "rejected")) else s
+        by_state.setdefault(key, []).append(str(o.get("ticker")))
+    for key, text in ORDER_PROBLEMS:
+        if by_state.get(key):
+            bad.append(f"{len(by_state[key])} 张订单{text}:{', '.join(by_state[key][:5])}")
+    if j.get("not_attempted"):
+        bad.append(f"{len(j['not_attempted'])} 张订单没有尝试发送(券商连不上,需要重跑)")
     rec = j.get("reconcile")
     if rec:
         bad.append(f"账本和券商持仓对不上:{('; '.join(map(str, rec)) if isinstance(rec, list) else str(rec))[:80]}")
     cash = None
-    if j.get("cash_check") is not None:
-        cash, note = cash_check_ok(j["cash_check"])
+    cc = j.get("cash_check")
+    if isinstance(cc, dict) and "ok" in cc and cc["ok"] is None:
+        # agent.execute checks cash only with the broker's cash in hand and no order in flight (ok = None otherwise)
+        n = cc.get("orders_in_flight")
+        warn.append("现金核对没做:" + (f"有 {n} 张订单在途,成交还没进账本" if n else "拿不到券商的现金数"))
+    elif cc is not None:
+        cash, note = cash_check_ok(cc)
         if cash is None:
             warn.append(f"现金核对的格式认不出:{note[:60]}")
         elif not cash:
@@ -308,7 +355,8 @@ def check_fetch_runs(now: dt.datetime, db: str = f"{A}/panel.db") -> list[dict]:
         due = due_day(now, sched, grace, any(x[1].date() == now.date() for x in mine))
         on_due = [x for x in mine if x[1].date() == due]
         if not on_due:
-            r.update(level=miss, detail=f"{due} 没有抓取记录(任务没运行,或在写入之前出错)")
+            # the row is written when the run ends (a Monday daily index run can take hours)
+            r.update(level=miss, detail=f"{due} 的抓取记录还没有写入(记录在运行结束时写:任务可能还在跑,也可能没运行或中途出错)")
         else:
             _, t, status, n_items, n_rows, reason = on_due[-1]
             when = f"{due} {t:%H:%M}"
@@ -507,7 +555,8 @@ def main() -> int:
     for sec in ("jobs", "data", "system", "drift"):
         for c in rep[sec]:
             if c["level"] != "ok":
-                print(f"[{c['level']:4s}] {c['name']}: {c['detail']}")
+                # one line each: section_failures skips these by their '[bad ] ' / '[warn] ' prefix
+                print(f"[{c['level']:4s}] {c['name']}: " + " ".join(str(c['detail']).split()))
     print(f"health: {rep['level']} ({rep['n_bad']} bad, {rep['n_warn']} warn, {len(allc)} checks)")
     bad_now = sorted(c["name"] for c in allc if c["level"] == "bad")
     bad_prev = sorted(c["name"] for sec in ("jobs", "data", "system", "drift") for c in prev.get(sec, []) if c["level"] == "bad")
