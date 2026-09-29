@@ -49,6 +49,18 @@ def test_the_research_etfs_stay_out_of_the_production_index_refresh():
         assert "backfill_factor_etfs" not in src and "FACTOR_ETFS" not in src, f
 
 
+@pytest.mark.parametrize("closed, days", [(False, 0), (True, 1)])
+def test_default_end_leaves_out_an_open_session(store, monkeypatch, closed, days):
+    # yf's end is exclusive: during the session the default must stop at yesterday (no in-progress bar).
+    import datetime as dt
+
+    import agent.backfill as bf
+    monkeypatch.setattr(bf, "session_closed", lambda now=None: closed)
+    dl, calls = _fake_download(list(FACTOR_ETFS))
+    backfill_factor_etfs(store, download=dl)
+    assert calls[0][2] == (dt.date.today() + dt.timedelta(days=days)).isoformat()
+
+
 def test_nothing_downloaded_writes_nothing(store):
     for dl in (_fake_download([])[0], lambda symbols, start, end: pd.DataFrame()):   # yfinance can return an empty frame
         assert backfill_factor_etfs(store, download=dl, end="2024-01-10") == {"rows": 0, "symbols": {}, "missing": list(FACTOR_ETFS)}

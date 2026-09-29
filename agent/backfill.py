@@ -177,7 +177,10 @@ def backfill_factor_etfs(store: PanelStore | None = None, start: str = "2012-01-
       python -c "from agent.backfill import backfill_factor_etfs; print(backfill_factor_etfs())"
     """
     download = download or _download
-    end = end or (dt.date.today() + dt.timedelta(days=1)).isoformat()
+    # Same cut as backfill_bars: while the session is open yfinance returns today's in-progress bar
+    # as a daily row, which would sit in index_daily as a close until the next run. Stop at
+    # yesterday (yf's end is exclusive) unless today's session is over.
+    end = end or (dt.date.today() + dt.timedelta(days=1 if session_closed() else 0)).isoformat()
     raw = download(list(FACTOR_ETFS), start, end)
     frames, per_symbol, missing = [], {}, []
     now = pd.Timestamp.now()
