@@ -291,3 +291,13 @@ def test_audit_fails_on_a_break_and_passes_without_one(store):
     audit_prices(store, rep)
     row = [r for r in rep.rows if r[1] == check][0]
     assert row[2] == "FAIL" and "DIV" in row[3] and "1 rows" in row[3]
+
+
+def test_a_malformed_answer_fails_the_symbol_not_the_run(store):
+    def vendor(url, headers):
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+        bars = {"AAA": [{"t": f"{DAYS[0]}T04:00:00Z", "o": 1.0, "h": 1.0, "l": 1.0, "c": 1.0, "v": 1}],
+                "BAD": [{"t": f"{DAYS[0]}T04:00:00Z", "c": 1.0}]}           # no open / high / low / volume
+        return 200, json.dumps({"bars": {s: bars[s] for s in q["symbols"][0].split(",")}, "next_page_token": None})
+    st = ab.backfill(store, DAYS[0], DAYS[-1], symbols=["AAA", "BAD"], quiet=True, http=vendor, sleep=Naps(), keys=KEYS)
+    assert st["with_data"] == 1 and st["failed_symbols"] == ["BAD"] and len(_bars(store, "AAA")) == 1

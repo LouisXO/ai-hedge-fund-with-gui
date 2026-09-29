@@ -399,7 +399,10 @@ def main() -> int:
     if not args.no_update:
         with PanelStore() as store:
             held = list(broker.positions())
-            bars_stats = update_bars(store, 7, held)
+            try:
+                bars_stats = update_bars(store, 7, held)
+            except Exception as exc:                          # the guards below decide on what the panel then holds
+                bars_stats = {"error": str(exc)[:200], "failed_symbols": [], "n_batches_failed": 0}
             print("bars:", {k: (len(v) if isinstance(v, list) else v) for k, v in bars_stats.items()})
             if bars_stats["failed_symbols"]:                  # a request that failed is named, never dropped in silence
                 print(f"bars: NO DATA for {len(bars_stats['failed_symbols'])} symbols in {bars_stats['n_batches_failed']} "

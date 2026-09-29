@@ -219,7 +219,10 @@ def _load(store: PanelStore, syms: list[str], start: str, end: str, pause: float
             if not adj.get(sym):                                 # raw bars and no adjusted ones: the raw close
                 failed.append(sym)                               # is not an adjusted close (audit 2026-09-28)
                 continue
-            frames.append(_rows(sym, bars, adj[sym], now))
+            try:
+                frames.append(_rows(sym, bars, adj[sym], now))
+            except (KeyError, TypeError, ValueError):            # a bar without its fields
+                failed.append(sym)
         dead = dead + 1 if len(failed) == len(batch) else 0
         if failed:
             stats["failed_symbols"] += failed
