@@ -63,6 +63,7 @@ MAX_FACT_AGE_DAYS = 400          # period end to the filing a value is carried i
 SHARES_MISMATCH = 1.5            # largest / smallest of the share counts known at one filing
 MIN_SHARES = 1000                # 0 / 1 / negative counts are XBRL noise (FOX, HOOD, EL...)
 ANNUAL_FORMS = ("20-F", "40-F")
+DAY = pd.Timedelta(days=1)
 REVIEW_WINDOW_DAYS = 200         # = factors.latest_before: older rows are not scored, so not worth a review
 SHARE_SOURCES = ["shares_dei", "shares_bs", "shares_w"]
 REVIEW_ONLY = [c for s in SHARE_SOURCES for c in (s, f"{s}_asof")] + ["shares_w_form"]
@@ -85,7 +86,7 @@ def _first_available(df: pd.DataFrame, tags: list[str]) -> pd.DataFrame:
     if sub.empty:
         return sub
     sub["_pref"] = sub["tag"].map({t: i for i, t in enumerate(tags)})
-    sub = sub.sort_values(["_pref", "filed"])
+    sub = sub.sort_values(["_pref", "filed"], kind="stable")
     return sub.drop_duplicates(["cik", "period_start", "period_end", "filed"], keep="first").drop(columns="_pref")
 
 
@@ -112,6 +113,23 @@ def _annual(f: pd.DataFrame) -> pd.DataFrame:
     return a.sort_values("filed", kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
 
 
+def _earliest(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per (cik, period_end): the version that was known first."""
+    return df.sort_values(["filed", "_how"], kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
+
+
+def _adjacent(left: pd.DataFrame, sq: pd.DataFrame, k: int, after: str | None = None, before: str | None = None) -> pd.DataFrame:
+    """Attach as end/start/filed/val<k> the quarter that starts the day after left[after], or ends the day before left[before].
+
+    Quarters are matched by their dates, never by their position in a sorted list: a quarter that
+    is filed later must not change which four made up a year that was already known."""
+    right = sq[["cik", "period_end", "q_start", "filed", "val"]]
+    right = right.rename(columns={"period_end": f"end{k}", "q_start": f"start{k}", "filed": f"filed{k}", "val": f"val{k}"})
+    if after is not None:
+        return left.assign(**{f"start{k}": left[after] + DAY}).merge(right, on=["cik", f"start{k}"])
+    return left.assign(**{f"end{k}": left[before] - DAY}).merge(right, on=["cik", f"end{k}"])
+
+
 def _single_quarters(f: pd.DataFrame) -> pd.DataFrame:
     """(cik, period_end) -> val of that quarter alone, the filing that made it known, the quarter's first day."""
     cols = ["cik", "period_end", "filed", "val", "q_start", "_how"]
@@ -125,24 +143,21 @@ def _single_quarters(f: pd.DataFrame) -> pd.DataFrame:
     pair = pair[(pair["period_end"] - pair["period_end_prev"]).dt.days.between(*QUARTER)]
     diff = pd.DataFrame({"cik": pair["cik"], "period_end": pair["period_end"],
                          "filed": pair[["filed", "filed_prev"]].max(axis=1), "val": pair["val"] - pair["val_prev"],
-                         "q_start": pair["period_end_prev"] + pd.Timedelta(days=1),
+                         "q_start": pair["period_end_prev"] + DAY,
                          "_how": np.where(pair["days"] >= YEAR[0], 3, 1)})[cols]
-    sq = pd.concat([direct, diff[diff["_how"] == 1]], ignore_index=True)
-    sq = sq.sort_values(["filed", "_how"], kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
-    # Q4 = annual - the three quarters inside that fiscal year (all must already be known), so that the four
-    # add up to the year as reported even when a quarter's own fact disagrees with the year-to-date
-    # ones (UHAL 2025-12: +$37.0M for the quarter, nine months less six months is -$37.0M).
+    sq = _earliest(pd.concat([direct, diff[diff["_how"] == 1]], ignore_index=True))
+    # Q4 = annual - the three quarters that fill the fiscal year up to it (all must already be known), so
+    # that the four add up to the year as reported even when a quarter's own fact disagrees with the
+    # year-to-date ones (UHAL 2025-12: +$37.0M for the quarter, nine months less six months is -$37.0M).
     # Annual - nine months only when the three are not all there.
-    a = _annual(f)
-    inside = a.merge(sq, on="cik", suffixes=("", "_q"))
-    inside = inside[(inside["period_end_q"] > inside["period_start"]) & (inside["period_end_q"] < inside["period_end"])]
-    three = inside.groupby(["cik", "period_end"], as_index=False).agg(
-        n=("val_q", "size"), val_q=("val_q", "sum"), filed_q=("filed_q", "max"), last=("period_end_q", "max"))
-    a = a.merge(three[three["n"] == 3], on=["cik", "period_end"])
-    q4 = pd.DataFrame({"cik": a["cik"], "period_end": a["period_end"], "filed": a[["filed", "filed_q"]].max(axis=1),
-                       "val": a["val"] - a["val_q"], "q_start": a["last"] + pd.Timedelta(days=1), "_how": 2})
-    sq = pd.concat([sq, q4[cols], diff[diff["_how"] == 3]], ignore_index=True)
-    sq = sq.sort_values(["filed", "_how"], kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
+    y = _annual(f)[["cik", "period_start", "period_end", "filed", "val"]]
+    y = _adjacent(y.assign(_day_before=y["period_start"] - DAY), sq, 1, after="_day_before")
+    y = _adjacent(_adjacent(y, sq, 2, after="end1"), sq, 3, after="end2")
+    y = y[(y["period_end"] - y["end3"]).dt.days.between(*QUARTER)]
+    q4 = pd.DataFrame({"cik": y["cik"], "period_end": y["period_end"],
+                       "filed": y[["filed", "filed1", "filed2", "filed3"]].max(axis=1),
+                       "val": y["val"] - y["val1"] - y["val2"] - y["val3"], "q_start": y["end3"] + DAY, "_how": 2})
+    sq = _earliest(pd.concat([sq, q4, diff[diff["_how"] == 3]], ignore_index=True))
     return sq.sort_values(["cik", "period_end"]).drop(columns="_how").reset_index(drop=True)
 
 
@@ -165,31 +180,32 @@ def ttm_flows(facts: pd.DataFrame, name: str, tags: list[str]) -> pd.DataFrame:
     if f.empty:
         return pd.DataFrame(columns=["cik", "period_end", "filed", col])
     sq = _single_quarters(f)
-    g = sq.groupby("cik")
-    sq[col] = sum(g["val"].shift(k) for k in range(4))
-    # Four rows are a year only when they are consecutive quarters. Was: no check, so a gap in the
-    # filings (or one fact per year) summed quarters of different years.
-    span = (sq["period_end"] - g["q_start"].shift(3)).dt.days + 1
-    sq.loc[~span.between(*TTM_SPAN), col] = np.nan
+    # Four quarters are a year only when each starts the day after the one before ends. Was:
+    # rolling(4) over whatever rows there were, so a gap in the filings (or one fact per year)
+    # summed quarters of different years.
+    t = _adjacent(sq.rename(columns={"q_start": "start0"}), sq, 1, before="start0")
+    t = _adjacent(_adjacent(t, sq, 2, before="start1"), sq, 3, before="start2")
+    t = t[((t["period_end"] - t["start3"]).dt.days + 1).between(*TTM_SPAN)]
     # a TTM value is known when the last of its four quarters was filed
-    sq["filed"] = pd.concat([g["filed"].shift(k) for k in range(4)], axis=1).max(axis=1)
+    rolled = pd.DataFrame({"cik": t["cik"], "period_end": t["period_end"],
+                           "filed": t[["filed", "filed1", "filed2", "filed3"]].max(axis=1),
+                           col: t["val"] + t["val1"] + t["val2"] + t["val3"], "_how": 0})
     # Annual filers: the year as reported is the TTM. Was: annual / 4 into rolling(4), i.e. the mean
     # of the last four years, available only after four annual reports (PERI $55.3M, 2025 was -$7.9M).
-    # "No interim" is judged with what was filed by the annual report's date.
-    part = f[f["days"] < YEAR[0]][["cik", "period_end", "filed"]].sort_values("period_end")
-    part = part.rename(columns={"period_end": "part_end", "filed": "part_filed"})
-    a = pd.merge_asof(_annual(f).sort_values("period_end"), part, left_on="period_end", right_on="part_end",
-                      by="cik", allow_exact_matches=False)
-    a = a[~((a["part_end"] > a["period_start"]) & (a["part_filed"] <= a["filed"]))].rename(columns={"val": col})
-    out = pd.concat([sq.dropna(subset=[col]), a])[["cik", "period_end", "filed", col]]
-    return out.sort_values("filed", kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
+    # An annual filer is a company with no shorter period of this year on file when the annual report came in.
+    part = f[f["days"] < YEAR[0]].sort_values("filed", kind="stable")
+    part = part.assign(part_end=part.groupby("cik")["period_end"].cummax())[["cik", "filed", "part_end"]]
+    a = pd.merge_asof(_annual(f).sort_values("filed", kind="stable"), part, on="filed", by="cik")
+    a = a[a["part_end"].isna() | (a["part_end"] <= a["period_start"])].rename(columns={"val": col}).assign(_how=1)
+    out = _earliest(pd.concat([rolled, a[["cik", "period_end", "filed", col, "_how"]]], ignore_index=True))
+    return out.drop(columns="_how")
 
 
 def latest_instants(facts: pd.DataFrame, name: str, tags: list[str]) -> pd.DataFrame:
     f = _first_available(facts[facts["is_instant"]], tags)
     if f.empty:
         return pd.DataFrame(columns=["cik", "period_end", "filed", name])
-    f = f.sort_values("filed").drop_duplicates(["cik", "period_end"], keep="first")
+    f = f.sort_values("filed", kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
     return f[["cik", "period_end", "filed", "val"]].rename(columns={"val": name})
 
 
@@ -219,10 +235,10 @@ def _carry(grid: pd.DataFrame, item: pd.DataFrame, col: str, extra: tuple = ()) 
     asof = f"{col}_asof"
     if item.empty:
         return pd.DataFrame({col: np.nan, asof: pd.NaT, **{e: None for e in extra}}, index=grid.index)
-    s = item.dropna(subset=[col]).sort_values(["cik", "filed", "period_end"])
+    s = item.dropna(subset=[col]).sort_values(["cik", "filed", "period_end"], kind="stable")
     s = s[s["period_end"] >= s.groupby("cik")["period_end"].cummax()]      # a late filing for an older period replaces nothing
     s = s.drop_duplicates(["cik", "filed"], keep="last").rename(columns={"period_end": asof})
-    got = pd.merge_asof(grid[["cik", "filed"]], s[["cik", "filed", col, asof, *extra]].sort_values("filed"),
+    got = pd.merge_asof(grid[["cik", "filed"]], s[["cik", "filed", col, asof, *extra]].sort_values("filed", kind="stable"),
                         on="filed", by="cik")
     old = (got["filed"] - got[asof]).dt.days > MAX_FACT_AGE_DAYS
     got.loc[old, [col, *extra]] = np.nan
@@ -252,20 +268,27 @@ def _usable_shares(out: pd.DataFrame) -> pd.DataFrame:
 
 def build(store: PanelStore) -> pd.DataFrame:
     """One row per (cik, filed): TTM flows + latest instants known at that filing."""
+    # ordered, and every sort below is stable: two facts that tie are always resolved the same way
     facts = store.con.execute("SELECT cik, tag, period_start, period_end, is_instant, val, form, filed "
-                              "FROM xbrl_facts WHERE unit IN ('USD','shares')").df()
+                              "FROM xbrl_facts WHERE unit IN ('USD','shares') "
+                              "ORDER BY cik, tag, period_start, period_end, filed, accn").df()
     for c in ("period_start", "period_end", "filed"):
         facts[c] = pd.to_datetime(facts[c]).astype("datetime64[ns]")
+    # a period that ends after its own filing is a typing error (a 2033 cover date in a 2023 10-Q); carried
+    # as "the latest" it would block every real value after it
+    facts = facts[facts["period_end"] <= facts["filed"]]
     # cik -> ticker is point-in-time: 388 tickers have belonged to more than one company (SPACs,
     # renames, recycled symbols), so a filing is mapped to the ticker its CIK carried in that quarter
     # (issuer_seen), falling back to the CIK's latest ticker. Found by the 2026-09-22 audit.
     tick_pit = store.con.execute("""SELECT CAST(cik AS INT) AS cik, quarter, ticker, n_filings FROM issuer_seen
-                                    WHERE ticker IN (SELECT DISTINCT ticker FROM bars)""").df()
+                                    WHERE ticker IN (SELECT DISTINCT ticker FROM bars)
+                                    ORDER BY ticker, quarter, cik""").df()
     # Form 4 filers mistype symbols; per (ticker, quarter) the CIK with the most filings owns the symbol
-    winner = tick_pit.sort_values("n_filings", ascending=False).drop_duplicates(["ticker", "quarter"])[["ticker", "quarter", "cik"]]
+    winner = (tick_pit.sort_values("n_filings", ascending=False, kind="stable")
+              .drop_duplicates(["ticker", "quarter"])[["ticker", "quarter", "cik"]])
     winner = winner.rename(columns={"cik": "winner_cik"})
     tick_pit = tick_pit[["cik", "quarter", "ticker"]]
-    tick = (tick_pit.sort_values("quarter").drop_duplicates("cik", keep="last")[["cik", "ticker"]]
+    tick = (tick_pit.sort_values("quarter", kind="stable").drop_duplicates("cik", keep="last")[["cik", "ticker"]]
             .rename(columns={"ticker": "ticker_latest"}))
     items = {f"{name}_ttm": ttm_flows(facts, name, tags) for name, tags in FLOW_TAGS.items()}
     parts = items.pop("cogs_g_ttm").merge(items.pop("cogs_s_ttm"), on=["cik", "period_end", "filed"], how="outer")
@@ -298,12 +321,12 @@ def build(store: PanelStore) -> pd.DataFrame:
     # (14.9M shares instead of 112.6M); 10 liquid names on 2026-09-25.
     for df in (out, winner):
         df["qn"] = df["quarter"].str[:4].astype(int) * 4 + df["quarter"].str[-1].astype(int)
-    out = pd.merge_asof(out.sort_values("qn", kind="stable"), winner.sort_values("qn")[["ticker", "qn", "winner_cik"]],
+    out = pd.merge_asof(out.sort_values("qn", kind="stable"), winner.sort_values("qn", kind="stable")[["ticker", "qn", "winner_cik"]],
                         on="qn", by="ticker")
     out = out[out["winner_cik"].isna() | (out["winner_cik"] == out["cik"])]      # a losing CIK does not get the symbol
     out = out.drop(columns=["quarter", "qn", "ticker_latest", "winner_cik"])
     # if two CIKs still land on the same ticker on the same filing date, keep the larger balance sheet
-    out = out.sort_values(["ticker", "filed", "assets"]).drop_duplicates(["ticker", "filed"], keep="last")
+    out = out.sort_values(["ticker", "filed", "assets", "cik"], kind="stable").drop_duplicates(["ticker", "filed"], keep="last")
     return out
 
 
@@ -314,7 +337,7 @@ def review_path(store: PanelStore) -> Path:
 
 def share_review(store: PanelStore, df: pd.DataFrame) -> pd.DataFrame:
     """Latest row of every name that would be scored today and has a flagged share count."""
-    latest = df.sort_values("filed").drop_duplicates("ticker", keep="last")
+    latest = df.sort_values("filed", kind="stable").drop_duplicates("ticker", keep="last")
     latest = latest[(latest["shares_flag"] != "") & (latest["filed"] >= df["filed"].max() - pd.Timedelta(days=REVIEW_WINDOW_DAYS))]
     try:
         ov = store.con.execute("SELECT ticker, shares FROM shares_override").df().set_index("ticker")["shares"]

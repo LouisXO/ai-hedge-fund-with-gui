@@ -145,6 +145,27 @@ def test_annual_filer_takes_the_latest_year_as_ttm():
     assert t.loc[pd.Timestamp("2024-12-31"), "filed"] == pd.Timestamp("2025-04-10")
 
 
+def test_facts_filed_later_do_not_change_what_was_known():
+    known = (year_to_date(1, CFO, 2023, [34, 63, 89, 110]) + year_to_date(1, CFO, 2024, [40, 70, 95, 118])
+             + [flow(2, NI, "2023-01-01", "2023-12-31", 50, "10-K", "2024-03-01")])       # first report of a new filer
+    later = [flow(1, CFO, "2024-02-01", "2024-04-30", 7, "10-Q/A", "2025-06-01"),          # a period that cuts across two quarters
+             flow(1, CFO, "2024-04-01", "2024-06-30", 99, "10-Q", "2025-08-01"),           # the quarter on its own, a year on
+             flow(2, NI, "2023-07-01", "2023-09-30", 12, "10-Q", "2024-11-01")]            # last year's quarter as a comparative
+    for name, tag in (("cfo", CFO), ("ni", NI)):
+        was = F.ttm_flows(facts(known), name, [tag])
+        now = F.ttm_flows(facts(known + later), name, [tag])
+        now = now[now["filed"] <= pd.Timestamp("2025-02-20")]
+        pd.testing.assert_frame_equal(was.reset_index(drop=True), now.reset_index(drop=True))
+
+
+def test_period_that_ends_after_its_filing_is_ignored(store):
+    rows = [instant(1, DEI, "2033-09-12", 5.2e6, "10-Q", "2023-09-13"),                  # a typing error on the cover page
+            instant(1, DEI, "2026-07-31", 5.4e6, "10-Q", "2026-08-05")]
+    load(store, rows, [("TYPO", 1, "2026q3", 5)])
+    df = F.build(store)
+    assert set(df["filed"]) == {pd.Timestamp("2026-08-05")} and df["shares"].tolist() == [5.4e6]
+
+
 def test_annual_value_is_not_the_ttm_when_the_year_has_quarters():
     rows = [flow(1, NI, "2024-01-01", "2024-03-31", 10, "10-Q", "2024-05-01"),
             flow(1, NI, "2024-01-01", "2024-12-31", 100, "10-K", "2025-02-20")]
