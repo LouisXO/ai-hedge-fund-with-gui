@@ -1,8 +1,13 @@
 """SIC code → Fama-French 12 industry, for sector-neutral factor scores.
 
-Ranges follow Ken French's "12 Industry Portfolios" definition. Anything not
+Ranges follow Ken French's "12 Industry Portfolios" definition. A SIC code not
 covered is "Other" (FF12 group 12), which is also where financials that
 French puts in "Money" are NOT — those get their own group here (FF12 11).
+A ticker without a SIC code is "Unclassified" (since 2026-09-29, S48): it is not
+evidence of being in French's "Other" group.
+
+The groups feed the v2 shadow line's 20% industry cap and the weekly attribution;
+the traded long v1 book does not use them.
 """
 from __future__ import annotations
 
@@ -27,9 +32,12 @@ FF12 = [
 ]
 
 
+UNCLASSIFIED = "Unclassified"
+
+
 def ff12(sic: float | int | None) -> str:
     if sic is None or pd.isna(sic):
-        return "Other"
+        return UNCLASSIFIED
     s = int(sic)
     for name, ranges in FF12:
         if any(lo <= s <= hi for lo, hi in ranges):
@@ -38,11 +46,20 @@ def ff12(sic: float | int | None) -> str:
 
 
 def industry_by_ticker(store) -> pd.Series:
-    """ticker -> FF12 group, via fundamentals_pit's cik→ticker and the SIC parquet."""
+    """ticker -> FF12 group, via fundamentals_pit's cik→ticker and the SIC file.
+
+    A ticker can map to several CIKs (475 of 7,758 on 2026-09-28: reused symbols, share classes,
+    successor companies). Each ticker takes the CIK of its most recent filing (ties: the larger
+    CIK), so the mapping is the same on every run; before 2026-09-29 an unordered DISTINCT +
+    drop_duplicates picked one at random and the industry layer moved by ~$9 between runs.
+    """
     if not SIC_FILE.exists():
         raise FileNotFoundError(f"{SIC_FILE} missing: run python -m agent.sources.sec_sic")
-    sic = pd.read_csv(SIC_FILE)[["cik", "sic"]]
-    ct = store.con.execute("SELECT DISTINCT cik, ticker FROM fundamentals_pit WHERE ticker IS NOT NULL").df()
+    sic = pd.read_csv(SIC_FILE)[["cik", "sic"]].drop_duplicates("cik")
+    ct = store.con.execute("""SELECT ticker, cik FROM (
+                                  SELECT ticker, cik, row_number() OVER (PARTITION BY ticker ORDER BY max(filed) DESC, cik DESC) AS k
+                                  FROM fundamentals_pit WHERE ticker IS NOT NULL GROUP BY ticker, cik)
+                              WHERE k = 1 ORDER BY ticker""").df()
     m = ct.merge(sic, on="cik", how="left")
     m["group"] = m["sic"].map(ff12)
-    return m.drop_duplicates("ticker").set_index("ticker")["group"]
+    return m.set_index("ticker")["group"]
