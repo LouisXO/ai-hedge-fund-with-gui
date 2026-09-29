@@ -338,3 +338,63 @@ def test_schema_alters_only_what_is_missing_and_never_hides_a_failure(con):
     rec = Recording(con)
     ledger.ensure_schema(rec)
     assert [s for s in rec.sql if s.startswith("ALTER")] == ["ALTER TABLE agent_lots ADD COLUMN entry_kind VARCHAR"]
+
+
+def test_nightly_run_passes_the_calendar_and_writes_the_classification_on_the_order(store, tmp_path, monkeypatch):
+    """execute.main, dry run, insider book only: the broker's calendar reaches insider_targets, its three
+    results are unpacked and the planned buy carries its classification (nothing is sent)."""
+    import json
+    import sys
+    import types
+    from agent import execute
+    from agent.books.data import Market
+
+    class Broker:
+        def account(self):
+            return {"equity": "100000", "cash": "100000"}
+
+        def calendar(self, start, end):
+            return list(SESSIONS)
+
+        def positions(self):
+            return []
+
+        def open_orders(self):
+            return []
+
+        def order_by_client_id(self, coid):
+            return None
+
+    class Now(dt.datetime):                              # Tuesday 17:00 ET: the 16:10 PT run after that session
+        @classmethod
+        def now(cls, tz=None):
+            return dt.datetime(2026, 9, 22, 17, 0, tzinfo=tz)
+
+    def market(_store, _start):
+        close = store.bars_wide("close")
+        adv = (close * store.bars_wide("volume")).rolling(20).mean()
+        return Market(close, close, close, adv, close.notna(), pd.Series(1.0, index=close.index), {})
+
+    seen = {}
+    real = execute.insider_targets
+
+    def spy(store_, day, con, sessions, *a, **k):
+        seen["sessions"] = sessions
+        return real(store_, day, con, sessions, *a, **k)
+
+    monkeypatch.setattr(execute.broker_mod, "from_env", Broker)
+    monkeypatch.setattr(execute, "dt", types.SimpleNamespace(date=dt.date, time=dt.time, timedelta=dt.timedelta, datetime=Now))
+    monkeypatch.setattr(execute, "PanelStore", lambda read_only=False: store)
+    monkeypatch.setattr(execute, "load_market", market)
+    monkeypatch.setattr(execute, "insider_targets", spy)
+    monkeypatch.setattr(sys, "argv", ["execute", "--no-update", "--book", "insider", "--optradar-db", str(tmp_path / "l.db"),
+                                      "--out-dir", str(tmp_path)])
+    insider(store, "AAA", "X", 400_000, TUE)
+    insider(store, "BBB", "X", 300_000, MON)
+    assert execute.main() == 0
+    assert seen["sessions"] == SESSIONS
+    out = json.load(open(tmp_path / "exec_2026-09-22.json"))
+    buys = {o["ticker"]: o for o in out["orders"] if o["side"] == "buy"}
+    assert set(buys) == {"AAA", "BBB"} and all(o["status"] == "dry_run" for o in buys.values())
+    assert (buys["AAA"]["entry_kind"], buys["AAA"]["lag_sessions"], buys["AAA"]["trigger_filing_day"]) == ("on_time", 0, "2026-09-22")
+    assert (buys["BBB"]["entry_kind"], buys["BBB"]["lag_sessions"], buys["BBB"]["trigger_filing_day"]) == ("late", 1, "2026-09-21")
