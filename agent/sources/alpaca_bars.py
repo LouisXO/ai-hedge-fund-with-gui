@@ -94,8 +94,9 @@ def vendor_symbol(sym: str) -> str:
 
 
 def panel_symbol(sym: str) -> str:
-    """Alpaca's spelling (and the broker's) → the panel's: 'BRK.A' → 'BRK-A'. A held 'BRK.A' passed to
-    update() next to the universe's 'BRK-A' is then one symbol, not two spellings of one request symbol."""
+    """Alpaca's spelling (and the broker's) → listing_status's: 'BRK.A' → 'BRK-A'. A held 'BRK.A' passed to
+    update() next to the universe's 'BRK-A' is then one symbol, not two spellings of one request symbol.
+    The yfinance rows of S&P names keep the dot ('BRK.B', 'BF.B'), so update() maps only into the universe."""
     return sym.replace(".", "-") if VENDOR_CLASS.match(sym) else sym
 
 
@@ -371,7 +372,8 @@ def update(store: PanelStore, days: int = 7, extra: list[str] | None = None, htt
     symbol is in failed_symbols, and the next evenings find the same break (LOOKBACK days back) and
     try again.
     """
-    syms = sorted(set(universe(store)) | {panel_symbol(s) for s in extra or []})
+    uni = set(universe(store))                           # the broker's 'BRK.A' is the universe's 'BRK-A'; a name outside
+    syms = sorted(uni | {panel_symbol(s) if panel_symbol(s) in uni else s for s in extra or []})   # it keeps its spelling
     today = dt.date.today()
     newest = store.con.execute("SELECT max(trade_date) FROM bars WHERE source = ?", [SOURCE]).fetchone()[0]
     start = today - dt.timedelta(days=days)

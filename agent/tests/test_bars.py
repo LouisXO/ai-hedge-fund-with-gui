@@ -340,9 +340,9 @@ def test_the_same_class_share_in_two_spellings_is_neither_lost_nor_doubled(store
     _list(store, ["AAA", "BRK-A"])
     _stored(store, "BRK-A", {d: (700_000.0, 700_000.0) for d in DAYS[:-1]})
     v.calls.clear()
-    ab.update(store, 7, extra=["BRK.A"], http=v, sleep=Naps(), keys=KEYS)    # a held position, as the broker spells it
-    assert v.calls[0][0] == ["AAA", "BRK.A"]
-    assert store.con.execute("SELECT count(*) FROM bars WHERE ticker = 'BRK.A'").fetchone()[0] == 0
+    ab.update(store, 7, extra=["BRK.A", "BF.B"], http=v, sleep=Naps(), keys=KEYS)   # held, as the broker spells them
+    assert v.calls[0][0] == ["AAA", "BF.B", "BRK.A"]                         # BF-B is not in the universe: BF.B stays,
+    assert store.con.execute("SELECT count(*) FROM bars WHERE ticker = 'BRK.A'").fetchone()[0] == 0   # as yfinance spells it
     assert len(_bars(store, "BRK-A")) == len(DAYS) and ab.panel_symbol("BRK.B") == "BRK-B" and ab.panel_symbol("AAPL") == "AAPL"
 
 
