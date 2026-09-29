@@ -193,3 +193,38 @@ def test_av_news_fetches_with_panel_closed_and_logs_an_error(panel, monkeypatch,
     assert [(r[0], r[1], r[4], r[5]) for r in runs(panel)] == [("av_news", "ok", 1, 1), ("av_news", "failed", 0, 0)]
     with PanelStore(panel, read_only=True) as s:
         assert s.con.execute("SELECT n_articles, n_rows FROM news_fetch_log").fetchall() == [(1, 1)]
+
+
+# ---- daily_archive: fractionable in the borrow archive ----
+
+import duckdb                                                                # noqa: E402
+
+from agent.sources import daily_archive                                      # noqa: E402
+
+OLD_BORROW = """CREATE TABLE borrow (day DATE, ticker VARCHAR, shortable BOOLEAN, easy_to_borrow BOOLEAN, marginable BOOLEAN,
+       PRIMARY KEY (day, ticker))"""
+
+
+def test_borrow_gains_fractionable_on_an_existing_archive_and_old_rows_stay_null(tmp_path):
+    con = duckdb.connect(str(tmp_path / "archive.db"))
+    con.execute(OLD_BORROW)
+    con.execute("INSERT INTO borrow VALUES ('2026-09-28', 'MU', TRUE, TRUE, TRUE)")
+    daily_archive.ensure_schema(con)
+    daily_archive.ensure_schema(con)                                        # idempotent
+    assert [r[0] for r in con.execute("DESCRIBE borrow").fetchall()] == daily_archive.BORROW_COLS
+    assets = [{"symbol": "MU", "tradable": True, "shortable": True, "easy_to_borrow": True, "marginable": True, "fractionable": True},
+              {"symbol": "XYZW", "tradable": True, "shortable": False, "easy_to_borrow": False, "marginable": False, "fractionable": False},
+              {"symbol": "OLD", "tradable": True, "shortable": True},                                 # flag not in the answer
+              {"symbol": "HALT", "tradable": False, "fractionable": True}]
+    assert daily_archive.archive_borrow(con, assets) == 3
+    got = con.execute("SELECT CAST(day AS VARCHAR), ticker, shortable, fractionable FROM borrow ORDER BY day, ticker").fetchall()
+    today = str(dt.date.today())
+    assert got == [("2026-09-28", "MU", True, None), (today, "MU", True, True), (today, "OLD", True, None),
+                   (today, "XYZW", False, False)]
+    con.close()
+
+
+def test_a_new_archive_has_the_same_column_order():
+    con = duckdb.connect(":memory:")
+    daily_archive.ensure_schema(con)
+    assert [r[0] for r in con.execute("DESCRIBE borrow").fetchall()] == daily_archive.BORROW_COLS
