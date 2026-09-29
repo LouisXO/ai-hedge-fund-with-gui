@@ -296,9 +296,9 @@ def test_schema_adds_the_classification_columns_to_an_old_ledger_once(tmp_path):
     con.execute("INSERT INTO agent_lots (lot_id, book, ticker, qty, status) VALUES ('insider|O|2026-09-18', 'insider', 'O', 5, 'open')")
     ledger.ensure_schema(con)
     ledger.ensure_schema(con)
-    for table in ("agent_orders", "agent_lots"):
+    for table, later in (("agent_orders", ["applied_qty", "applied_notional"]), ("agent_lots", ["sold_qty", "sold_notional"])):
         cols = [r[0] for r in con.execute(f"DESCRIBE {table}").fetchall()]
-        assert cols[-3:] == ["trigger_filing_day", "lag_sessions", "entry_kind"] and len(cols) == len(set(cols))
+        assert cols[-5:] == ["trigger_filing_day", "lag_sessions", "entry_kind"] + later and len(cols) == len(set(cols))
     assert con.execute("SELECT trigger_filing_day, lag_sessions, entry_kind FROM agent_orders").fetchall() == [(None, None, None)]
     con.execute("INSERT INTO agent_books VALUES ('insider', 30000, 30000, 20, ?, now())", [AS_OF])
     cal = [dt.date(2026, 9, d) for d in (21, 22, 23, 24, 25, 28, 29, 30)]
