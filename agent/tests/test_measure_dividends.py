@@ -101,3 +101,39 @@ def test_auction_nav_table_gains_the_new_columns(tmp_path):
     cols = [r[0] for r in con.execute("DESCRIBE agent_auction_nav").fetchall()]
     assert cols == auction_basis.NAV_COLS
     con.close()
+
+
+def test_a_failed_rewrite_keeps_the_previous_dividend_rows(tmp_path, monkeypatch):
+    con = ledger.connect(str(tmp_path / "t.db"))
+    con.execute(dividends.DDL)
+    con.execute("INSERT INTO agent_dividends VALUES ('L1', 'long', 'X', '2026-09-01', 0.1, 10, 1.0, 'dividend', '2026-09-28 13:30')")
+    dup = pd.DataFrame([{"lot_id": "L2", "book": "long", "ticker": "Y", "ex_date": D(2026, 9, 2), "per_share": 0.2, "qty": 5.0,
+                         "usd": 1.0, "kind": "dividend", "computed_at": T0}] * 2)          # same key twice: the insert fails
+    monkeypatch.setattr(dividends, "compute", lambda con, store: (dup, None))
+    with pytest.raises(Exception):
+        dividends.update(con, None)
+    assert con.execute("SELECT lot_id FROM agent_dividends").fetchall() == [("L1",)]
+    con.close()
+
+
+def test_a_dividend_failure_does_not_stop_the_auction_basis(monkeypatch):
+    class Store:
+        def __init__(self, read_only=True):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def boom(con, store):
+        raise RuntimeError("panel locked")
+    monkeypatch.setattr(auction_basis, "PanelStore", Store)
+    monkeypatch.setattr(auction_basis.dividends, "update", boom)
+    div, err = auction_basis.soft_dividends(None)
+    assert err == "RuntimeError: panel locked"
+    assert div.empty and list(div.columns) == auction_basis.DIV_COLS
+    rows = auction_basis.nav_rows(pd.DataFrame([{"as_of": D(2026, 9, 25), "book": "long", "equity_usd": 100.0}]),
+                                  pd.DataFrame(columns=["book", "d", "adj"]), {}, div)
+    assert rows and rows[0][auction_basis.NAV_COLS.index("div_cum")] == 0.0

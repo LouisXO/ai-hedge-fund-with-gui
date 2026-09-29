@@ -150,6 +150,22 @@ def cross_prices(pairs: set[tuple[str, dt.date]]) -> dict[tuple[str, dt.date], f
     return {(t, d): float(p) for t, d, p in zip(have["ticker"], have["day"], have["open_px"]) if pd.notna(p)}
 
 
+DIV_COLS = ["lot_id", "book", "ticker", "ex_date", "per_share", "qty", "usd", "kind", "computed_at"]
+
+
+def soft_dividends(con) -> tuple[pd.DataFrame, str | None]:
+    """dividends.update, but a failure there does not stop the auction basis: the price NAV, the missed-trade
+    shadow and auction_basis.json are still written (div_cum 0 for the day; postclose also runs agent.dividends
+    on its own). Returns (rows, error text or None)."""
+    try:
+        with PanelStore(read_only=True) as store:
+            return dividends.update(con, store), None
+    except Exception as e:                        # noqa: BLE001 — reported in the json and on stdout
+        msg = f"{type(e).__name__}: {e}"
+        print(f"dividends skipped ({msg}); NAV written without them")
+        return pd.DataFrame(columns=DIV_COLS), msg
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=ledger.OPTRADAR_DB, help="the ledger (a copy, for a test run)")
@@ -159,8 +175,7 @@ def main(argv: list[str] | None = None) -> int:
     con = ledger.connect(args.db)
     try:
         ensure_table(con)
-        with PanelStore(read_only=True) as store:
-            div = dividends.update(con, store)
+        div, div_error = soft_dividends(con)
         fills = con.execute("""SELECT client_order_id, book, ticker, side, filled_qty, filled_avg_px, CAST(filled_at AS DATE) d, reason,
                                       order_type, limit_price
                                FROM agent_orders WHERE dry_run = FALSE AND filled_qty > 0""").df()
@@ -247,7 +262,8 @@ def main(argv: list[str] | None = None) -> int:
            "dividends": {"n": int((div["kind"] == "dividend").sum()) if len(div) else 0,
                          "usd": float(div.loc[div["kind"] == "dividend", "usd"].sum()) if len(div) else 0.0,
                          "to_check": [{"ticker": t, "ex_date": str(x), "kind": k} for t, x, k in
-                                      zip(div["ticker"], div["ex_date"], div["kind"]) if k != "dividend"] if len(div) else []},
+                                      zip(div["ticker"], div["ex_date"], div["kind"]) if k != "dividend"] if len(div) else [],
+                         "error": div_error},
            "missed_summary": {"n": len(miss_rows) - sum(m["retried_filled"] for m in miss_rows), "closed": len(closed),
                               "n_retried_filled": sum(m["retried_filled"] for m in miss_rows),
                               "mean_ret_pct": sum(m["ret_pct"] for m in closed) / len(closed) if closed else None,

@@ -146,11 +146,22 @@ def update(con, store: PanelStore) -> pd.DataFrame:
     """Recompute agent_dividends from scratch (the factors can be corrected after the fact). Returns the rows."""
     rows, _ = compute(con, store)
     con.execute(DDL)
-    con.execute("DELETE FROM agent_dividends")
-    if len(rows):
-        con.register("_div_in", rows)
-        con.execute("INSERT INTO agent_dividends SELECT lot_id, book, ticker, ex_date, per_share, qty, usd, kind, computed_at FROM _div_in")
-        con.unregister("_div_in")
+    con.execute("BEGIN TRANSACTION")               # delete + insert together: a failure keeps the previous rows
+    try:
+        con.execute("DELETE FROM agent_dividends")
+        if len(rows):
+            con.register("_div_in", rows)
+            con.execute("INSERT INTO agent_dividends SELECT lot_id, book, ticker, ex_date, per_share, qty, usd, kind, computed_at FROM _div_in")
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    finally:
+        if len(rows):
+            try:
+                con.unregister("_div_in")
+            except Exception:
+                pass
     return rows
 
 
