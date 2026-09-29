@@ -18,7 +18,9 @@ from hedge_fund.features.panel import PanelStore
 BUCKETS = [-np.inf, 3e6, 2e7, 1e8, np.inf]
 LABELS = ["micro", "small", "mid", "large"]
 MAX_TX_USD = 50e6          # a single open-market insider trade above this is a parsing error, not a signal
-OVERRIDE_DAYS = 400        # shares_override reaches back this far from the newest filing, no further
+OVERRIDE_DAYS = 120        # a share-count override reaches rows filed up to this many days before its as_of, none earlier or after
+SPLIT_MOVE = 1.4           # adj_close/close moving more than this between a row's filing and the override's as_of: a split between
+OVERRIDE_TABLES = ("shares_override", "shares_override_log")   # the current row per ticker, and every row it ever had
 
 
 @dataclass
@@ -86,17 +88,92 @@ def fundamentals(store: PanelStore) -> pd.DataFrame | None:
     # XBRL feed cannot see; their current count from yfinance stands in (not point-in-time — a share
     # count moves a few % a year, the price is what moves the ratio). Audit S28, 2026-09-22.
     df.loc[df["shares"] <= 1000, "shares"] = np.nan             # 0 / 1 / negative counts are XBRL noise (FOX, HOOD, EL...)
-    # S47 补充 5: only where the count is missing, and only on rows filed within OVERRIDE_DAYS of the newest
-    # filing in the table. Was: every row of the ticker, so a count checked in 2026 set the market cap of
-    # 2017 in a backtest, and replaced counts that were fine.
+    # S47b 1 (replaces S47 补充 5's 400 days from the newest filing): only where the count is missing or
+    # flagged (shares_flag not empty), and only from an override whose as_of is 0..OVERRIDE_DAYS after the
+    # row's filing — see apply_share_overrides. Every other row, and every unflagged count, is as built.
     try:
-        ov = store.con.execute("SELECT ticker, shares FROM shares_override").df().set_index("ticker")["shares"]
-        m = df["ticker"].map(ov)
-        use = m.notna() & df["shares"].isna() & (df["filed"] >= df["filed"].max() - pd.Timedelta(days=OVERRIDE_DAYS))
-        df.loc[use, "shares"] = m[use]
+        df = apply_share_overrides(store, df)
     except Exception:
         pass
     return df
+
+
+def _tables(store: PanelStore) -> set[str]:
+    # looked up, not tried: a failed query would abort the caller's open transaction
+    return set(store.con.execute("SELECT table_name FROM information_schema.tables").df()["table_name"])
+
+
+def share_overrides(store: PanelStore) -> pd.DataFrame:
+    """ticker, as_of, shares of every override: shares_override (the current row per ticker) and
+    shares_override_log (every row agent.sources.moomoo_shares wrote, and the rows it found there). On the
+    same (ticker, as_of) the shares_override row wins: a row fixed by hand there is what stands."""
+    have = _tables(store)
+    parts = [store.con.execute(f"SELECT ticker, CAST(as_of AS DATE) AS as_of, shares FROM {t}").df()
+             for t in OVERRIDE_TABLES if t in have]
+    cols = ["ticker", "as_of", "shares"]
+    ov = pd.concat(parts, ignore_index=True)[cols] if parts else pd.DataFrame(columns=cols)
+    ov["as_of"] = pd.to_datetime(ov["as_of"]).astype("datetime64[ns]")
+    ov["shares"] = pd.to_numeric(ov["shares"], errors="coerce")
+    return ov.dropna(subset=["as_of", "shares"]).drop_duplicates(["ticker", "as_of"], keep="first")
+
+
+def apply_share_overrides(store: PanelStore, df: pd.DataFrame) -> pd.DataFrame:
+    """Fundamentals rows whose count is missing or flagged take the EARLIEST override with as_of in
+    [filed, filed + OVERRIDE_DAYS] (S47b 1); shares_asof becomes that as_of.
+
+    Point in time: a backtest day on such a row sees a count at most OVERRIDE_DAYS newer than the row's
+    filing; with the daily fetch the first snapshot after a filing is a day or two after it. The first
+    snapshots (2026-09-22 yfinance, 2026-09-29 onward moomoo) reach back to rows filed from 2026-05-25 /
+    2026-06-01; earlier rows, and rows with no override in their window (a 20-F filed in April, V's row
+    of 2026-04-29), stay as built. Earliest, not latest: once a row has taken an override it keeps it as
+    later snapshots arrive (a 20-F row is used for 200 days, not 120), and a list recomputed later — the
+    drift check, the evaluation's same-window backtest — sees the count the live list saw.
+
+    Splits: close is not split-adjusted, so a count taken after a split, on a row filed before it, gives
+    close x count off by the split ratio on the days before the split (a reverse split makes the name look
+    that many times cheaper). Where adj_close/close on the last bar at or before the as_of differs from
+    the one at or before the filing by more than SPLIT_MOVE either way, the row is left as built
+    (CTNT: 1:150 reverse split on 2026-09-28, row filed 2026-08-13)."""
+    ov = share_overrides(store)
+    flagged = (df["shares_flag"].fillna("").ne("") if "shares_flag" in df
+               else pd.Series(False, index=df.index))
+    need = df.index[(df["shares"].isna() | flagged) & df["ticker"].isin(set(ov["ticker"]))]
+    if not len(need):
+        return df
+    left = (df.loc[need, ["ticker", "filed"]].assign(filed=lambda x: x["filed"].astype("datetime64[ns]"))
+            .rename_axis("row").reset_index().sort_values("filed"))
+    hit = pd.merge_asof(left, ov[["ticker", "as_of", "shares"]].sort_values("as_of"), left_on="filed",
+                        right_on="as_of", by="ticker", direction="forward",
+                        tolerance=pd.Timedelta(days=OVERRIDE_DAYS)).dropna(subset=["shares"])
+    move = _factor_move(store, hit)
+    hit = hit[~((move > SPLIT_MOVE) | (move < 1 / SPLIT_MOVE))]
+    df.loc[hit["row"].to_numpy(), "shares"] = hit["shares"].to_numpy()
+    if "shares_asof" in df:
+        df["shares_asof"] = pd.to_datetime(df["shares_asof"])
+        df.loc[hit["row"].to_numpy(), "shares_asof"] = hit["as_of"].to_numpy()
+    return df
+
+
+def _factor_move(store: PanelStore, hit: pd.DataFrame) -> pd.Series:
+    """Per row of hit: adj_close/close on the last bar at or before filed over the same at or before as_of.
+    NaN where either bar is missing (then nothing is skipped: without a bar the name is not scored)."""
+    out = pd.Series(np.nan, index=hit.index)
+    if hit.empty or "bars" not in _tables(store):
+        return out
+    start = (hit["filed"].min() - pd.Timedelta(days=10)).date().isoformat()
+    bars = store.con.execute(
+        "SELECT ticker, CAST(trade_date AS DATE) AS d, adj_close / close AS k FROM bars "
+        "WHERE trade_date >= CAST(? AS DATE) AND close > 0 AND adj_close > 0 "
+        "AND list_contains(?, ticker)", [start, sorted(hit["ticker"].unique())]).df()
+    if bars.empty:
+        return out
+    bars = bars.assign(d=pd.to_datetime(bars["d"]).astype("datetime64[ns]")).sort_values("d")
+
+    def k_at(col):
+        x = hit[["ticker", col]].rename_axis("i").reset_index().sort_values(col)
+        got = pd.merge_asof(x, bars, left_on=col, right_on="d", by="ticker", direction="backward")
+        return got.set_index("i")["k"].reindex(hit.index)
+    return k_at("filed") / k_at("as_of")
 
 
 def insider_flows(store: PanelStore, start: str) -> pd.DataFrame:

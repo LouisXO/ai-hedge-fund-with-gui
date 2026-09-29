@@ -27,7 +27,9 @@ Checks
                 days behind the bars); held names whose listing state changed at the last refresh
   factors       per-day universe size and NaN share per family; z-score caps (winsor) — how many
                 names sit exactly at the cap per family; families' z dispersion; in the top 60, every
-                name whose B/M is at the winsor cap or whose share fact is older than 400 days
+                name whose B/M is at the winsor cap or whose share fact is older than 400 days; in the
+                top 60, our market cap against moomoo's count (shares_override rows from
+                agent.sources.moomoo_shares, never a live call) — more than 30% apart is a WARN
                 (run daily: --section factors)
   ledger        agent_picks/agent_orders/agent_lots consistency; paper vs model prices present
 """
@@ -59,6 +61,7 @@ KNOWN_FLOWS = [  # ticker, column, filing date of the 10-K, USD billions, tolera
 ]
 TOP_KEEP = 60                   # the long book holds a name while it ranks inside this
 SHARE_FACT_MAX_AGE_DAYS = 400
+MCAP_VS_MOOMOO_TOL = 0.30       # S47b 1: our market cap vs moomoo's, beyond this the count is suspect
 
 
 LISTING_MAX_AGE_DAYS = 8       # the list is refreshed every Sunday: more than 8 days behind the bars means a refresh failed
@@ -101,6 +104,18 @@ def top_list_suspects(fs: pd.DataFrame, f: pd.DataFrame, day: pd.Timestamp, n: i
     top = fs[fs["n_families"] >= 3].sort_values("composite", ascending=False).head(n).index
     age = (day - pd.to_datetime(f["shares_asof"])).dt.days
     return [t for t in top if bm[t] >= cap], [t for t in top if age[t] > SHARE_FACT_MAX_AGE_DAYS], float(cap)
+
+
+def mcap_vs_moomoo(mcap: pd.Series, close: pd.Series, ref_shares: pd.Series,
+                   tol: float = MCAP_VS_MOOMOO_TOL) -> tuple[dict, list[str]]:
+    """{ticker: our mcap / moomoo's} beyond 1 +- tol, and the names moomoo has no count for.
+
+    moomoo's cap is its share count at our close, so the ratio is a ratio of share counts: a price
+    move between the snapshot and the bar does not show up as a difference."""
+    ref = ref_shares.reindex(mcap.index) * close.reindex(mcap.index)
+    ratio = (mcap / ref).replace([np.inf, -np.inf], np.nan)
+    off = {t: float(r) for t, r in ratio.dropna().items() if abs(r - 1) > tol}
+    return off, [t for t in mcap.index if pd.isna(ref.get(t))]
 
 
 def audit_fundamentals(store, rep: Report):
@@ -318,16 +333,22 @@ def audit_factors(store, rep: Report):
                 f"{fs[fam].isna().mean():.0%} NaN, max z {z.max():.2f}, {cap} names at the cap, sd {z.std():.2f}")
     top = fs.sort_values("composite", ascending=False).head(30)
     rep.add("factors", "top-30 family mix", "PASS", f"mean z v {top['value'].mean():+.2f} q {top['quality'].mean():+.2f} m {top['momentum'].mean():+.2f} lv {top['lowvol'].mean():+.2f}")
+    # S47b 1: close x the count the books used, against moomoo's count at the same close (latest snapshot rows)
+    top60 = fs[fs["n_families"] >= 3].sort_values("composite", ascending=False).head(TOP_KEEP)
+    try:
+        mm = store.con.execute("SELECT ticker, shares, as_of FROM shares_override WHERE source = 'moomoo_snapshot'").df()
+    except Exception:
+        mm = pd.DataFrame(columns=["ticker", "shares", "as_of"])
+    off, missing = mcap_vs_moomoo(top60["mcap"], market.close.loc[day], mm.set_index("ticker")["shares"])
+    newest = pd.to_datetime(mm["as_of"]).max() if len(mm) else None
+    rep.add("factors", f"top {TOP_KEEP}: market cap vs moomoo (> {MCAP_VS_MOOMOO_TOL:.0%} apart)",
+            "WARN" if off or missing else "PASS",
+            f"{len(off)} apart {({t: round(r, 2) for t, r in off.items()})}; {len(missing)} without a moomoo count "
+            f"{missing[:10]}; newest snapshot {newest.date() if newest is not None else 'none'}")
     if "shares_asof" not in fund.columns:
         rep.add("factors", f"top {TOP_KEEP}: suspect value inputs", "WARN", "fundamentals_pit has no shares_asof: rebuild it (agent.books.fundamentals.factor_inputs)")
         return
-    f = latest_before(fund, day)
-    try:                                                   # an overridden count is as old as the override
-        ov = store.con.execute("SELECT ticker, as_of FROM shares_override").df().set_index("ticker")["as_of"]
-        hit = f.index[f.index.isin(ov.index) & f["shares_asof"].isna() & f["shares"].notna()]   # applied only where XBRL had none
-        f.loc[hit, "shares_asof"] = pd.to_datetime(ov).reindex(hit)
-    except Exception:
-        pass
+    f = latest_before(fund, day)                           # an overridden count's shares_asof is the override's as_of (fundamentals)
     at_cap, old, cap = top_list_suspects(fs, f, day)
     rep.add("factors", f"top {TOP_KEEP}: B/M at the winsor cap ({cap:.2f})", "WARN" if at_cap else "PASS", f"{len(at_cap)} {at_cap}")
     rep.add("factors", f"top {TOP_KEEP}: share fact older than {SHARE_FACT_MAX_AGE_DAYS} days", "WARN" if old else "PASS", f"{len(old)} {old}")
