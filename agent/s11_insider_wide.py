@@ -47,8 +47,8 @@ def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str],
     carries for a living company (OKE, TEL).
 
     A company the vendor still carries as Active after it was delisted stays True after its last bar (KLG,
-    WNS, AILE: 8 such names in 2026-09); no list can hold it, since that needs a bar and ADV, and the audit
-    counts them.
+    WNS, AILE; RCM, LTRY, ABST, SCU, QTNT have bars that stop well before their Delisted row ends); no list
+    can hold it, since that needs a bar and ADV, and the audit counts the first kind.
 
     TODO(S47 补充, not fixed yet): the mask says which days a name may be picked, not which prices belong to
     the listing it is in. Factors look back by row position (agent/books/factors.py: hist.iloc[-253] and a
