@@ -88,9 +88,16 @@ def main() -> int:
                 gap = (float(a.iloc[-1]) / float(res.nav.loc[d0]) - 1) * 100
                 out.append(chk("净值:竞价口径 对 规则重放", "ok" if abs(gap) <= 0.5 else "warn" if abs(gap) <= 1.5 else "bad",
                                f"模拟盘 ${a.iloc[-1]:,.0f},重放 ${res.nav.loc[d0]:,.0f},差 {gap:+.2f}%", gap_pct=gap))
-        # 3) list revisions over the last 5 recorded days
+        # 3) list revisions over the last 5 recorded days — only lists recorded on the current data definition:
+        #    lists before the S47 correction (evaluate_from) differ from a recomputation by design
+        try:
+            import yaml
+            since = yaml.safe_load(open(os.path.join(os.path.dirname(__file__), "config.yaml"))).get("evaluate_from")
+        except Exception:
+            since = None
+        comparable = [d for d in sorted(lists) if since is None or d.date() >= pd.Timestamp(str(since)).date()]
         ov30, ov60, worst = [], [], None
-        for d in sorted(lists)[-5:]:
+        for d in comparable[-5:]:
             if d not in market.adj.index:
                 continue
             now = [r["ticker"] for r in long_live.targets(store, market, d, TOP_N)]
