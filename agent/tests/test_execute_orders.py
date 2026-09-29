@@ -125,6 +125,19 @@ def test_a_body_that_is_not_json_is_a_broker_error_and_a_404_lookup_is_none(monk
     assert PaperBroker("PKX", "s").order_by_client_id("x") is None
 
 
+def test_orders_since_asks_in_utc_seconds_and_pages(monkeypatch):
+    seen = []
+
+    def req(self, method, path, params=None, body=None):
+        seen.append(params["after"])
+        n = 500 if len(seen) == 1 else 2
+        return [{"client_order_id": f"x{len(seen)}-{i}", "submitted_at": f"2026-09-2{len(seen)}T20:00:00.5Z"} for i in range(n)]
+    monkeypatch.setattr(PaperBroker, "_req", req)
+    after = dt.datetime(2026, 9, 15, 19, 10, 0, 123456, tzinfo=execute.ET)
+    assert len(PaperBroker("PKX", "s").orders_since(after)) == 502
+    assert seen == ["2026-09-15T23:10:00Z", "2026-09-21T20:00:00.5Z"]
+
+
 # ---------------------------------------------------------------- sending ------------
 def test_each_order_is_in_the_ledger_as_it_returns_and_a_timeout_is_looked_up(con):
     """POST 2 times out after the broker took it: recorded accepted with its id. POST 3 times out and never

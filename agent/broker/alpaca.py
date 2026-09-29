@@ -97,7 +97,9 @@ class PaperBroker:
         return self._req("GET", "/orders", {"status": "open", "limit": 500, "nested": "false"}) or []
 
     def orders_since(self, after: dt.datetime, status: str = "all") -> list[dict]:
-        out, page_after = [], after.isoformat()
+        # plain RFC 3339 in UTC to the second, the form the API documents (an ET offset with microseconds is valid
+        # too, but this call first runs unattended in the 16:10 job, where a 4xx stops the evening's orders)
+        out, page_after = [], after.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         while True:
             chunk = self._req("GET", "/orders", {"status": status, "limit": 500, "direction": "asc",
                                                  "after": page_after, "nested": "false"}) or []
