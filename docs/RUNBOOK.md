@@ -168,24 +168,27 @@ curl -s -X DELETE -H "APCA-API-KEY-ID: $K" -H "APCA-API-SECRET-KEY: $S" "https:/
 - `last_backup.json`:最近一次的清单,每个文件的状态、表数和行数。自 S48 起,行数是把写好的 `.zst` 解压到临时目录后读出来的。
 - 密钥不在备份里(按设计),要重新申请。
 
-在任务间隙做(避开 06:00、08:41、13:15、13:25、16:10 PT 前后),或者先停掉相关任务。`zstd -d` 在目标文件已存在时会拒绝,所以先把旧文件挪开:
+在任务间隙做(避开 06:00、08:41、13:15、13:25、16:10 PT 前后),或者先停掉相关任务。`zstd -d` 在目标文件已存在时会拒绝,所以先把旧文件挪开。**旧库旁边的 `.db.wal` 必须一起挪开**:需要恢复时旧库往往是崩溃后留下的,带着 WAL;只挪 `.db`、把备份解压到原位置后,DuckDB 打开时会把旧 WAL 重放进恢复出的库,不报错,账本里混进旧文件的行。下面的 `park` 把 `.db` 和 `.db.wal` 一起挪走,原位置还剩任何一个就停下,不解压:
 
 ```bash
 B="$HOME/Library/Mobile Documents/com~apple~CloudDocs/OptRadarBackup"
 ls "$B/daily" "$B/weekly"; $PY -m json.tool "$B/last_backup.json" | head -40
 D="$B/daily/<日期>"; W="$B/weekly/<日期>"          # 选定要恢复的日期
 OLD=~/restore_old_$(date +%Y%m%d%H%M); mkdir -p "$OLD"
-mv ~/optradar/optradar.db "$OLD"/ 2>/dev/null
-zstd -d "$D/optradar.db.zst" -o ~/optradar/optradar.db
+park() { for x in "$1" "$1.wal"; do [ -e "$x" ] && mv "$x" "$OLD"/; done; if [ -e "$1" ] || [ -e "$1.wal" ]; then echo "停下:$1 或 $1.wal 仍在原位,不解压"; return 1; fi; }
+park ~/optradar/optradar.db && zstd -d "$D/optradar.db.zst" -o ~/optradar/optradar.db
 for f in archive estimates retail auctions filings; do
-  mv ~/.hedge-fund/agent/$f.db "$OLD"/ 2>/dev/null; zstd -d "$D/$f.db.zst" -o ~/.hedge-fund/agent/$f.db
+  park ~/.hedge-fund/agent/$f.db && zstd -d "$D/$f.db.zst" -o ~/.hedge-fund/agent/$f.db
 done
 cp "$D"/state/* ~/.hedge-fund/agent/
 tar -xzf "$D/out_agent.tgz" -C ~/optradar/out
 for f in panel options news short intraday; do                  # 只有要恢复大库时
-  mv ~/.hedge-fund/agent/$f.db "$OLD"/ 2>/dev/null; zstd -d "$W/$f.db.zst" -o ~/.hedge-fund/agent/$f.db
+  park ~/.hedge-fund/agent/$f.db && zstd -d "$W/$f.db.zst" -o ~/.hedge-fund/agent/$f.db
 done
+ls ~/optradar/*.wal ~/.hedge-fund/agent/*.wal 2>/dev/null         # 第一次打开之前应当没有输出
 ```
+
+备份里的 `.zst` 本身不带 WAL(备份时已把 WAL 并进副本),解压出来的就是完整的库。
 
 **恢复后检查**
 

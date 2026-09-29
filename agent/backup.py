@@ -15,7 +15,9 @@ source had: the restore test covers the file that is actually kept. A database t
 skipped and reported; the next run picks it up.
 Secrets (~/.hedge-fund/.env, optradar/.env) are NOT copied to the cloud: keys are re-issued, not restored.
 
-Restore: `zstd -d <file>.zst -o <name>.db` into ~/.hedge-fund/agent/ (or ~/optradar/ for optradar.db).
+Restore: first move BOTH the old <name>.db and <name>.db.wal out of the way (DuckDB silently replays a WAL left
+next to the path onto the restored file), then `zstd -d <file>.zst -o <name>.db` into ~/.hedge-fund/agent/ (or
+~/optradar/ for optradar.db). docs/RUNBOOK.md section 7 has the exact commands.
 
 Usage: python -m agent.backup [--weekly] [--dest DIR]
 """
