@@ -320,6 +320,50 @@ def test_a_second_run_the_same_evening_does_not_spend_the_same_cash_again(con):
     assert [o["ticker"] for o in again] == ["C5"]
 
 
+def test_a_rerun_keeps_the_size_of_a_buy_funded_by_sells_already_sent(con):
+    """Review finding (S48 fix): the long book has $1,000 and funds two entries with two rank_out sells. Run 1
+    sends both sells and N1, then the broker stops answering (N2 submit_unknown -> not_sent at the sync). Run 2
+    the same evening drops the sells as already sent; their proceeds still count, so N2 goes out at 39 shares
+    as planned (the guard used to count only the buys in flight: N2 was cut to 0)."""
+    con.execute("UPDATE agent_books SET cash_usd = 1000 WHERE book = 'long'")
+    lots = [{"ticker": f"H{i}", "qty": 100, "entry_px": 20.0, "hold_until": None} for i in range(30)]
+    ref = {**{f"H{i}": 20.0 for i in range(30)}, "N1": 50.0, "N2": 50.0}
+    keep = {f"H{i}" for i in range(28)}                                      # H28, H29 rank out
+    slots = {"long": (1_000.0 + 60_000.0) / 30}
+
+    def plan(inflight):
+        return plan_book("long", BOOKS["long"], lots, ["N1", "N2"], keep, AS_OF, CAL[6], ref, {}, 1_000.0, set(), True,
+                         "day", inflight=inflight)
+
+    fb = FakeBroker({client_id("long", AS_OF, "N2", "buy"): "down"})
+    run1, skipped, notes = execute.final_orders(con, fb, plan([]), {"long": 1_000.0}, None, slots, ref)
+    assert [(o["side"], o["ticker"], o["qty"]) for o in run1] == [("sell", "H28", 100), ("sell", "H29", 100),
+                                                                   ("buy", "N1", 39), ("buy", "N2", 39)]
+    assert skipped == [] and notes == []
+    send_orders(con, fb, run1, submit=True)
+    fb.down = False
+    sync_fills(con, fb, CAL)
+    assert [f["ticker"] for f in execute.inflight_sells(con)] == ["H28", "H29"]
+    run2, skipped, notes = execute.final_orders(con, fb, plan(inflight_buys(con, "long")), {"long": 1_000.0},
+                                                None, slots, ref)
+    assert [(o["side"], o["ticker"], o["qty"]) for o in run2] == [("buy", "N2", 39)] and notes == []
+    assert len(skipped) == 2                                                 # the two sells
+    # a sell the broker never confirmed brings no money: with it, the same rerun cannot fund N2
+    con.execute("UPDATE agent_orders SET alpaca_id = NULL, status = ? WHERE side = 'sell'", [SUBMIT_UNKNOWN])
+    run3, _, notes = execute.final_orders(con, fb, plan(inflight_buys(con, "long")), {"long": 1_000.0}, None, slots, ref)
+    assert [o["ticker"] for o in run3 if o["side"] == "buy"] == [] and "N2" in notes[0]
+
+
+def test_a_sell_in_flight_and_planned_again_is_counted_once():
+    sells_inflight = [{"book": "insider", "ticker": "S", "qty": 50, "ref_close": 20.0}]
+    plans = [_order("insider", "S", "sell", 50, ref=20.0), _order("insider", "A", "buy", 200, limit=10.0)]
+    out, notes = guard_buys(plans, {"insider": 1_100.0}, [], None, {"insider": 1_500.0}, None, sells_inflight)
+    # 1,100 + 970 once = 2,070 for 2,000 of buys: nothing cut; counted twice it would be 3,040 and hide a cut below
+    assert [o["qty"] for o in out] == [50, 200] and notes == []
+    out, _ = guard_buys(plans, {"insider": 1_000.0}, [], None, {"insider": 1_500.0}, None, sells_inflight)
+    assert out[1]["qty"] == 197
+
+
 def test_the_unfilled_part_of_a_partial_buy_is_what_stays_in_flight(con):
     fb = FakeBroker()
     coid = _sent(con, fb, _order("insider", "PRT", "buy", 100, limit=10.3))

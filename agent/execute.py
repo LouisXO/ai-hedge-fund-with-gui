@@ -487,23 +487,41 @@ def inflight_buys(con, book: str | None = None) -> list[dict]:
             for b, t, q_, lp, rc in rows if (q_ or 0) > 0]
 
 
+def inflight_sells(con) -> list[dict]:
+    """Sell orders the broker confirmed (alpaca_id known) that are not final yet, the unfilled part only. Their
+    lots still exit in plan_book, so their proceeds are in its cash_plan; a rerun the same evening drops them as
+    already sent, so the guard has to count them here, like the buys in flight. An order the broker never
+    confirmed (submit_unknown) is not counted: its money may never come."""
+    rows = con.execute(f"""SELECT book, ticker, qty - coalesce(applied_qty, 0), ref_close FROM agent_orders
+                           WHERE dry_run = FALSE AND side = 'sell' AND alpaca_id IS NOT NULL
+                             AND (status IS NULL OR status NOT IN ({FINAL_SQL}))""").fetchall()
+    return [{"book": b, "ticker": t, "qty": float(q or 0), "ref_close": rc} for b, t, q, rc in rows if (q or 0) > 0]
+
+
 def _notional(o: dict, ref_close: dict[str, float] | None = None) -> float:
     px = buy_px(o, ref_close)
     return float(o["qty"]) * px if px else 0.0
 
 
 def guard_buys(plans: list[dict], book_cash: dict[str, float], inflight: list[dict], broker_cash: float | None,
-               slots: dict[str, float], ref_close: dict[str, float] | None = None) -> tuple[list[dict], list[str]]:
+               slots: dict[str, float], ref_close: dict[str, float] | None = None,
+               sells_inflight: list[dict] | None = None) -> tuple[list[dict], list[str]]:
     """The last check before anything is sent (S48). Buys only; a sell is never cut.
 
     1. one buy costs at most order_cap(its book's slot): 1.5 slots, never over $10,000;
-    2. a book's buys cost at most its cash, less its buys in flight, plus its planned sells at ref close x 0.97;
+    2. a book's buys cost at most its cash, less its buys in flight, plus its sells at ref close x 0.97;
     3. all buys together cost at most the broker's cash, less all buys in flight, plus all sells x 0.97.
-    Over a limit, shares come off the lowest-priority buy first (the book's last; across books the plan's last),
-    down to dropping it. With the books' cash right this never binds: plan_book sizes within it. It is there for
-    a ledger that is wrong. Returns (the orders, one note per cut).
+    "Its sells" = the planned ones and the ones already at the broker and not filled yet (sells_inflight, e.g. sent
+    by an earlier run the same evening; a ticker with a planned sell is counted once). Over a limit, shares come
+    off the lowest-priority buy first (the book's last; across books the plan's last), down to dropping it.
+
+    It binds in ordinary runs too, not only on a wrong ledger: plan_book counts a sell's proceeds at 1.00 x ref
+    close and may spend them to the last dollar, the guard at 0.97. A book that funds its buys with the evening's
+    sells then loses about 3% of those proceeds from its last buy (shares, and a name only when that buy is
+    smaller than the shortfall). Returns (the orders, one note per cut).
     """
     notes: list[str] = []
+    sells_inflight = sells_inflight or []
     out = [dict(o) for o in plans]
     for o in out:
         if o["side"] != "buy" or o["book"] not in slots:
@@ -514,8 +532,12 @@ def guard_buys(plans: list[dict], book_cash: dict[str, float], inflight: list[di
             notes.append(f"{o['book']} {o['ticker']}: ${o['qty'] * px:,.0f} over the ${cap:,.0f} order cap, qty {o['qty']} -> {q}")
             o["qty"] = q
 
-    def sells(rows):
-        return sum(o["qty"] * (o.get("ref_close") or 0.0) * SELL_HAIRCUT for o in rows if o["side"] == "sell")
+    def sells(rows, flying_sells):
+        planned = {(o["book"], o["ticker"]) for o in rows if o["side"] == "sell"}
+        usd = sum(o["qty"] * (o.get("ref_close") or 0.0) for o in rows if o["side"] == "sell")
+        usd += sum(f["qty"] * ((ref_close or {}).get(f["ticker"]) or f.get("ref_close") or 0.0)
+                   for f in flying_sells if (f["book"], f["ticker"]) not in planned)
+        return usd * SELL_HAIRCUT
 
     def trim(rows, avail, label):
         buys = [o for o in rows if o["side"] == "buy" and o["qty"] > 0]
@@ -532,11 +554,30 @@ def guard_buys(plans: list[dict], book_cash: dict[str, float], inflight: list[di
     for book in dict.fromkeys(o["book"] for o in out):
         rows = [o for o in out if o["book"] == book]
         fly = sum(_notional(f, ref_close) for f in inflight if f["book"] == book)
-        trim(rows, book_cash.get(book, 0.0) - fly + sells(rows), f"book {book}")
+        trim(rows, book_cash.get(book, 0.0) - fly + sells(rows, [f for f in sells_inflight if f["book"] == book]),
+             f"book {book}")
     if broker_cash is not None:
         fly = sum(_notional(f, ref_close) for f in inflight)
-        trim(out, broker_cash - fly + sells(out), "account")
+        trim(out, broker_cash - fly + sells(out, sells_inflight), "account")
     return [o for o in out if o["side"] == "sell" or o["qty"] >= 1], notes
+
+
+def final_orders(con, broker, plans: list[dict], book_cash: dict[str, float], broker_cash: float | None,
+                 slots: dict[str, float], ref_close: dict[str, float]) -> tuple[list[dict], list[str], list[str]]:
+    """What main() sends: the plan less the ids the broker or the ledger already has, capped per run, through
+    guard_buys with this ledger's orders in flight. Returns (orders, ids skipped as already sent, guard notes).
+
+    An order the broker never had (not_sent, or a refused POST: rejected without an alpaca_id) is sent again by a
+    rerun under the same id, as before S48 when neither was written."""
+    existing = {o["client_order_id"] for o in broker.open_orders()}
+    already = {r[0] for r in con.execute("""SELECT client_order_id FROM agent_orders WHERE dry_run = FALSE
+                                            AND NOT (coalesce(status, '') IN (?, 'rejected') AND alpaca_id IS NULL)""",
+                                         [NOT_SENT]).fetchall()}
+    skipped = [o["client_order_id"] for o in plans if o["client_order_id"] in existing | already]
+    plans = [o for o in plans if o["client_order_id"] not in existing | already]
+    out, notes = guard_buys(cap_orders(plans), book_cash, inflight_buys(con), broker_cash, slots, ref_close,
+                            inflight_sells(con))
+    return out, skipped, notes
 
 
 def cap_orders(plans: list[dict], n: int = MAX_ORDERS_PER_RUN) -> list[dict]:
@@ -863,18 +904,11 @@ def main() -> int:
                                          "top": ranked[:10]}
             nav = mark_books(con, day.date(), ref_close, float(acct["equity"]))
 
-        # ---- caps, then submit or print
-        existing = {o["client_order_id"] for o in broker.open_orders()}
-        # an order the broker never had (not_sent, or a refused POST) is sent again by a rerun under the same id,
-        # as before S48 when neither was written
-        already = {r[0] for r in con.execute("""SELECT client_order_id FROM agent_orders WHERE dry_run = FALSE
-                                                AND NOT (coalesce(status, '') IN (?, 'rejected') AND alpaca_id IS NULL)""",
-                                             [NOT_SENT]).fetchall()}
-        skipped = [o["client_order_id"] for o in plans if o["client_order_id"] in existing | already]
-        plans = [o for o in plans if o["client_order_id"] not in existing | already]
+        # ---- already sent, caps and the pre-submit guard, then submit or print
         slots = {b["book"]: b["equity_usd"] / BOOKS[b["book"]]["max_positions"] for b in nav if b["book"] in BOOKS}
-        plans, guard_notes = guard_buys(cap_orders(plans), {b: r["cash_usd"] for b, r in books.items()}, flying,
-                                        float(acct["cash"]) if acct.get("cash") is not None else None, slots, ref_close)
+        plans, skipped, guard_notes = final_orders(con, broker, plans, {b: r["cash_usd"] for b, r in books.items()},
+                                                   float(acct["cash"]) if acct.get("cash") is not None else None,
+                                                   slots, ref_close)
         for n in guard_notes:
             print(f"  pre-submit guard: {n}")
         sent, not_attempted = send_orders(con, broker, plans, args.submit)
