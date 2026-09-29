@@ -219,6 +219,12 @@ def test_a_10k_quarter_that_equals_the_year_is_the_year():
     # in a 10-Q the same coincidence is a real quarter
     rows[3] = flow(1, NI, "2025-09-28", "2025-12-27", 1096, "10-Q", "2026-02-19")
     assert F.quarterly_flows(facts(rows), "ni", [NI])["ni"].tolist()[-1] == 1096
+    # AMSC: the year itself is first filed a year later, as a comparative; it cannot reach back
+    known = rows[:3] + [flow(1, NI, "2025-09-28", "2025-12-27", 1096, "10-K", "2026-02-19")]
+    later = [flow(1, NI, "2024-12-29", "2025-12-27", 1096, "10-K", "2027-02-18")]
+    was = F.ttm_flows(facts(known), "ni", [NI])
+    now = F.ttm_flows(facts(known + later), "ni", [NI])
+    pd.testing.assert_frame_equal(was, now[now["filed"] <= pd.Timestamp("2026-12-31")].reset_index(drop=True))
 
 
 def test_zero_in_the_preferred_revenue_tag_does_not_hide_the_other():

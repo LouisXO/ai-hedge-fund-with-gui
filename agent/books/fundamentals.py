@@ -157,10 +157,11 @@ def _single_quarters(f: pd.DataFrame) -> pd.DataFrame:
     q = f[f["days"].between(*QUARTER)]
     # A 10-K fact with a quarter-long period and the whole year's value is the year mislabelled, not a
     # quarter (TSCO 2025: $1.096B for 2025-09-28..12-27 = the year, so ni_ttm read $1.88B against $1.01B;
-    # 97 companies since 2012). The fourth quarter is then the year less its three quarters.
-    year = _annual(f)[["cik", "period_end", "val"]].rename(columns={"val": "_year"})
+    # 97 companies since 2012). The fourth quarter is then the year less its three quarters. Only a year
+    # already filed counts: AMSC's fiscal 2021 appeared as a year only in the next 10-K, a year later.
+    year = _annual(f)[["cik", "period_end", "val", "filed"]].rename(columns={"val": "_year", "filed": "_year_filed"})
     q = q.merge(year, on=["cik", "period_end"], how="left")
-    q = q[~(q["form"].fillna("").str.startswith("10-K") & (q["val"] == q["_year"]))]
+    q = q[~(q["form"].fillna("").str.startswith("10-K") & (q["val"] == q["_year"]) & (q["_year_filed"] <= q["filed"]))]
     direct = q.assign(q_start=q["period_start"], _how=0)[cols]
     # Year-to-date facts start on the same day; the later minus the earlier is the quarter between them.
     # Was: only ~3-month facts were kept, and the cash flow statement has one per year (Q1), so
