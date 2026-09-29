@@ -32,6 +32,7 @@ sed -i '' 's/^AGENT_EXEC=.*/AGENT_EXEC=off/' ~/.hedge-fund/.env && grep '^AGENT_
 | 早报和采集日志 | `~/optradar/out/cron.log`、`~/optradar/out/agent/collect.log` |
 | launchd 上次退出码 | `launchctl list \| grep com.louis`(第二列是上次退出码,`-` 表示还没跑过) |
 | 券商侧的真相 | Alpaca 网页的 Orders 和 Positions 页 |
+| 公开站推送被中止 | Mac 通知"公开站推送已中止";日志里的 `publish_guard:` 行(见第 10 节) |
 
 ---
 
@@ -252,7 +253,20 @@ cd ~/hedge-fund && PYTHONPATH=. $PY -W ignore -m agent.health --no-llm-probe --n
    手机或 Mac 收到通知即可。收不到时,去掉 `--setting-sources ""`(保留 `--tools` 和两个 MCP 参数)再试,并在这里记下结论。
 5. 上实盘之前这一条必须完成:实盘密钥不放进 `~/.hedge-fund/.env`(见 `docs/LIVE_MIGRATION.md`)。
 
-## 10. 仍然存在的风险(不在本手册的处理范围)
+## 10. 公开站推送被关键词检查中止
+
+**怎么发现**:Mac 通知"公开站推送已中止";`execute.log`(13:25 任务)或 `cron.log`(08:41 任务)里有 `publish_guard: 发现 N 处疑似真实账户信息`,下面逐行列出 `文件:行号 [标记] 片段`。
+
+**原因**:`site/publish.sh` 在提交 `site/public` 之前扫描暂存的页面,在 `git push` 之前扫描所有待推送提交的新增行和提交说明(`site/publish_guard.py`)。推送的是整个 `v2-rebuild` 分支,所以别的 session 提交的文档也在扫描范围里。
+
+**处理**
+
+- 命中在 `site/public`:生成器把不该公开的内容写进了页面。页面已取消暂存、没有提交;修生成器,重跑 `PUBLISH=1 zsh site/publish.sh`。
+- 命中在别的提交:把那几行移到私有仓库(`optradar/docs/PRIVATE.md` 等),在本仓库提交删除,再重跑。提交还没推送,删掉之后不会进入公开历史。
+- 确认是误报:手工运行 `PUBLISH=1 PUBLISH_GUARD=off zsh site/publish.sh`(定时任务永远不设这个变量),并把误报的写法记在这里,以后调整 `publish_guard.py` 的标记。
+- 私有词表(可选):`~/.hedge-fund/publish_guard_terms.txt`,一行一个字面量(账户号、精确金额等),`#` 开头是注释,少于 4 个字符的忽略。命中时不回显词表内容。
+
+## 11. 仍然存在的风险(不在本手册的处理范围)
 
 - 生产任务直接运行研究工作区 `~/hedge-fund` 的代码,任务脚本里没有测试关卡。审计建议:生产用单独的检出(git worktree 固定在一个 tag 上,`pytest` 通过后才移动 tag),同时改各 plist 的 `WorkingDirectory`、`PYTHONPATH` 和三个脚本里的 `cd` 路径。需要用户决定。
 - 整套任务在一台会合盖、会带出门的笔记本上。上实盘前把下单链路迁到一直插电的机器(见 `docs/LIVE_MIGRATION.md`)。

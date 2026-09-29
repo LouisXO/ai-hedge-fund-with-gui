@@ -25,18 +25,22 @@ guard() {
   fi
   PYTHONPATH=/Users/louis/hedge-fund ~/.hedgefund-venv/bin/python site/publish_guard.py "$@"
 }
+blocked() {   # the jobs treat a failed publish as non-fatal, so say it where the owner will see it
+  echo "$1"
+  TN=/opt/homebrew/bin/terminal-notifier
+  [ -x "$TN" ] && "$TN" -title "公开站推送已中止" -message "发现疑似真实账户信息,见任务日志" -group publish_guard >/dev/null 2>&1
+  exit 3
+}
 git add site/public
 if ! guard --staged; then
   git reset -q site/public
-  echo "推送已中止:待提交的 site/public 里有疑似真实账户信息(见上)。已取消暂存,未提交;先修生成器再重跑。"
-  exit 3
+  blocked "推送已中止:待提交的 site/public 里有疑似真实账户信息(见上)。已取消暂存,未提交;先修生成器再重跑。"
 fi
 git commit -q -m "site: daily public signals $DATE"
 # another machine (or a manual push) may have moved the branch since the last run
 git pull -q --rebase --autostash origin v2-rebuild
 if ! guard --range origin/v2-rebuild..HEAD; then
-  echo "推送已中止:待推送的提交里有疑似真实账户信息(见上)。提交留在本地未推送;把这些行移到私有仓库并提交修正后再推。"
-  exit 3
+  blocked "推送已中止:待推送的提交里有疑似真实账户信息(见上)。提交留在本地未推送;把这些行移到私有仓库并提交修正后再推。"
 fi
 git push -q origin v2-rebuild
 echo "已推送 → Netlify 将自动部署"

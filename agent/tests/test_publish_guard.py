@@ -138,4 +138,4 @@ def test_publish_sh_runs_the_guard_before_commit_and_before_push():
     i_add, i_staged, i_commit = src.index("git add site/public"), src.index("guard --staged"), src.index("git commit")
     i_pull, i_range, i_push = src.index("git pull"), src.index("guard --range origin/v2-rebuild..HEAD"), src.index("git push")
     assert i_add < i_staged < i_commit < i_pull < i_range < i_push
-    assert "exit 3" in src[i_range:i_push]
+    assert "blocked " in src[i_staged:i_commit] and "blocked " in src[i_range:i_push] and "exit 3" in src
