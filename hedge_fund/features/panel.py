@@ -21,6 +21,19 @@ import pandas as pd
 
 from hedge_fund.paths import PANEL_DB
 
+# One row per listing of a symbol, not per symbol: a ticker can be used by two companies in turn (SNDK
+# 1995-2016 and 2025-), and the vendor can carry an Active and a Delisted row for the same company (OKE).
+# ipo_date is part of the key so that every such segment is kept. Until 2026-09-28 the key was
+# (symbol, status); PanelStore.migrate_listing_key converts a table created before that.
+LISTING_KEY = ["symbol", "status", "ipo_date"]
+LISTING_DDL = """CREATE TABLE IF NOT EXISTS {name} (
+        symbol VARCHAR, name VARCHAR, exchange VARCHAR, asset_type VARCHAR,
+        ipo_date DATE, delisting_date DATE, status VARCHAR, fetched_at TIMESTAMP,
+        PRIMARY KEY (symbol, status, ipo_date))"""
+LISTING_COLS = ["symbol", "name", "exchange", "asset_type", "ipo_date", "delisting_date", "status", "fetched_at"]
+NO_IPO_DATE = "1900-01-01"          # a key column cannot be NULL; the listing mask reads this as "from the first bar"
+MIN_ACTIVE_SHARE = 0.9              # a fresh active list smaller than this share of the last one is a broken download
+
 DDL = [
     """CREATE TABLE IF NOT EXISTS bars (
         ticker VARCHAR, trade_date DATE, open DOUBLE, high DOUBLE, low DOUBLE,
@@ -45,10 +58,7 @@ DDL = [
         acq_disp VARCHAR, shares DOUBLE, price DOUBLE, value_usd DOUBLE, shares_after DOUBLE,
         source VARCHAR, fetched_at TIMESTAMP,
         PRIMARY KEY (accession, ticker, trans_date, trans_code, shares, price))""",
-    """CREATE TABLE IF NOT EXISTS listing_status (
-        symbol VARCHAR, name VARCHAR, exchange VARCHAR, asset_type VARCHAR,
-        ipo_date DATE, delisting_date DATE, status VARCHAR, fetched_at TIMESTAMP,
-        PRIMARY KEY (symbol, status))""",
+    LISTING_DDL.format(name="listing_status"),
     """CREATE TABLE IF NOT EXISTS issuer_seen (
         ticker VARCHAR, cik VARCHAR, quarter VARCHAR, n_filings INT, first_filing DATE, last_filing DATE,
         PRIMARY KEY (ticker, cik, quarter))""",
@@ -133,6 +143,110 @@ class PanelStore:
         self.con.execute(f'INSERT OR REPLACE INTO {table} SELECT * FROM _gen_in')
         self.con.unregister("_gen_in")
         return len(df)
+
+    def _listing_count(self, name: str) -> int:
+        return self.con.execute(f"SELECT count(*) FROM {name}").fetchone()[0]
+
+    def _listing_key(self) -> list[str]:
+        row = self.con.execute("""SELECT constraint_column_names FROM duckdb_constraints()
+                                  WHERE table_name = 'listing_status' AND constraint_type = 'PRIMARY KEY'""").fetchone()
+        return list(row[0]) if row else []
+
+    def migrate_listing_key(self) -> dict:
+        """listing_status keyed by (symbol, status) -> keyed by (symbol, status, ipo_date), in place.
+
+        DuckDB cannot alter a primary key, so: create the new table, copy, compare the row counts, drop the
+        old one, rename — all in one transaction, so a failure at any step leaves the old table untouched.
+        Safe to run again: a table that already has the new key is left alone.
+        """
+        n = self._listing_count("listing_status")
+        if self._listing_key() == LISTING_KEY:
+            return {"migrated": False, "rows_before": n, "rows_after": n}
+        self.con.execute("BEGIN")
+        try:
+            self.con.execute("DROP TABLE IF EXISTS listing_status_new")        # left by nothing we commit; be sure
+            self.con.execute(LISTING_DDL.format(name="listing_status_new"))
+            self.con.execute(f"""INSERT INTO listing_status_new
+                                 SELECT * REPLACE (coalesce(ipo_date, DATE '{NO_IPO_DATE}') AS ipo_date)
+                                 FROM (SELECT {', '.join(LISTING_COLS)} FROM listing_status)""")
+            after = self._listing_count("listing_status_new")
+            if after != n:
+                raise RuntimeError(f"listing_status migration: row count {n} -> {after}, nothing changed")
+            self.con.execute("DROP TABLE listing_status")
+            self.con.execute("ALTER TABLE listing_status_new RENAME TO listing_status")
+            self.con.execute("COMMIT")
+        except Exception:
+            self.con.execute("ROLLBACK")
+            raise
+        if self._listing_key() != LISTING_KEY or self._listing_count("listing_status") != n:
+            raise RuntimeError("listing_status migration: the table after the swap is not the one that was copied")
+        return {"migrated": True, "rows_before": n, "rows_after": n}
+
+    def close_stale_listings(self, fresh_at=None) -> dict:
+        """Active rows the vendor's active list no longer carries (fetched before `fresh_at`, default the
+        latest Active fetch).
+
+        If a Delisted row of the same symbol ends on or after the row's ipo_date, the vendor has said when
+        that listing ended: the Active row is removed and the Delisted row carries the interval. Without
+        one the row stays as it is (still open-ended) and is reported, because a name the vendor merely
+        dropped from its list may be alive and held.
+        """
+        if fresh_at is None:
+            fresh_at = self.con.execute("SELECT max(fetched_at) FROM listing_status WHERE status = 'Active'").fetchone()[0]
+        stale = self.con.execute("""
+            SELECT a.symbol, a.ipo_date, a.asset_type,
+                   EXISTS (SELECT 1 FROM listing_status d WHERE d.symbol = a.symbol AND d.status <> 'Active'
+                           AND d.delisting_date >= a.ipo_date) AS ended
+            FROM listing_status a WHERE a.status = 'Active' AND a.fetched_at < ? ORDER BY 1, 2""", [fresh_at]).df()
+        ended = stale[stale["ended"]]
+        for sym, ipo in zip(ended["symbol"], ended["ipo_date"]):
+            self.con.execute("DELETE FROM listing_status WHERE symbol = ? AND status = 'Active' AND ipo_date = ?",
+                             [sym, pd.Timestamp(ipo).date()])
+        return {"active_closed": sorted(set(ended["symbol"])),
+                "active_missing": sorted(set(stale.loc[~stale["ended"], "symbol"]))}
+
+    def write_listing(self, active: pd.DataFrame, delisted: pd.DataFrame) -> dict:
+        """One refresh from the vendor's two lists. Adds to a symbol's history, never replaces it.
+
+        Everything happens in one transaction: the table as it was is copied to listing_status_prev (the
+        audit compares the two), the rows are upserted by (symbol, status, ipo_date), and Active rows that
+        left the active list are closed (close_stale_listings). A fresh active list much shorter than the
+        last one is refused: with the mask a union of intervals, the active list is what keeps a name in
+        the universe, and a truncated download must not be read as 2,000 delistings.
+        """
+        self.migrate_listing_key()
+        df = pd.concat([active, delisted], ignore_index=True)
+        for c in LISTING_COLS:
+            if c not in df.columns:
+                df[c] = None
+        df = df[LISTING_COLS].copy()
+        df["ipo_date"] = pd.to_datetime(df["ipo_date"]).fillna(pd.Timestamp(NO_IPO_DATE)).dt.date
+        # the same listing twice in one download: keep the one that ends last (INSERT OR REPLACE would keep the first)
+        df = (df.assign(_end=pd.to_datetime(df["delisting_date"])).sort_values("_end", na_position="last", kind="stable")
+                .drop_duplicates(LISTING_KEY, keep="last").drop(columns="_end").sort_values(LISTING_KEY))
+        had = self.con.execute("""SELECT count(*) FROM listing_status WHERE status = 'Active' AND fetched_at =
+                                  (SELECT max(fetched_at) FROM listing_status WHERE status = 'Active')""").fetchone()[0]
+        n_active = int((df["status"] == "Active").sum())
+        if n_active < MIN_ACTIVE_SHARE * had:
+            raise RuntimeError(f"listing refresh refused: the active list has {n_active} rows, the last one had {had}")
+        before = self._listing_count("listing_status")
+        self.con.execute("BEGIN")
+        try:
+            self.con.execute("CREATE OR REPLACE TABLE listing_status_prev AS SELECT * FROM listing_status")
+            self.con.register("_ls_in", df)
+            new = self.con.execute("SELECT count(*) FROM _ls_in i ANTI JOIN listing_status l USING (symbol, status, ipo_date)").fetchone()[0]
+            self.con.execute(f"INSERT OR REPLACE INTO listing_status SELECT {', '.join(LISTING_COLS)} FROM _ls_in")
+            self.con.unregister("_ls_in")
+            if self._listing_count("listing_status") != before + new:       # a refresh only adds rows or updates them
+                raise RuntimeError(f"listing refresh: {before} rows + {new} new != {self._listing_count('listing_status')}")
+            out = self.close_stale_listings(df.loc[df["status"] == "Active", "fetched_at"].max())
+            after = self._listing_count("listing_status")
+            self.con.execute("COMMIT")
+        except Exception:
+            self.con.execute("ROLLBACK")
+            raise
+        return {"active": n_active, "delisted": int(len(df) - n_active), "rows_before": before, "rows_after": after,
+                "new_segments": int(new), **out}
 
     def log_fetch(self, rows: list[dict]) -> None:
         if not rows:

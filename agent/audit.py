@@ -19,7 +19,8 @@ Checks
   insider       value_usd = shares x price; filing_date >= trans_date; ticker present in bars;
                 outliers > $50M; source mix by date
   universe      PIT membership ~500 per date; listing mask agrees with bars (no bars for "listed" days,
-                bars for "unlisted" days); ADV floor universe size by year
+                bars for "unlisted" days); ADV floor universe size by year; no liquid name with an Active
+                row outside the mask; held names whose listing state changed at the last refresh
   factors       per-day universe size and NaN share per family; z-score caps (winsor) — how many
                 names sit exactly at the cap per family; families' z dispersion
   ledger        agent_picks/agent_orders/agent_lots consistency; paper vs model prices present
@@ -173,6 +174,42 @@ def audit_universe(store, rep: Report):
     adv = (close * vol).rolling(20).mean()
     by_year = (adv >= 5e6).sum(axis=1).groupby(adv.index.year).median()
     rep.add("universe", "names with ADV >= $5M by year (long book universe)", "PASS", by_year.to_dict())
+    audit_listing(store, rep)
+
+
+def audit_listing(store, rep: Report, ledger_db: str | None = None):
+    """The listing mask against the vendor's own active list, and against itself one refresh earlier."""
+    from agent import ledger
+    from agent.s11_insider_wide import listed_mask
+    q = store.con.execute
+    last = pd.Timestamp(q("SELECT max(trade_date) FROM bars").fetchone()[0])
+    lb = (last - pd.Timedelta(days=45)).date().isoformat()
+    close, vol = store.bars_wide("close", start=lb), store.bars_wide("volume", start=lb)
+    adv = (close * vol).rolling(20).mean().loc[last]
+    liquid = adv[(adv >= 5e6) & close.loc[last].notna()].index
+    active = set(q("SELECT DISTINCT symbol FROM listing_status WHERE status = 'Active' AND asset_type = 'Stock'").df()["symbol"])
+    lm = listed_mask(store, close.index, list(close.columns)).loc[last]
+    out = adv[[t for t in liquid if t in active and not lm[t]]].sort_values(ascending=False)
+    rep.add("universe", "liquid names with an Active row that the listing mask excludes", "PASS" if out.empty else "FAIL",
+            f"{len(out)} of {len(liquid)} with a bar on {last.date()} and ADV >= $5M {out.index[:10].tolist() if len(out) else ''}".rstrip())
+
+    # the list is downloaded again every Sunday: a held name that the new download stops (or starts) calling
+    # listed is sold (or bought) by the rules on the next run, so it is named here first
+    check = "held names whose listing state changed at the last refresh"
+    has_prev = q("SELECT count(*) FROM duckdb_tables() WHERE table_name = 'listing_status_prev'").fetchone()[0]
+    if not has_prev or not q("SELECT count(*) FROM listing_status_prev").fetchone()[0]:
+        rep.add("universe", check, "PASS", "no earlier refresh to compare with")
+        return
+    con = ledger.connect(ledger_db or ledger.OPTRADAR_DB, read_only=True)
+    try:
+        held = sorted(con.execute("SELECT DISTINCT ticker FROM agent_lots WHERE status = 'open'").df()["ticker"])
+    finally:
+        con.close()
+    day = pd.DatetimeIndex([last])
+    was, now = (listed_mask(store, day, held, table=t).loc[last] for t in ("listing_status_prev", "listing_status"))
+    word = {True: "listed", False: "not listed"}
+    moved = [f"{t} {word[bool(was[t])]} -> {word[bool(now[t])]}" for t in held if was[t] != now[t]]
+    rep.add("universe", check, "WARN" if moved else "PASS", f"{len(moved)} of {len(held)} held {moved if moved else ''}".rstrip())
 
 
 def audit_factors(store, rep: Report):

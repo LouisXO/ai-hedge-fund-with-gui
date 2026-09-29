@@ -8,7 +8,7 @@ can (NYSE 98% / NASDAQ 85% including delisted).
 
 Universe here is point-in-time and survivorship-free by construction:
 a name is in on day D if
-  - listing_status says it was listed (ipo_date <= D < delisting_date), and
+  - listing_status says it was listed (ipo_date <= D <= delisting_date, any of its listings), and
   - it had a Form 4 filer that quarter (panel.issuer_seen), and
   - its 20-day dollar volume on D clears --min-adv (default $1M), which is
     what makes a position executable at all.
@@ -36,17 +36,28 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, "site-data", "validation")
 
 
-def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str]) -> pd.DataFrame:
-    """True where listing_status says the symbol was trading that day."""
-    ls = store.con.execute("""SELECT symbol, min(ipo_date) AS ipo, max(delisting_date) AS delist
-                              FROM listing_status WHERE asset_type = 'Stock' GROUP BY 1""").df()
+def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str],
+                table: str = "listing_status") -> pd.DataFrame:
+    """True where listing_status says the symbol was trading that day.
+
+    Every row is one listing interval and the mask is their union: an Active row runs from ipo_date with no
+    end, a Delisted row from ipo_date to delisting_date (inclusive). Taking min(ipo_date) and
+    max(delisting_date) per symbol instead (the rule until 2026-09-28) ended a ticker's life at the old
+    company's delisting when the ticker was used again (SNDK, DELL), and at a Delisted row the vendor
+    carries for a living company (OKE, TEL).
+    """
+    ls = store.con.execute(f"""SELECT symbol, status, ipo_date, delisting_date
+                               FROM {table} WHERE asset_type = 'Stock'""").df()
     ls = ls[ls["symbol"].isin(tickers)]
-    out = pd.DataFrame(False, index=dates, columns=tickers)
-    for sym, ipo, delist in ls.itertuples(index=False):
-        lo = pd.Timestamp(ipo) if pd.notna(ipo) else dates[0]
-        hi = pd.Timestamp(delist) if pd.notna(delist) else dates[-1]
-        out.loc[(dates >= lo) & (dates <= hi), sym] = True
-    return out
+    col = {t: i for i, t in enumerate(tickers)}
+    day = dates.to_numpy()
+    arr = np.zeros((len(dates), len(tickers)), dtype=bool)
+    for sym, status, ipo, delist in ls.itertuples(index=False):
+        on = np.ones(len(day), dtype=bool) if pd.isna(ipo) else day >= pd.Timestamp(ipo).to_datetime64()
+        if status != "Active" and pd.notna(delist):
+            on &= day <= pd.Timestamp(delist).to_datetime64()
+        arr[on, col[sym]] = True
+    return pd.DataFrame(arr, index=dates, columns=tickers)
 
 
 def event_stats(ev: pd.DataFrame, fwd: pd.DataFrame, mkt: pd.Series, horizon: int, label: str) -> dict:
