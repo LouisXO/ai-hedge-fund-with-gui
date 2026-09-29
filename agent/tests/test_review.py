@@ -128,7 +128,7 @@ def _paper_fixture(tmp_path, monkeypatch):
         st.con.execute("INSERT INTO index_daily VALUES ('SPY', ?, ?, ?, ?), ('IWM', ?, ?, ?, ?)",
                        [d, 600 + i, 600.5 + i, 600.5 + i, d, 200 - i, 199.5 - i, 199.5 - i])
         st.con.execute("INSERT INTO bars VALUES ('AAA', ?, ?, ?, ?, ?, ?)", [d, 10 + i, 11 + i, 9 + i, 10.5 + i, 10.5 + i])
-        drop = 0.85 if d == days[-1] else 1.0                          # BBB loses 15% on the last day
+        drop = 0.75 if d == days[-1] else 1.0                          # BBB loses 25% on the last day
         st.con.execute("INSERT INTO bars VALUES ('BBB', ?, 20, 21, 16, ?, ?)", [d, 20 * drop, 20 * drop])
     con = ledger.connect(str(tmp_path / "l.db"))
     ledger.ensure_schema(con)
@@ -167,7 +167,8 @@ def test_paper_section_closed_lots_and_rule_classes(tmp_path, monkeypatch):
     assert c["iwm_pct"] == pytest.approx(((200 - len(days) + 1) / 199 - 1) * 100)
     assert c["replay_pct"] == pytest.approx(((10 + len(days) - 1) / 11 - 1) * 100)
     cls = {f["rule"]: f["cls"] for f in out["flags"]}
-    assert cls == {"paper_rejected": "action", "paper_reconcile": "action", "paper_lot_tail": "action", "paper_unfilled": "sim"}
+    assert {r: c for r, c in cls.items() if r != "paper_big_move"} == \
+        {"paper_rejected": "action", "paper_reconcile": "action", "paper_lot_tail": "action", "paper_unfilled": "sim"}
     assert "DDD" in [f for f in out["flags"] if f["rule"] == "paper_unfilled"][0]["text"]
     assert "CCC" not in [f for f in out["flags"] if f["rule"] == "paper_unfilled"][0]["text"]
     rej = [f for f in out["flags"] if f["rule"] == "paper_rejected"][0]["text"]
@@ -242,3 +243,10 @@ def test_real_section_dates_each_deal_by_its_own_day(tmp_path, monkeypatch):
     assert [f["date"] for f in fl["real_add_same_day"]] == ["2026-10-12"]
     (rt,) = out["round_trips"]
     assert rt["code"] == "US.AAA261009C100000" and rt["exit_px"] == 0 and rt["exit_day"] == "2026-10-10"
+
+
+def test_a_15pct_day_is_a_big_move_not_an_action(tmp_path, monkeypatch):
+    con, st, day, prev, days = _paper_fixture(tmp_path, monkeypatch)
+    st.con.execute("UPDATE bars SET close = 17, adj_close = 17 WHERE ticker = 'BBB' AND trade_date = ?", [day])   # -15%
+    cls = {f["rule"]: f["cls"] for f in R.paper_section(con, st, day, prev, 0.1)["flags"]}
+    assert "paper_lot_tail" not in cls and cls.get("paper_big_move") == "info"
