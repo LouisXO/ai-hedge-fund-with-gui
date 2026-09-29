@@ -15,9 +15,28 @@ if [ -z "$(git status --porcelain site/public)" ]; then
   echo "无变化,跳过推送"
   exit 0
 fi
+# 本仓库是公开 fork,推送的是整个 v2-rebuild 分支:推送前扫描待推送内容里的真实账户标记
+# (site/publish_guard.py;私有词表 ~/.hedge-fund/publish_guard_terms.txt)。命中就中止,不推送。
+# PUBLISH_GUARD=off 只供用户确认误报后手工运行,定时任务永远不设。
+guard() {
+  if [ "$PUBLISH_GUARD" = "off" ]; then
+    echo "警告:PUBLISH_GUARD=off,跳过真实账户检查($*)"
+    return 0
+  fi
+  PYTHONPATH=/Users/louis/hedge-fund ~/.hedgefund-venv/bin/python site/publish_guard.py "$@"
+}
 git add site/public
+if ! guard --staged; then
+  git reset -q site/public
+  echo "推送已中止:待提交的 site/public 里有疑似真实账户信息(见上)。已取消暂存,未提交;先修生成器再重跑。"
+  exit 3
+fi
 git commit -q -m "site: daily public signals $DATE"
 # another machine (or a manual push) may have moved the branch since the last run
 git pull -q --rebase --autostash origin v2-rebuild
+if ! guard --range origin/v2-rebuild..HEAD; then
+  echo "推送已中止:待推送的提交里有疑似真实账户信息(见上)。提交留在本地未推送;把这些行移到私有仓库并提交修正后再推。"
+  exit 3
+fi
 git push -q origin v2-rebuild
 echo "已推送 → Netlify 将自动部署"
