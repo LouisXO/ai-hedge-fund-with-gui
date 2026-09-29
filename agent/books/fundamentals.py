@@ -7,16 +7,28 @@ with filed <= D — never the row for the period that ends before D, which
 is the classic look-ahead (a Q4 filed in late February is not known on
 January 31).
 
-Quarterly flows: 10-Q facts with a ~3-month duration are used directly;
-the fourth quarter is derived as the 10-K annual value minus the three
-10-Qs of the same fiscal year, because 10-Ks report the year, not Q4.
-Companies filing 20-F/40-F (foreign) only have annual values and are
-covered at annual frequency.
+Quarterly flows: facts with a ~3-month duration are used directly. Items
+disclosed year-to-date (the cash flow statement: 3, 6, 9, 12 months) are
+differenced inside the fiscal year: Q2 = 6M - Q1, Q3 = 9M - 6M,
+Q4 = FY - 9M. A TTM is the sum of four quarters that together cover one
+year (330-400 days). Companies with no interim facts (20-F/40-F) take the
+latest annual value as the TTM.
 
-Tag fallbacks: revenue and cost tags changed with ASC 606 (2018); equity
-with/without minority interest; shares from dei when us-gaap is missing.
+Shares: the cover-page count (dei), the balance-sheet count and the
+weighted average diluted count are three reports of one number. When they
+disagree by more than 1.5x the count is not usable: it is left missing and
+the name goes to the review list (review_path), to be settled by hand in
+shares_override. Nothing is carried into a filing from a period that ended
+more than 400 days before it.
+
+Tag fallbacks: revenue and cost tags changed with ASC 606 (2018); shares
+from dei when us-gaap is missing. Equity is the parent's only.
+
+Data corrections of 2026-09-28: docs/AGENT_PLAN.md S47.
 """
 from __future__ import annotations
+
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -36,10 +48,30 @@ FLOW_TAGS = {
 SHARES_FLOW_TAGS = ["WeightedAverageNumberOfDilutedSharesOutstanding", "WeightedAverageNumberOfSharesOutstandingBasic"]
 INSTANT_TAGS = {
     "assets": ["Assets"],
-    "equity": ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
+    # Was: falling back to StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest, which put
+    # XIFR's book value at $10.7B against ~$3B attributable to the parent. A company that reports only that
+    # tag has no equity here.
+    "equity": ["StockholdersEquity"],
     "debt": ["LongTermDebtNoncurrent", "LongTermDebt"],
-    "shares": ["EntityCommonStockSharesOutstanding", "CommonStockSharesOutstanding"],
+    "shares_dei": ["EntityCommonStockSharesOutstanding"],
+    "shares_bs": ["CommonStockSharesOutstanding"],
 }
+QUARTER, HALF, NINE_MONTHS, YEAR = (75, 105), (165, 195), (255, 285), (350, 380)   # period lengths, days
+TTM_SPAN = (330, 400)            # first quarter's start to last quarter's end
+MAX_FACT_AGE_DAYS = 400          # period end to the filing a value is carried into
+SHARES_MISMATCH = 1.5            # largest / smallest of the share counts known at one filing
+MIN_SHARES = 1000                # 0 / 1 / negative counts are XBRL noise (FOX, HOOD, EL...)
+ANNUAL_FORMS = ("20-F", "40-F")
+REVIEW_WINDOW_DAYS = 200         # = factors.latest_before: older rows are not scored, so not worth a review
+SHARE_SOURCES = ["shares_dei", "shares_bs", "shares_w"]
+REVIEW_ONLY = [c for s in SHARE_SOURCES for c in (s, f"{s}_asof")] + ["shares_w_form"]
+
+# TODO(S47, not done): a split between the filing date and the scoring day. factors.factor_scores takes
+# mcap = raw close on the day x shares from the latest filing, so from the split date until the next
+# 10-Q/10-K the market cap is off by the split ratio (NVDA 10:1 on 2024-06-10: 2.46B shares until the
+# 2024-08-28 filing, mcap $300B instead of $2.97T; AMZN, GOOG and CMG reached the top 30 this way).
+# The ratio must come from a corporate-actions source; adj/close in the panel is not usable for this
+# until the adjusted series is repaired.
 
 
 def _first_available(df: pd.DataFrame, tags: list[str]) -> pd.DataFrame:
@@ -56,32 +88,96 @@ def _first_available(df: pd.DataFrame, tags: list[str]) -> pd.DataFrame:
     return sub.drop_duplicates(["cik", "period_start", "period_end", "filed"], keep="first").drop(columns="_pref")
 
 
-def quarterly_flows(facts: pd.DataFrame, name: str, tags: list[str]) -> pd.DataFrame:
-    """(cik, period_end, filed) -> quarterly value, with Q4 derived from the annual."""
+def _between(days: pd.Series, *spans: tuple[int, int]) -> pd.Series:
+    ok = pd.Series(False, index=days.index)
+    for lo, hi in spans:
+        ok |= days.between(lo, hi)
+    return ok
+
+
+def _periods(facts: pd.DataFrame, tags: list[str]) -> pd.DataFrame:
+    """Facts covering a quarter, half, nine months or a year, as first filed; dates as timestamps."""
     f = _first_available(facts, tags)
+    for c in ("period_start", "period_end", "filed"):
+        f[c] = pd.to_datetime(f[c]).astype("datetime64[ns]")
+    f["days"] = (f["period_end"] - f["period_start"]).dt.days
+    f = f[_between(f["days"], QUARTER, HALF, NINE_MONTHS, YEAR)]
+    # the value a period is known by: the earliest filing that reported it
+    return f.sort_values("filed", kind="stable").drop_duplicates(["cik", "period_start", "period_end"], keep="first")
+
+
+def _annual(f: pd.DataFrame) -> pd.DataFrame:
+    a = f[f["days"].between(*YEAR)]
+    return a.sort_values("filed", kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
+
+
+def _single_quarters(f: pd.DataFrame) -> pd.DataFrame:
+    """(cik, period_end) -> val of that quarter alone, the filing that made it known, the quarter's first day."""
+    cols = ["cik", "period_end", "filed", "val", "q_start", "_how"]
+    q = f[f["days"].between(*QUARTER)]
+    direct = q.assign(q_start=q["period_start"], _how=0)[cols]
+    # Year-to-date facts start on the same day; the later minus the earlier is the quarter between them.
+    # Was: only ~3-month facts were kept, and the cash flow statement has one per year (Q1), so
+    # rolling(4) added the first quarters of four different years: AAPL's cfo_ttm read $150.3B
+    # on every 2023 filing, fiscal 2023 was $110.5B.
+    pair = f[f["days"] >= HALF[0]].merge(f[f["days"] <= NINE_MONTHS[1]], on=["cik", "period_start"], suffixes=("", "_prev"))
+    pair = pair[(pair["period_end"] - pair["period_end_prev"]).dt.days.between(*QUARTER)]
+    diff = pd.DataFrame({"cik": pair["cik"], "period_end": pair["period_end"],
+                         "filed": pair[["filed", "filed_prev"]].max(axis=1), "val": pair["val"] - pair["val_prev"],
+                         "q_start": pair["period_end_prev"] + pd.Timedelta(days=1), "_how": 1})
+    sq = pd.concat([direct, diff[cols]], ignore_index=True)
+    sq = sq.sort_values(["filed", "_how"], kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
+    # no nine-month fact: Q4 = annual - the three quarters inside that fiscal year (all must already be known)
+    a = _annual(f).merge(sq[["cik", "period_end"]], on=["cik", "period_end"], how="left", indicator=True)
+    a = a[a["_merge"] == "left_only"].drop(columns="_merge")
+    inside = a.merge(sq, on="cik", suffixes=("", "_q"))
+    inside = inside[(inside["period_end_q"] > inside["period_start"]) & (inside["period_end_q"] < inside["period_end"])]
+    three = inside.groupby(["cik", "period_end"], as_index=False).agg(
+        n=("val_q", "size"), val_q=("val_q", "sum"), filed_q=("filed_q", "max"), last=("period_end_q", "max"))
+    a = a.merge(three[three["n"] == 3], on=["cik", "period_end"])
+    q4 = pd.DataFrame({"cik": a["cik"], "period_end": a["period_end"], "filed": a[["filed", "filed_q"]].max(axis=1),
+                       "val": a["val"] - a["val_q"], "q_start": a["last"] + pd.Timedelta(days=1), "_how": 2})
+    sq = pd.concat([sq, q4[cols]], ignore_index=True)
+    return sq.sort_values(["cik", "period_end"]).drop(columns="_how").reset_index(drop=True)
+
+
+def quarterly_flows(facts: pd.DataFrame, name: str, tags: list[str]) -> pd.DataFrame:
+    """(cik, period_end, filed) -> quarterly value; quarters not reported alone are derived (see _single_quarters)."""
+    f = _periods(facts, tags)
     if f.empty:
         return pd.DataFrame(columns=["cik", "period_end", "filed", name])
-    f = f.assign(days=(pd.to_datetime(f["period_end"]) - pd.to_datetime(f["period_start"])).dt.days)
-    q = f[(f["days"].between(75, 105))]
-    a = f[(f["days"].between(350, 380))]
-    # the value a quarter is known by: the earliest filing that reported it
-    q = q.sort_values("filed").drop_duplicates(["cik", "period_end"], keep="first")
-    a = a.sort_values("filed").drop_duplicates(["cik", "period_end"], keep="first")
-    rows = [q[["cik", "period_end", "filed", "val"]].rename(columns={"val": name})]
-    # Q4 = annual - the three quarters inside that fiscal year (all must already be known)
-    for r in a.itertuples():
-        start = pd.Timestamp(r.period_start)
-        inside = q[(q["cik"] == r.cik) & (pd.to_datetime(q["period_end"]) > start)
-                   & (pd.to_datetime(q["period_end"]) < pd.Timestamp(r.period_end))]
-        if len(inside) == 3:
-            rows.append(pd.DataFrame([{"cik": r.cik, "period_end": r.period_end,
-                                       "filed": max(r.filed, inside["filed"].max()),
-                                       name: r.val - inside["val"].sum()}]))
-        elif len(inside) == 0 and r.form in ("20-F", "40-F"):
-            rows.append(pd.DataFrame([{"cik": r.cik, "period_end": r.period_end, "filed": r.filed,
-                                       name: r.val / 4.0}]))   # annual filers: spread evenly
-    out = pd.concat(rows, ignore_index=True)
-    return out.sort_values(["cik", "period_end", "filed"]).drop_duplicates(["cik", "period_end"], keep="first")
+    out = _single_quarters(f).rename(columns={"val": name})[["cik", "period_end", "filed", name]]
+    if facts["period_end"].dtype == object:             # callers that pass dates get dates back
+        for c in ("period_end", "filed"):
+            out[c] = out[c].dt.date
+    return out
+
+
+def ttm_flows(facts: pd.DataFrame, name: str, tags: list[str]) -> pd.DataFrame:
+    """(cik, period_end, filed) -> trailing twelve months, known when the last piece of it was filed."""
+    col = f"{name}_ttm"
+    f = _periods(facts, tags)
+    if f.empty:
+        return pd.DataFrame(columns=["cik", "period_end", "filed", col])
+    sq = _single_quarters(f)
+    g = sq.groupby("cik")
+    sq[col] = sum(g["val"].shift(k) for k in range(4))
+    # Four rows are a year only when they are consecutive quarters. Was: no check, so a gap in the
+    # filings (or one fact per year) summed quarters of different years.
+    span = (sq["period_end"] - g["q_start"].shift(3)).dt.days + 1
+    sq.loc[~span.between(*TTM_SPAN), col] = np.nan
+    # a TTM value is known when the last of its four quarters was filed
+    sq["filed"] = pd.concat([g["filed"].shift(k) for k in range(4)], axis=1).max(axis=1)
+    # Annual filers: the year as reported is the TTM. Was: annual / 4 into rolling(4), i.e. the mean
+    # of the last four years, available only after four annual reports (PERI $55.3M, 2025 was -$7.9M).
+    # "No interim" is judged with what was filed by the annual report's date.
+    part = f[f["days"] < YEAR[0]][["cik", "period_end", "filed"]].sort_values("period_end")
+    part = part.rename(columns={"period_end": "part_end", "filed": "part_filed"})
+    a = pd.merge_asof(_annual(f).sort_values("period_end"), part, left_on="period_end", right_on="part_end",
+                      by="cik", allow_exact_matches=False)
+    a = a[~((a["part_end"] > a["period_start"]) & (a["part_filed"] <= a["filed"]))].rename(columns={"val": col})
+    out = pd.concat([sq.dropna(subset=[col]), a])[["cik", "period_end", "filed", col]]
+    return out.sort_values("filed", kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
 
 
 def latest_instants(facts: pd.DataFrame, name: str, tags: list[str]) -> pd.DataFrame:
@@ -92,10 +188,69 @@ def latest_instants(facts: pd.DataFrame, name: str, tags: list[str]) -> pd.DataF
     return f[["cik", "period_end", "filed", "val"]].rename(columns={"val": name})
 
 
+def weighted_shares(facts: pd.DataFrame) -> pd.DataFrame:
+    """(cik, period_end, filed) -> weighted average diluted shares as reported, and the form that reported it.
+
+    Was: through quarterly_flows, which is for flows. A 10-K's count became annual minus three
+    quarters (META -5.22B, F -8.04B, MA -1.86B shares, so no market cap from February to May)
+    and a 20-F's count was divided by 4 (MOMO, TAL, BEKE, XPEV ... at exactly 0.25x)."""
+    f = _periods(facts, SHARES_FLOW_TAGS)
+    f = f[f["val"] > MIN_SHARES]
+    if f.empty:
+        return pd.DataFrame(columns=["cik", "period_end", "filed", "shares_w", "shares_w_form"])
+    # per period end: the earliest filing, and in it the shortest period (a quarter's average is nearer
+    # to the count today than the year's)
+    f = f.sort_values(["filed", "days"], kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
+    return f[["cik", "period_end", "filed", "val", "form"]].rename(columns={"val": "shares_w", "form": "shares_w_form"})
+
+
+def _carry(grid: pd.DataFrame, item: pd.DataFrame, col: str, extra: tuple = ()) -> pd.DataFrame:
+    """`col` as known at each filing of `grid` (sorted by filed): its latest period filed on or before.
+
+    Was: ffill without a limit, so an item a company stopped reporting kept its last value for
+    ever — UHAL's 2022 share count, BZ's 2019 one, EDRY's 2019-22 net income were all scored in
+    2026. A value whose period ended more than MAX_FACT_AGE_DAYS before the filing is dropped;
+    `<col>_asof` keeps the period end either way, so the review list can say how old it was."""
+    asof = f"{col}_asof"
+    if item.empty:
+        return pd.DataFrame({col: np.nan, asof: pd.NaT, **{e: None for e in extra}}, index=grid.index)
+    s = item.dropna(subset=[col]).sort_values(["cik", "filed", "period_end"])
+    s = s[s["period_end"] >= s.groupby("cik")["period_end"].cummax()]      # a late filing for an older period replaces nothing
+    s = s.drop_duplicates(["cik", "filed"], keep="last").rename(columns={"period_end": asof})
+    got = pd.merge_asof(grid[["cik", "filed"]], s[["cik", "filed", col, asof, *extra]].sort_values("filed"),
+                        on="filed", by="cik")
+    old = (got["filed"] - got[asof]).dt.days > MAX_FACT_AGE_DAYS
+    got.loc[old, [col, *extra]] = np.nan
+    return got.drop(columns=["cik", "filed"])
+
+
+def _usable_shares(out: pd.DataFrame) -> pd.DataFrame:
+    """shares, shares_asof, shares_flag from the three counts known at each filing."""
+    src = out[SHARE_SOURCES]
+    # dual-class companies (META, V, MA, BRK.B, F, ...) report shares outstanding per class, which
+    # companyfacts leaves out; the weighted average diluted count is undimensioned and stands in
+    dei_newer = out["shares_bs"].isna() | (out["shares_dei"].notna() & (out["shares_dei_asof"] >= out["shares_bs_asof"]))
+    instant = out["shares_dei"].where(dei_newer, out["shares_bs"])
+    instant_asof = out["shares_dei_asof"].where(dei_newer, out["shares_bs_asof"]).where(instant.notna())
+    shares = instant.fillna(out["shares_w"])
+    shares_asof = instant_asof.fillna(out["shares_w_asof"].where(out["shares_w"].notna()))
+    flag = pd.Series("", index=out.index)
+    had_one = out[[f"{s}_asof" for s in SHARE_SOURCES]].notna().any(axis=1)
+    flag[shares.isna() & had_one] = "stale"
+    # price is per ADS, the count is ordinary shares, and the ratio between them is not in XBRL
+    flag[instant.isna() & out["shares_w"].notna() & out["shares_w_form"].isin(ANNUAL_FORMS)] = "ads"
+    # HG: cover page 65.9M, balance sheet 98.6M; MCHB: 18.9M from before the merger, 222M weighted
+    flag[src.max(axis=1) > SHARES_MISMATCH * src.min(axis=1)] = "mismatch"
+    unusable = flag.isin(["ads", "mismatch"])
+    return out.assign(shares=shares.mask(unusable), shares_asof=shares_asof.mask(unusable), shares_flag=flag)
+
+
 def build(store: PanelStore) -> pd.DataFrame:
     """One row per (cik, filed): TTM flows + latest instants known at that filing."""
     facts = store.con.execute("SELECT cik, tag, period_start, period_end, is_instant, val, form, filed "
                               "FROM xbrl_facts WHERE unit IN ('USD','shares')").df()
+    for c in ("period_start", "period_end", "filed"):
+        facts[c] = pd.to_datetime(facts[c]).astype("datetime64[ns]")
     # cik -> ticker is point-in-time: 388 tickers have belonged to more than one company (SPACs,
     # renames, recycled symbols), so a filing is mapped to the ticker its CIK carried in that quarter
     # (issuer_seen), falling back to the CIK's latest ticker. Found by the 2026-09-22 audit.
@@ -107,69 +262,68 @@ def build(store: PanelStore) -> pd.DataFrame:
     tick_pit = tick_pit[["cik", "quarter", "ticker"]]
     tick = (tick_pit.sort_values("quarter").drop_duplicates("cik", keep="last")[["cik", "ticker"]]
             .rename(columns={"ticker": "ticker_latest"}))
-    parts = []
-    for cik, g in facts.groupby("cik"):
-        flows = None
-        for name, tags in FLOW_TAGS.items():
-            qf = quarterly_flows(g, name, tags)
-            if qf.empty:
-                continue
-            qf = qf.sort_values("period_end")
-            qf[f"{name}_ttm"] = qf[name].rolling(4).sum()
-            # a TTM value is known when the last of its four quarters was filed
-            filed = pd.to_datetime(qf["filed"])
-            qf["filed_ttm"] = pd.concat([filed.shift(k) for k in range(4)], axis=1).max(axis=1)
-            keep = qf[["cik", "period_end", "filed_ttm", f"{name}_ttm"]].dropna().rename(columns={"filed_ttm": "filed"})
-            flows = keep if flows is None else flows.merge(keep, on=["cik", "period_end", "filed"], how="outer")
-        inst = None
-        for name, tags in INSTANT_TAGS.items():
-            li = latest_instants(g, name, tags)
-            if li.empty:
-                continue
-            li["filed"] = pd.to_datetime(li["filed"])
-            inst = li if inst is None else inst.merge(li, on=["cik", "period_end", "filed"], how="outer")
-        # dual-class companies (META, V, MA, BRK.B, F, ...) report shares outstanding per class, which
-        # companyfacts leaves out; the quarterly weighted-average diluted count is undimensioned
-        sw = quarterly_flows(g, "shares_w", SHARES_FLOW_TAGS)
-        if not sw.empty:
-            sw["filed"] = pd.to_datetime(sw["filed"])
-            sw = sw[["cik", "period_end", "filed", "shares_w"]]
-            inst = sw if inst is None else inst.merge(sw, on=["cik", "period_end", "filed"], how="outer")
-        if flows is not None and "cogs_ttm" in flows.columns and ("cogs_g_ttm" in flows.columns or "cogs_s_ttm" in flows.columns):
-            parts_sum = flows[[c for c in ("cogs_g_ttm", "cogs_s_ttm") if c in flows.columns]].sum(axis=1, min_count=1)
-            flows["cogs_ttm"] = flows["cogs_ttm"].fillna(parts_sum)
-        elif flows is not None and ("cogs_g_ttm" in flows.columns or "cogs_s_ttm" in flows.columns):
-            flows["cogs_ttm"] = flows[[c for c in ("cogs_g_ttm", "cogs_s_ttm") if c in flows.columns]].sum(axis=1, min_count=1)
-        if flows is not None:
-            flows = flows.drop(columns=[c for c in ("cogs_g_ttm", "cogs_s_ttm") if c in flows.columns])
-        if flows is None and inst is None:
-            continue
-        df = flows if inst is None else (inst if flows is None else flows.merge(inst, on=["cik", "period_end", "filed"], how="outer"))
-        df["filed"] = pd.to_datetime(df["filed"])
-        df = df.sort_values("filed")
-        # carry the latest known value of each item forward across filings
-        for c in df.columns:
-            if c not in ("cik", "period_end", "filed"):
-                df[c] = df[c].ffill()
-        if "shares_w" in df.columns:
-            df["shares"] = df["shares"].fillna(df["shares_w"]) if "shares" in df.columns else df["shares_w"]
-            df = df.drop(columns="shares_w")
-        parts.append(df.drop_duplicates("filed", keep="last"))
-    out = pd.concat(parts, ignore_index=True)
+    items = {f"{name}_ttm": ttm_flows(facts, name, tags) for name, tags in FLOW_TAGS.items()}
+    parts = items.pop("cogs_g_ttm").merge(items.pop("cogs_s_ttm"), on=["cik", "period_end", "filed"], how="outer")
+    parts["parts"] = parts[["cogs_g_ttm", "cogs_s_ttm"]].sum(axis=1, min_count=1)
+    cogs = items["cogs_ttm"].merge(parts[["cik", "period_end", "filed", "parts"]], on=["cik", "period_end", "filed"], how="outer")
+    items["cogs_ttm"] = cogs.assign(cogs_ttm=cogs["cogs_ttm"].fillna(cogs["parts"])).drop(columns="parts")
+    instants = facts[facts["is_instant"]]
+    for name, tags in INSTANT_TAGS.items():
+        items[name] = latest_instants(instants, name, tags)
+    for name in ("shares_dei", "shares_bs"):
+        items[name] = items[name][items[name][name] > MIN_SHARES]
+    items["shares_w"] = weighted_shares(facts)
+    grid = pd.concat([df[["cik", "period_end", "filed"]] for df in items.values() if not df.empty], ignore_index=True)
+    grid = grid.groupby(["cik", "filed"], as_index=False)["period_end"].max()
+    grid = grid.sort_values(["filed", "cik"]).reset_index(drop=True)
+    grid["cik"] = grid["cik"].astype("int64")
+    cols = [grid[["cik", "period_end", "filed"]]]
+    for col, df in items.items():
+        df = df.astype({"cik": "int64"}) if not df.empty else df
+        cols.append(_carry(grid, df, col, ("shares_w_form",) if col == "shares_w" else ()))
+    out = pd.concat(cols, axis=1)
+    out = out.drop(columns=[c for c in out.columns if c.endswith("_asof") and c not in REVIEW_ONLY])
+    out = _usable_shares(out)
     out["quarter"] = out["filed"].dt.year.astype(str) + "q" + out["filed"].dt.quarter.astype(str)
     out = out.merge(tick_pit, on=["cik", "quarter"], how="left").merge(tick, on="cik", how="inner")
     out["ticker"] = out["ticker"].fillna(out["ticker_latest"])
-    out = out.merge(winner, on=["ticker", "quarter"], how="left")
+    # A quarter with no Form 4 under the symbol keeps the owner of the last quarter that had one.
+    # Was: no owner at all, so every CIK ever seen under the symbol kept it. issuer_seen ends a quarter
+    # behind the newest filings, and GSBD's latest row came from a CIK seen under it once, in 2016
+    # (14.9M shares instead of 112.6M); 10 liquid names on 2026-09-25.
+    for df in (out, winner):
+        df["qn"] = df["quarter"].str[:4].astype(int) * 4 + df["quarter"].str[-1].astype(int)
+    out = pd.merge_asof(out.sort_values("qn", kind="stable"), winner.sort_values("qn")[["ticker", "qn", "winner_cik"]],
+                        on="qn", by="ticker")
     out = out[out["winner_cik"].isna() | (out["winner_cik"] == out["cik"])]      # a losing CIK does not get the symbol
-    out = out.drop(columns=["quarter", "ticker_latest", "winner_cik"])
+    out = out.drop(columns=["quarter", "qn", "ticker_latest", "winner_cik"])
     # if two CIKs still land on the same ticker on the same filing date, keep the larger balance sheet
     out = out.sort_values(["ticker", "filed", "assets"]).drop_duplicates(["ticker", "filed"], keep="last")
     return out
 
 
+def review_path(store: PanelStore) -> Path:
+    """The review list: names whose share count could not be used. It lives next to panel.db."""
+    return store.path.parent / "shares_review.csv"
+
+
+def share_review(store: PanelStore, df: pd.DataFrame) -> pd.DataFrame:
+    """Latest row of every name that would be scored today and has a flagged share count."""
+    latest = df.sort_values("filed").drop_duplicates("ticker", keep="last")
+    latest = latest[(latest["shares_flag"] != "") & (latest["filed"] >= df["filed"].max() - pd.Timedelta(days=REVIEW_WINDOW_DAYS))]
+    try:
+        ov = store.con.execute("SELECT ticker, shares FROM shares_override").df().set_index("ticker")["shares"]
+    except Exception:
+        ov = pd.Series(dtype=float)
+    out = latest[["ticker", "cik", "filed", "shares_flag", *REVIEW_ONLY]].assign(override=latest["ticker"].map(ov).to_numpy())
+    return out.sort_values("ticker").reset_index(drop=True)
+
+
 def factor_inputs(store: PanelStore) -> pd.DataFrame:
-    """Cached build; stores panel.fundamentals_pit."""
+    """Cached build; stores panel.fundamentals_pit and writes the share review list."""
     df = build(store)
+    share_review(store, df).to_csv(review_path(store), index=False)
+    df = df.drop(columns=REVIEW_ONLY)
     df["assets_1y"] = np.nan
     df = df.sort_values(["ticker", "filed"])
     # asset growth: assets vs the value known ~one year earlier
