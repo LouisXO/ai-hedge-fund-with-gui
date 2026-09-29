@@ -195,3 +195,44 @@ def test_held_ticker_without_a_bar_is_kept_not_sold_as_rank_out():
     ins = [dict(_lot("GAP", 50, hold_until=NEXT), book="insider")]
     out = plan_book("insider", BOOKS["insider"], ins, [], set(), AS_OF, NEXT, {}, {}, cash_usd=0.0, blocked=set(), tif="day")
     assert [(o["ticker"], o["reason"]) for o in out] == [("GAP", "hold_expired")]
+
+
+def test_bars_guard_reason_is_what_main_plans_on():
+    """main() takes skipped_reason from this function: under 98% coverage nothing is planned."""
+    from agent.execute import bars_guard_reason
+    assert bars_guard_reason(0.9741) == "bars coverage 97.41%"
+    assert bars_guard_reason(0.97996) == "bars coverage 97.99%"          # floored: never reads as 98.00%
+    assert bars_guard_reason(0.98) is None and bars_guard_reason(1.0) is None
+    assert bars_guard_reason(None) is None                               # no earlier session: no guard
+
+
+def test_long_keep_holds_a_name_without_a_bar_and_plan_book_does_not_sell_it():
+    from agent.execute import long_keep
+    cfg = dict(BOOKS["long"], max_positions=3)
+    lots = [_lot("A", 100), _lot("GAP", 100), _lot("Z", 100)]
+    keep = long_keep({"A", "C"}, ["GAP"])
+    assert keep == {"A", "C", "GAP"}
+    orders = plan_book("long", cfg, lots, ["A", "C"], keep, AS_OF, NEXT, {"A": 10.0, "Z": 10.0, "C": 10.0}, {},
+                       cash_usd=1000.0, blocked=set(), tif="day")
+    assert [(o["ticker"], o["side"], o["reason"]) for o in orders] == [("Z", "sell", "rank_out"), ("C", "buy", "entry")]
+
+
+def test_a_failed_bars_update_is_named_with_failed():
+    from agent.execute import bars_update_note
+    assert bars_update_note(None) is None
+    assert bars_update_note({"failed_symbols": [], "n_batches_failed": 0, "rows": 5}) is None
+    assert bars_update_note({"error": "IO Error: database is locked", "failed_symbols": [], "n_batches_failed": 0}) \
+        == "bars update failed: IO Error: database is locked"
+    note = bars_update_note({"failed_symbols": ["AAA", "BBB"], "n_batches_failed": 1})
+    assert "failed" in note and "2 symbols" in note and "AAA" in note
+
+
+def test_class_shares_are_not_entered_but_a_held_one_is_kept():
+    from agent.execute import entry_candidates
+    assert entry_candidates(["AAA", "BRK-A", "LGF.B", "BWL-A", "BBB", "SPY"]) == ["AAA", "BBB", "SPY"]
+    cfg = dict(BOOKS["long"], max_positions=3)
+    lots = [_lot("BWL-A", 100)]
+    ranked = entry_candidates(["BRK-A", "AAA"])
+    orders = plan_book("long", cfg, lots, ranked, {"BWL-A", "AAA", "BRK-A"}, AS_OF, NEXT,
+                       {"BWL-A": 30.0, "AAA": 10.0, "BRK-A": 700_000.0}, {}, cash_usd=3000.0, blocked=set(), tif="day")
+    assert [(o["ticker"], o["side"]) for o in orders] == [("AAA", "buy")]
