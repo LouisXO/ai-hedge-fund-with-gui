@@ -17,6 +17,7 @@ from hedge_fund.features.panel import PanelStore
 BUCKETS = [-np.inf, 3e6, 2e7, 1e8, np.inf]
 LABELS = ["micro", "small", "mid", "large"]
 MAX_TX_USD = 50e6          # a single open-market insider trade above this is a parsing error, not a signal
+OVERRIDE_DAYS = 400        # shares_override reaches back this far from the newest filing, no further
 
 
 @dataclass
@@ -75,10 +76,14 @@ def fundamentals(store: PanelStore) -> pd.DataFrame | None:
     # XBRL feed cannot see; their current count from yfinance stands in (not point-in-time — a share
     # count moves a few % a year, the price is what moves the ratio). Audit S28, 2026-09-22.
     df.loc[df["shares"] <= 1000, "shares"] = np.nan             # 0 / 1 / negative counts are XBRL noise (FOX, HOOD, EL...)
+    # S47 补充 5: only where the count is missing, and only on rows filed within OVERRIDE_DAYS of the newest
+    # filing in the table. Was: every row of the ticker, so a count checked in 2026 set the market cap of
+    # 2017 in a backtest, and replaced counts that were fine.
     try:
         ov = store.con.execute("SELECT ticker, shares FROM shares_override").df().set_index("ticker")["shares"]
         m = df["ticker"].map(ov)
-        df["shares"] = m.where(m.notna(), df["shares"])
+        use = m.notna() & df["shares"].isna() & (df["filed"] >= df["filed"].max() - pd.Timedelta(days=OVERRIDE_DAYS))
+        df.loc[use, "shares"] = m[use]
     except Exception:
         pass
     return df
