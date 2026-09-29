@@ -1,0 +1,60 @@
+"""S48 pages: benchmarks SPY and QQQ from each book's start, labelled bases, gap to the cross by order kind, counts-only progress."""
+import datetime as dt
+import sys
+import types
+
+import pandas as pd
+import pytest
+
+sys.modules.setdefault("site_theme", types.SimpleNamespace(head=lambda *a, **k: "", nav=lambda *a, **k: "", FOOT=""))
+from agent import dashboard, evaluate  # noqa: E402
+
+D = dt.date
+
+
+def _base():
+    d = [D(2026, 9, 21), D(2026, 9, 22), D(2026, 9, 23)]
+    nav = pd.DataFrame([(d[0], "long", 100.0, 0.0, 0.0, 100.0), (d[1], "long", 99.0, 90.0, 0.0, 99.5), (d[2], "long", 101.0, 95.0, 0.5, 102.0)],
+                       columns=["as_of", "book", "equity_usd", "market_value_usd", "div_cum", "equity_auction_tr"])
+    nav["sim"], nav["sim_tr"], nav["auction_tr"], nav["n_positions"] = nav["equity_usd"], nav["equity_usd"] + nav["div_cum"], nav["equity_auction_tr"], 1
+    bench = {"SPY": {d[0]: 10.0, d[1]: 10.1, d[2]: 10.2}, "QQQ": {d[0]: 20.0, d[1]: 20.0, d[2]: 21.0}}
+    return evaluate.baselines(nav, {"long": d[1]}, bench), [(x, "long", 0, 1) for x in d]
+
+
+def test_cards_name_the_start_the_basis_spy_qqq_and_invested_share():
+    base, _ = _base()
+    html = dashboard.book_cards(base, {"long": 0})
+    for s in ("自 2026-09-21 收盘", "模拟器口径含分红", "竞价口径含分红", "SPY", "QQQ", "平均仓位", "首笔成交 2026-09-22"):
+        assert s in html
+    assert "alpha" not in html.lower()
+
+
+def test_paper_block_carries_spy_and_qqq_from_the_first_start():
+    base, nav = _base()
+    b = dashboard.paper_block(base, nav)
+    assert b["paper_since"] == "2026-09-21" and b["paper_nav"]["spy"][0] == 100.0 and b["paper_nav"]["qqq"][-1] == pytest.approx(105.0)
+    assert b["paper_nav"]["long"][-1] == pytest.approx(101.5)                       # sim + dividends, from the 09-21 close
+    assert dashboard.paper_block({"books": {}, "combined": None}, [])["paper_nav"]["days"] == []
+
+
+def test_auction_fills_are_only_opg_orders_and_the_gap_is_to_the_cross():
+    fills = [("long", "A", "buy", D(2026, 9, 30), "2026-09-30 09:30:01", 10.1, 10.0, "limit", "day"),
+             ("insider", "B", "buy", D(2026, 9, 30), "2026-09-30 09:30:02", 5.2, 5.0, "market", "day"),
+             ("insider", "C", "buy", D(2026, 9, 30), "2026-09-30 09:30:00", 5.0, 5.0, "market", "opg")]
+    rows = [{"book": "long", "ticker": "A", "side": "buy", "day": "2026-09-30", "gap_pct": 0.5, "gap_fill": False},
+            {"book": "insider", "ticker": "B", "side": "buy", "day": "2026-09-30", "gap_pct": 2.0, "gap_fill": False},
+            {"book": "insider", "ticker": "C", "side": "buy", "day": "2026-09-30", "gap_pct": 0.1, "gap_fill": False}]
+    f = evaluate.fill_gaps(fills, rows)
+    assert [x["kind"] for x in f] == ["day_limit", "day_market", "opg"]
+    assert [x["gap"] for x in f] == [0.5, 2.0, 0.1] and f[0]["gap_model"] == pytest.approx(1.0)
+    txt = dashboard.gap_summary(f)
+    assert "开盘竞价单(OPG) 1 笔 +0.10%" in txt and "DAY 市价单 1 笔 +2.00%" in txt and "对开盘竞价价" in txt
+
+
+def test_progress_shows_counts_only():
+    p = {"evaluate_from": "2026-09-29", "progress": {"long": {"closed": 3, "target": 100, "or_date": "2027-06-30", "on_time": None},
+                                                    "insider": {"closed": 5, "target": 200, "or_date": "2027-06-30", "on_time": 4}},
+         "orders": {"insider/buy": {"n": 10, "n_filled": 7}}}
+    html = dashboard.progress_html(p)
+    assert "平仓 3/100" in html and "按时入场 4" in html and "内部人 买 7/10" in html
+    assert "alpha" not in html.lower() and "t " not in html.replace("target", "")

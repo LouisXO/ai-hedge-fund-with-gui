@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import glob
 import json
 import math
 import os
@@ -167,6 +168,56 @@ def page_baselines(con, store, end: dt.date | None = None) -> dict:
     nav, first, _ = load_books(con)
     since = min(first.values()) - dt.timedelta(days=10) if first else None
     return baselines(nav, first, bench_prices(store, BENCH, since), end)
+
+
+def fill_gaps(fills: list, rows: list[dict]) -> list[dict]:
+    """Each fill with its gap to the OPENING CROSS (auction_basis fill_rows; the evaluation's definition) and its order kind.
+
+    kind: 'opg' (market-on-open, fills in the cross), 'day_market' (the simulator's first ask after the open),
+    'day_limit'. The gap to the bars' open (model_px) is kept as gap_model for reference only."""
+    cross = {(r["book"], r["ticker"], r["side"], r["day"]): r for r in rows}
+    out = []
+    for b, t, s, day, ts, px, m, ot, tif in fills:
+        r = cross.get((b, t, s, str(day)), {})
+        kind = "opg" if (tif or "").lower() == "opg" else "day_market" if ot == "market" else "day_limit"
+        out.append({"book": b, "ticker": t, "side": s, "day": str(day), "time": str(ts)[11:19], "type": ot, "tif": tif, "kind": kind,
+                    "gap": None if r.get("gap_pct") is None else round(r["gap_pct"], 3), "gap_fill": bool(r.get("gap_fill")),
+                    "gap_model": round((px / m - 1) * 100 * (1 if s == "buy" else -1), 3) if m else None})
+    return out
+
+
+def bench_by_year(s, start: str, end: str) -> tuple[dict, float | None]:
+    """Calendar-year total returns and CAGR of an adj_close series over [start, end], as the backtest reports SPY:
+    the first year from the first close in the window, later years from the previous year's last close."""
+    s = s.loc[start:end].dropna()
+    if s.empty:
+        return {}, None
+    out, prev = {}, float(s.iloc[0])
+    for y, g in s.groupby(s.index.year):
+        out[str(y)] = float(g.iloc[-1]) / prev - 1
+        prev = float(g.iloc[-1])
+    years = (s.index[-1] - s.index[0]).days / 365.25
+    return out, ((float(s.iloc[-1]) / float(s.iloc[0])) ** (1 / years) - 1) * 100 if years > 0 else None
+
+
+def backtest_bench(store, valid_dir: str) -> dict | None:
+    """The two live books' backtests by year (S33 report) next to SPY and QQQ over the same window. The comparison
+    shown is against SPY and QQQ (CAGR, excess over SPY); alpha2 stays in the research reports (S48)."""
+    files = sorted(glob.glob(os.path.join(valid_dir, "s33_negative_filters_*.json")))
+    if not files:
+        return None
+    full = json.load(open(files[-1]))
+    j = full["books"]
+    lb, ib = j["long_base"], j["insider_base"]
+    years = sorted(lb["by_year"])
+    qqq_y, qqq_cagr = bench_by_year(store.index_series("QQQ"), full.get("start", "2017-01-01"), full.get("end", "2026-08-31"))
+    keys = ("cagr_pct", "spy_cagr_pct", "excess_cagr_pct", "active_t_nw", "max_drawdown_pct", "sharpe", "avg_exposure")
+    return {"years": years, "long": [round(lb["by_year"][y] * 100, 1) for y in years],
+            "insider": [round(ib["by_year"].get(y, 0) * 100, 1) for y in years],
+            "spy": [round(lb["spy_by_year"][y] * 100, 1) for y in years],
+            "qqq": [round(qqq_y[y] * 100, 1) if y in qqq_y else None for y in years], "qqq_cagr_pct": qqq_cagr,
+            "long_meta": {k: lb.get(k) for k in keys}, "insider_meta": {k: ib.get(k) for k in keys},
+            "start": full.get("start"), "end": full.get("end"), "report": os.path.basename(files[-1])}
 
 
 # ================================================================ 2. evaluation (file only) ====
