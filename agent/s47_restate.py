@@ -9,10 +9,14 @@ A restatement is not a new variant: results are written under "restated", which 
 (hedge_fund/validation/family_log.py reads "books") does not count. Whatever the numbers are, v1 keeps
 running (S47). The long book's daily NAV is written to s47_base_nav.csv for the drift monitor.
 
-Usage: python -m agent.s47_restate
+S47b (2026-09-29): `--name s47b` restates on the S47b data (reused tickers split, the listing supplement,
+moomoo share counts) against the S47 restatement, and writes s47b_restatement_<date> next to it.
+
+Usage: python -m agent.s47_restate [--name s47b]
 """
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import json
 import os
@@ -32,11 +36,17 @@ OUT_DIR = "/Users/louis/hedge-fund/site-data/validation"
 START, END = "2017-01-01", "2026-08-31"
 BEFORE = {"long": {"alpha2_ann_pct": 8.11, "alpha2_t_nw": 1.46, "cagr_pct": 19.4, "source": "s44_v2_bundle_2026-09-26 strict base"},
           "insider": {"alpha2_ann_pct": 8.38, "alpha2_t_nw": 1.93, "cagr_pct": 20.4, "source": "S45 D1 base (2026-09-28)"}}
+BEFORE_S47B = {"long": {"alpha2_ann_pct": 8.37, "alpha2_t_nw": 1.40, "cagr_pct": 19.7, "source": "S47 restatement (2026-09-29)"},
+               "insider": {"alpha2_ann_pct": 8.80, "alpha2_t_nw": 2.05, "cagr_pct": 21.1, "source": "S47 restatement (2026-09-29)"}}
 KEYS = ["cagr_pct", "alpha2_ann_pct", "alpha2_t_nw", "excess_cagr_pct", "active_t_nw", "beta_mkt", "beta_size", "vol_pct",
         "max_drawdown_pct", "sharpe", "n_trades", "trade_hit_rate", "avg_exposure", "by_year"]
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--name", default="s47", choices=["s47", "s47b"])
+    name = ap.parse_args().name
+    before = BEFORE_S47B if name == "s47b" else BEFORE
     t0 = time.time()
     with PanelStore(read_only=True) as store:
         market = load_market(store, START)
@@ -53,17 +63,17 @@ def main() -> int:
     ins_res = simulate(market, ins_tg, START, END, ins.spec.max_slots, ins.spec.hold_days, 0.5, cash_in_spy=True)
     after = {"long": {k: long_res.metrics.get(k) for k in KEYS}, "insider": {k: ins_res.metrics.get(k) for k in KEYS}}
     stamp = dt.date.today().isoformat()
-    path = os.path.join(OUT_DIR, f"s47_restatement_{stamp}")
+    path = os.path.join(OUT_DIR, f"{name}_restatement_{stamp}")
     long_res.nav.rename("v1c").to_frame().to_csv(os.path.join(OUT_DIR, "s47_base_nav.csv"))
     with open(path + ".json", "w") as f:
-        json.dump({"start": START, "end": END, "before": BEFORE, "restated": after,
+        json.dump({"start": START, "end": END, "before": before, "restated": after,
                    "n_insider_events": int(len(ins_ev))}, f, indent=1, default=float)
-    L = [f"# S47 — restatement on the corrected data ({stamp})", "", f"{START} → {END}. Same rules and engine settings as the numbers replaced. "
+    L = [f"# {name.upper()} — restatement on the corrected data ({stamp})", "", f"{START} → {END}. Same rules and engine settings as the numbers replaced. "
          "Not a new variant; v1 keeps running whatever the result (S47).", "",
          "| book | | CAGR | alpha2/yr | alpha2 t | excess vs SPY | active t | β mkt | β size | vol | MaxDD | Sharpe | trades | hit |",
          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for b in ("long", "insider"):
-        o, m = BEFORE[b], after[b]
+        o, m = before[b], after[b]
         L.append(f"| {b} | before | {o['cagr_pct']:+.1f}% | {o['alpha2_ann_pct']:+.2f}% | {o['alpha2_t_nw']:.2f} | | | | | | | | | |")
         L.append(f"| {b} | restated | {m['cagr_pct']:+.1f}% | {m['alpha2_ann_pct']:+.2f}% | {m['alpha2_t_nw']:.2f} | {m['excess_cagr_pct']:+.1f}% | "
                  f"{m['active_t_nw']:.2f} | {m['beta_mkt']:.2f} | {m['beta_size']:.2f} | {m['vol_pct']:.0f}% | {m['max_drawdown_pct']:.0f}% | "
