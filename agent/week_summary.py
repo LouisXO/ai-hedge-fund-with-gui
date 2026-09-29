@@ -2,18 +2,25 @@
 
 Numbers come from the ledger and the panel at run time; the experiment table and the lessons are
 the week's record (docs/AGENT_PLAN.md §9 S27–S42b). Private only: it shows the real account.
+S48: each book is measured from the close before its first fill with SPY and QQQ on adj_close over
+the same days (agent/evaluate.baselines), the allocations come from agent_books, the auction basis
+is read at the week's end from agent_auction_nav (not the latest row), and "share of the losses"
+is the attribution's definition (the loss over the sum of the losing positions' losses).
 
-Usage: python -m agent.week_summary [--date 2026-09-26]
+Usage: python -m agent.week_summary [--date 2026-09-26] [--db PATH] [--out DIR]
 """
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import sys
 
 import duckdb
 
+from agent import evaluate, ledger
+from hedge_fund.features.panel import PanelStore
 from hedge_fund.paths import AGENT_DIR
 
 sys.path.insert(0, "/Users/louis/optradar/bin")
@@ -22,6 +29,27 @@ import site_theme  # noqa: E402
 OUT = "/Users/louis/optradar/out"
 DB = "/Users/louis/optradar/optradar.db"
 START, END, PREV = "2026-09-21", "2026-09-25", "2026-09-18"
+# The week's orders by their state at the end of END, not today's: filled means filled on or before END; an order
+# for the session after END (as_of = END), or one filled later, was still working on Friday ('pending').
+# A filled order can read 'expired' later, so the fill decides, not the status.
+ORDERS_AS_OF_END = """SELECT book, CASE WHEN coalesce(filled_qty, 0) > 0 AND CAST(filled_at AS DATE) <= CAST(? AS DATE) THEN 'filled'
+                                        WHEN coalesce(filled_qty, 0) > 0 OR as_of >= CAST(? AS DATE) THEN 'pending'
+                                        WHEN status IN ('expired', 'canceled', 'rejected', 'done_for_day', 'replaced') THEN status
+                                        ELSE 'pending' END, count(*)
+                      FROM o.agent_orders WHERE dry_run = FALSE AND as_of <= CAST(? AS DATE) GROUP BY ALL"""
+
+AUCTION = os.path.join(OUT, "agent", "auction_basis.json")
+
+
+def week_gap(path: str, book: str) -> tuple[float | None, int]:
+    """(mean gap to the opening cross in % per side, fills) of `book` on fills up to END, from auction_basis.json."""
+    try:
+        rows = json.load(open(path)).get("fill_rows", [])
+    except Exception:
+        return None, 0
+    g = [r["gap_pct"] for r in rows if r.get("book") == book and r.get("gap_pct") is not None and str(r.get("day")) <= END]
+    return (sum(g) / len(g) if g else None), len(g)
+
 
 EXPERIMENTS = [  # id, question, result, verdict (ok = adopted, no = rejected, wait = deferred)
     ("S33", "负面事件(大跌、增发等)做入场否决", "被否决的名字没有显著跑输;长线「5 日内大动不进」有点用但没过直接检验", "no", "不采用"),
@@ -66,44 +94,69 @@ def pct(x: float) -> str:
     return f"<span class='{'pos' if x >= 0 else 'neg'}'>{x:+.2f}%</span>"
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default="2026-09-26")
-    args = ap.parse_args()
+    ap.add_argument("--db", default=DB, help="the ledger (a copy, for a test run)")
+    ap.add_argument("--out", default=OUT)
+    ap.add_argument("--auction", default=AUCTION, help="auction_basis.json (fill_rows: the gap to the opening cross)")
+    args = ap.parse_args(argv)
+    end = dt.date.fromisoformat(END)
     con = duckdb.connect(str(AGENT_DIR / "panel.db"), read_only=True)
-    con.execute(f"ATTACH '{DB}' AS o (READ_ONLY)")
-    idx = {(s, str(d)): c for s, d, c in con.execute("SELECT symbol, trade_date, close FROM index_daily WHERE trade_date >= ? AND symbol IN ('SPY','IWM')", [PREV]).fetchall()}
-    nav = {(b, str(d)): e for b, d, e in con.execute("SELECT book, as_of, equity_usd FROM o.agent_book_nav").fetchall()}
+    con.execute(f"ATTACH '{args.db}' AS o (READ_ONLY)")
+    idx = {(s, str(d)): c for s, d, c in con.execute("SELECT symbol, trade_date, adj_close FROM index_daily WHERE trade_date >= ? AND symbol IN ('SPY','QQQ','IWM')", [PREV]).fetchall()}
     lots = con.execute("""SELECT l.ticker, l.qty, l.entry_px, b.close, (b.close / l.entry_px - 1) * 100, l.qty * (b.close - l.entry_px)
                           FROM o.agent_lots l JOIN bars b ON b.ticker = l.ticker AND b.trade_date = ?
                           WHERE l.book = 'long' AND l.status = 'open' ORDER BY 6""", [END]).fetchall()
-    orders = con.execute("""SELECT book, CASE WHEN coalesce(filled_qty, 0) > 0 THEN 'filled' ELSE status END, count(*)
-                            FROM o.agent_orders GROUP BY ALL""").fetchall()              # a filled order can read 'expired' after the day ends
-    real = con.execute("SELECT date, max(total_assets) FROM o.acct_nav WHERE date >= ? GROUP BY 1 ORDER BY 1", [PREV]).fetchall()
+    orders = con.execute(ORDERS_AS_OF_END, [END, END, END]).fetchall()
+    real = con.execute("SELECT date, max(total_assets) FROM o.acct_nav WHERE date >= ? AND date <= ? GROUP BY 1 ORDER BY 1", [PREV, END]).fetchall()
+    alloc = dict(con.execute("SELECT book, alloc_usd FROM o.agent_books").fetchall())     # S48: not constants
     con.close()
-    auct = json.load(open(os.path.join(OUT, "agent", "auction_basis.json")))["books"]
-    alloc = {"long": 60000, "insider": 30000, "core": 10000}
+    lcon = ledger.connect(args.db, read_only=True)
+    try:
+        with PanelStore(read_only=True) as store:
+            base = evaluate.page_baselines(lcon, store, end=end)
+        nav, _, _ = evaluate.load_books(lcon)                   # auction_tr falls back to the simulator NAV where it is missing
+        nav_end = {r.book: (r.sim, r.auction_tr) for r in nav[nav["as_of"] == end].itertuples()}
+    finally:
+        lcon.close()
     name = {"long": "长线综合因子", "insider": "内部人买入", "core": "SPY 核心"}
     spy_w = (idx[("SPY", END)] / idx[("SPY", PREV)] - 1) * 100
     iwm_w = (idx[("IWM", END)] / idx[("IWM", PREV)] - 1) * 100
-    spy_h = (idx[("SPY", END)] / idx[("SPY", START)] - 1) * 100          # from the close before the long book's entries (09-22 open)
-    iwm_h = (idx[("IWM", END)] / idx[("IWM", START)] - 1) * 100
+    lb = base["books"].get("long", {})
+    spy_h, qqq_h = (lb.get("bench") or {}).get("SPY"), (lb.get("bench") or {}).get("QQQ")      # from the close before the long book's first fill
     rows = ""
     tot_sim = tot_auc = 0.0
+    total_alloc = sum(alloc[b] for b in ("long", "insider", "core") if b in alloc)
     for b in ("long", "insider", "core"):
-        sim, auc = nav[(b, END)], auct[b]["equity_auction"]
+        sim, auc = nav_end[b][0], nav_end[b][1] if nav_end[b][1] is not None else nav_end[b][0]
         tot_sim += sim
         tot_auc += auc
-        rows += (f"<tr><td>{name[b]}</td><td class='num'>${alloc[b]:,.0f}</td><td class='num'>${sim:,.0f}</td><td class='num'>{pct((sim / alloc[b] - 1) * 100)}</td>"
-                 f"<td class='num'>${auc:,.0f}</td><td class='num'>{pct((auc / alloc[b] - 1) * 100)}</td><td class='num'>{auct[b]['n_fills']}</td></tr>")
-    rows += (f"<tr><td><b>合计</b></td><td class='num'>$100,000</td><td class='num'>${tot_sim:,.0f}</td><td class='num'>{pct((tot_sim / 1e5 - 1) * 100)}</td>"
-             f"<td class='num'>${tot_auc:,.0f}</td><td class='num'>{pct((tot_auc / 1e5 - 1) * 100)}</td><td></td></tr>")
+        x = base["books"].get(b)
+        since = f"{x['base_day']}" if x else "—"
+        bench = f"SPY {x['bench']['SPY']:+.2f}% · QQQ {x['bench']['QQQ']:+.2f}%" if x and x["bench"]["SPY"] is not None else "—"
+        ex = f"{x['exposure_avg_pct']:.0f}%" if x and x["exposure_avg_pct"] is not None else "—"
+        mg, ng = week_gap(args.auction, b)
+        drag = (f"<br><span class='muted'>模拟器按开盘后卖一成交(这本书到 {END} 实测 "
+                + ("还没有" if mg is None else f"{mg:+.2f}%/边,{ng} 笔,样本很小")
+                + "),这本书 5 个交易日换一次仓:模拟器口径很可能大幅低于竞价口径</span>"
+                if b == "insider" else "")
+        rows += (f"<tr><td>{name[b]}{drag}</td><td class='num'>${alloc[b]:,.0f}</td><td class='num'>{since}</td><td class='num'>${sim:,.0f}</td>"
+                 f"<td class='num'>{pct((sim / alloc[b] - 1) * 100)}</td>"
+                 f"<td class='num'>${auc:,.0f}</td><td class='num'>{pct((auc / alloc[b] - 1) * 100)}</td><td class='num'>{bench}</td><td class='num'>{ex}</td></tr>")
+    comb = base.get("combined") or {}
+    c_spy, c_qqq = (comb.get("bench_ret") or {}).get("SPY"), (comb.get("bench_ret") or {}).get("QQQ")
+    rows += (f"<tr><td><b>合计</b></td><td class='num'>${total_alloc:,.0f}</td><td class='num'>{comb.get('base_day', '—')}</td><td class='num'>${tot_sim:,.0f}</td>"
+             f"<td class='num'>{pct((tot_sim / total_alloc - 1) * 100)}</td>"
+             f"<td class='num'>${tot_auc:,.0f}</td><td class='num'>{pct((tot_auc / total_alloc - 1) * 100)}</td>"
+             f"<td class='num'>" + (f"SPY {c_spy:+.2f}% · QQQ {c_qqq:+.2f}%" if c_spy is not None else "—") + "</td><td></td></tr>")
     n_up = sum(1 for r in lots if r[4] > 0)
     pnl = sum(r[5] for r in lots)
     worst, best = lots[:5], lots[-5:][::-1]
     lot_tbl = lambda rs: "".join(f"<tr><td><b>{t}</b></td><td class='num'>{e:.2f}</td><td class='num'>{c:.2f}</td><td class='num'>{pct(r)}</td><td class='num'>{p:+,.0f}</td></tr>" for t, q, e, c, r, p in rs)  # noqa: E731
     head = "<tr><th>标的</th><th>买入价</th><th>周五收盘</th><th>涨跌</th><th>盈亏 $</th></tr>"
     ex_top = worst[0]
+    losses = sum(r[5] for r in lots if r[5] < 0)            # attribution.py's top1_share_of_losses: over the losing positions only
     od = {}
     for b, s, n in orders:
         od.setdefault(b, {})[s] = n
@@ -118,22 +171,23 @@ def main() -> int:
 <h1>第一周总结 · {START} → {END}</h1>
 <p class='muted'>模拟盘上线第一周。私有页面:含实盘数字,不上公开站。</p>
 <div class='cards'>
-<div class='card'><span class='k'>模拟盘合计(模拟器口径)</span><span class='v'>{pct((tot_sim / 1e5 - 1) * 100)}</span><span class='s'>${tot_sim:,.0f}</span></div>
-<div class='card'><span class='k'>模拟盘合计(竞价口径)</span><span class='v'>{pct((tot_auc / 1e5 - 1) * 100)}</span><span class='s'>${tot_auc:,.0f} · 评估用这个</span></div>
-<div class='card'><span class='k'>SPY / IWM 本周</span><span class='v'>{pct(spy_w)}</span><span class='s'>IWM {iwm_w:+.2f}%</span></div>
+<div class='card'><span class='k'>模拟盘合计(模拟器口径,不含分红)</span><span class='v'>{pct((tot_sim / total_alloc - 1) * 100)}</span><span class='s'>${tot_sim:,.0f} · 对分配 ${total_alloc:,.0f}</span></div>
+<div class='card'><span class='k'>模拟盘合计(竞价口径含分红)</span><span class='v'>{pct((tot_auc / total_alloc - 1) * 100)}</span><span class='s'>${tot_auc:,.0f} · 评估用这个</span></div>
+<div class='card'><span class='k'>SPY / QQQ 同期(自 {comb.get('base_day', '—')} 收盘)</span><span class='v'>{pct(c_spy) if c_spy is not None else '—'}</span><span class='s'>QQQ {'—' if c_qqq is None else format(c_qqq, '+.2f') + '%'} · 复权价(含分红)· 日历周 SPY {spy_w:+.2f}%,IWM {iwm_w:+.2f}%</span></div>
 <div class='card'><span class='k'>实验</span><span class='v'>{len(EXPERIMENTS)}</span><span class='s'>{n_no} 个否定 · 全部预注册</span></div>
 </div>
 <h2>一、模拟盘</h2>
-<div class='tbl'><table><tr><th>书</th><th>起始</th><th>模拟器净值</th><th>自起始</th><th>竞价口径净值</th><th>自起始</th><th>成交笔数</th></tr>{rows}</table></div>
+<div class='tbl'><table><tr><th>书</th><th>分配</th><th>起点(首笔成交前收盘)</th><th>模拟器净值</th><th>收益(模拟器口径)</th><th>竞价口径含分红净值</th><th>收益(竞价口径含分红)</th><th>同期 SPY / QQQ</th><th>平均仓位</th></tr>{rows}</table></div>
+<p class='muted'>收益都是对分配金额;每本书的起点在首笔成交前一个收盘,那之前书里只有现金,收益为零。SPY / QQQ 从各书自己的起点算,用复权价(含分红)。</p>
 <p><b>长线书</b> 9/22 开盘一次建满 30 仓,到周五 {n_up} 涨 {len(lots) - n_up} 跌,持仓盈亏 ${pnl:+,.0f}。
-同期(9/21 收盘起)SPY {spy_h:+.2f}%,IWM {iwm_h:+.2f}%。最大的一笔是 {ex_top[0]}({ex_top[4]:+.1f}%,${ex_top[5]:+,.0f}),占全部亏损的 {ex_top[5] / pnl * 100:.0f}%。</p>
-<p class='muted'>怎么读:4 个交易日、30 只小盘股,一只股票就占了三成亏损,这个样本没有统计意义。
+同期(自 {lb.get('base_day', '—')} 收盘,复权价)SPY {spy_h:+.2f}%,QQQ {qqq_h:+.2f}%。最大的一笔是 {ex_top[0]}({ex_top[4]:+.1f}%,${ex_top[5]:+,.0f}),占亏损股票合计亏损的 {ex_top[5] / losses * 100:.0f}%。</p>
+<p class='muted'>怎么读:4 个交易日、30 只小盘股,一只股票就占了亏损股票合计亏损的 {ex_top[5] / losses * 100:.0f}%,这个样本没有统计意义。
 这一周不能证明策略有效,也不能证明无效;评估点是 100 笔平仓。规则不动。</p>
 <div class='grid2'>
 <div><p class='muted'>跌幅最大 5 只</p><div class='tbl'><table>{head}{lot_tbl(worst)}</table></div></div>
 <div><p class='muted'>涨幅最大 5 只</p><div class='tbl'><table>{head}{lot_tbl(best)}</table></div></div>
 </div>
-<p><b>内部人书</b> 共下单 {sum(ins.values())} 张:成交 {ins.get('filled', 0)},未成交过期 {ins.get('expired', 0)},周一待成交 {ins.get('accepted', 0)}。
+<p><b>内部人书</b> 共下单 {sum(ins.values())} 张:成交 {ins.get('filled', 0)},未成交过期 {ins.get('expired', 0)},周一待成交 {ins.get('pending', 0)}(均为 {END} 收盘时的状态)。
 没成交的都是头两天的 OPG 单(S36);改 DAY 单之后 9/25 的两张(GSHD、OFIX)全部成交。<b>SPY 核心</b> 9/25 建仓,成交价比开盘竞价还低一点。</p>
 <p><b>实盘</b> {real_txt}。实盘的逐笔分析在每天的复盘页。</p>
 <h2>二、实验({len(EXPERIMENTS)} 个,全部先预注册再跑)</h2>
@@ -146,8 +200,8 @@ def main() -> int:
 <h2>五、接下来</h2>
 <ul class='list'>{''.join(f"<li>{x}</li>" for x in OPEN)}</ul>
 <p class='muted'>生成 {args.date} · python -m agent.week_summary</p>""" + site_theme.FOOT
-    os.makedirs(os.path.join(OUT, "weekly"), exist_ok=True)
-    path = os.path.join(OUT, "weekly", f"{args.date}-第一周总结.html")
+    os.makedirs(os.path.join(args.out, "weekly"), exist_ok=True)
+    path = os.path.join(args.out, "weekly", f"{args.date}-第一周总结.html")
     with open(path, "w") as f:
         f.write(page)
     print(path)

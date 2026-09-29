@@ -9,8 +9,12 @@ evaluate_at:
     n_closed_lots: 100        # ~ three full turns of the 30-slot book at a 38-session median hold
     or_date: 2027-06-30
   insider:
-    n_closed_lots: 200        # the backtest's per-trade sd is ~8%; 200 trades give a 1.1% standard error on the mean
-    or_date: 2027-06-30
+    n_closed_lots: 200        # the backtest's per-trade sd is ~9.6% (base run, 6,589 trades); 200 trades give a ~0.68% standard error
+    or_date: 2027-06-30       # on the mean (corrected 2026-09-29, S48: the "1.1%" written here was about two standard errors)
+  # S48 (2026-09-29), comment only — the key below is unchanged: the execution gap is measured against the opening
+  # cross (agent/auction_basis.py), the evaluation's basis; the bars' open (model_px) is kept for reference. The paper
+  # NAV that is compared is the auction basis with dividends, net of regulatory fees. agent/evaluate.py computes these
+  # inputs every day into out/agent/evaluate.json only (no page headline before the evaluation point).
   metric: "alpha2 (SPY + size) of the paper NAV vs the same-window backtest; execution gap = mean fill vs model open"
 
 # S47 (2026-09-29): the data correction took effect with the 2026-09-29 list (first fills at the 09-30 open).
