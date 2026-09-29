@@ -341,19 +341,19 @@ def insider_targets(store: PanelStore, day: pd.Timestamp, con, sessions: list[dt
     Form 4 job, so a filing made on D can reach the panel on D+1 and would be missed by a one-day
     window; counted in sessions, Monday's window still holds Friday. The same filing therefore
     shows up two evenings in a row; `blocking_orders` keeps that from buying twice while still
-    retrying an entry the broker left unfilled.
+    retrying an entry the broker left unfilled — over three sessions, so a late entry is retried too.
     Returns (tickers, retries, {ticker: trigger_filing_day, lag_sessions, entry_kind}); the third
     is recorded on the order for the evaluation and decides nothing here.
     """
-    df = signals_insider.candidates(store, day, window, sessions)
-    if df.empty:
-        return [], set(), {}
-    df = df[df["eligible"]]
     rows = con.execute("""SELECT ticker, status, filled_qty FROM agent_orders
                           WHERE book = 'insider' AND side = 'buy' AND dry_run = FALSE AND as_of >= ?""",
                        [(day - pd.Timedelta(days=8)).date()]).fetchall()
     skip, retry = blocking_orders(rows)
-    df = df[~df["ticker"].isin(skip)].sort_values("buy_usd", ascending=False)
+    # the one retry (S36b) holds for a late entry too: its filing day is a session further back (owner, S47 addendum d)
+    df = signals_insider.candidates(store, day, window, sessions, longer={t: window + 1 for t in retry})
+    if df.empty:
+        return [], set(), {}
+    df = df[df["eligible"] & ~df["ticker"].isin(skip)].sort_values("buy_usd", ascending=False)
     names = list(df["ticker"])
     retries = {t for t in names if t in retry}
     info = {r.ticker: {"trigger_filing_day": r.trigger_filing_day, "lag_sessions": int(r.lag_sessions),

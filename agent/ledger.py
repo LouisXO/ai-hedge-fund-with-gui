@@ -85,14 +85,24 @@ _ADD_COLUMNS += [(table, col, typ) for table in ("agent_orders", "agent_lots")
                  for col, typ in (("trigger_filing_day", "DATE"), ("lag_sessions", "INT"), ("entry_kind", "VARCHAR"))]
 
 
+def _columns(con, table: str) -> set[str]:
+    return {r[0] for r in con.execute(f"DESCRIBE {table}").fetchall()}
+
+
 def ensure_schema(con) -> None:
+    """Create the tables, then add the later columns that are missing, and check they are all there.
+
+    An ALTER that fails raises: sync_fills reads the insider classification columns, so a ledger
+    silently left without them would stop every book that evening at the first fill.
+    """
     for stmt in DDL:
         con.execute(stmt)
     for table, col, typ in _ADD_COLUMNS:
-        try:
+        if col not in _columns(con, table):
             con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
-        except Exception:
-            pass                      # already present
+    missing = [f"{table}.{col}" for table, col, _ in _ADD_COLUMNS if col not in _columns(con, table)]
+    if missing:
+        raise RuntimeError(f"ledger schema: columns still missing after ALTER: {', '.join(missing)}")
 
 
 def _insert(con, table: str, df: pd.DataFrame) -> int:

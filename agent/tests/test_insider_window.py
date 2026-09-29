@@ -31,16 +31,29 @@ def store(tmp_path):
                          "close": px, "adj_close": px, "volume": float(v), "source": "test",
                          "fetched_at": pd.Timestamp.now()})
     s.upsert_bars(pd.DataFrame(rows))
+    listed(s, list(PX))
     yield s
     s.close()
 
 
-def insider(store, ticker, owner, usd, day, code="P"):
+PX = {"AAA": 20.0, "BBB": 50.0, "CCC": 10.0, "THIN": 3.0}           # the insiders pay the bar's price
+
+
+def listed(store, tickers, ipo="2010-01-04", delisted=None):
+    """listing_status rows: the backtest's tradable mask (and so the live list) needs a listed name."""
+    store.insert("listing_status", pd.DataFrame([
+        {"symbol": t, "name": t, "exchange": "NYSE", "asset_type": "Stock", "ipo_date": pd.Timestamp(ipo).date(),
+         "delisting_date": pd.Timestamp(delisted).date() if delisted else None,
+         "status": "Delisted" if delisted else "Active", "fetched_at": pd.Timestamp.now()} for t in tickers]))
+
+
+def insider(store, ticker, owner, usd, day, code="P", price=None, trans_day=None):
+    price = price or PX[ticker]
     store.insert("insider_tx", pd.DataFrame([{
         "accession": f"{ticker}-{owner}-{day}-{usd}", "ticker": ticker, "issuer_cik": "1",
-        "filing_date": pd.Timestamp(day).date(), "trans_date": pd.Timestamp(day).date(),
+        "filing_date": pd.Timestamp(day).date(), "trans_date": pd.Timestamp(trans_day or day).date(),
         "owner_name": owner, "relationship": "isOfficer", "officer_title": "CEO",
-        "trans_code": code, "acq_disp": "A", "shares": usd / 10.0, "price": 10.0,
+        "trans_code": code, "acq_disp": "A", "shares": usd / price, "price": price,
         "value_usd": float(usd), "shares_after": 0.0, "source": "test", "fetched_at": pd.Timestamp.now()}]))
 
 
@@ -75,14 +88,17 @@ def test_monday_window_holds_friday_and_not_thursday(store):
     assert signals_insider.window_sessions(dt.date(2026, 9, 8), 2, SESSIONS) == [dt.date(2026, 9, 4), dt.date(2026, 9, 8)]
 
 
-def test_trigger_is_the_most_recent_qualifying_day_and_ranks_by_its_amount(store):
+def test_trigger_is_the_earliest_qualifying_day_and_the_latest_one_ranks(store):
+    """Owner, S47 addendum (a): the backtest bought after Monday's filing and held through Tuesday's,
+    so an entry made tonight is a session late even though Tuesday qualifies too. The ordering is
+    what it was: the most recent qualifying day's amount."""
     insider(store, "AAA", "X", 900_000, MON)
     insider(store, "AAA", "X", 300_000, TUE)
     insider(store, "BBB", "X", 500_000, MON)
     insider(store, "BBB", "Y", 1_000, TUE)               # Tuesday does not qualify by itself: Monday is the trigger
     df = signals_insider.candidates(store, TUE, 2, SESSIONS).set_index("ticker")
-    assert df.loc["AAA", "trigger_filing_day"] == TUE.date() and df.loc["AAA", "lag_sessions"] == 0
-    assert df.loc["AAA", "buy_usd"] == pytest.approx(300_000)
+    assert df.loc["AAA", "trigger_filing_day"] == MON.date() and df.loc["AAA", "lag_sessions"] == 1
+    assert df.loc["AAA", "last_filing"] == TUE.date() and df.loc["AAA", "buy_usd"] == pytest.approx(300_000)
     assert df.loc["BBB", "trigger_filing_day"] == MON.date() and df.loc["BBB", "lag_sessions"] == 1
     assert list(df.index) == ["BBB", "AAA"]              # larger purchase first, as the backtest fills its slots
 
