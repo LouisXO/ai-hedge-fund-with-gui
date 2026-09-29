@@ -272,7 +272,16 @@ class PanelStore:
                 self.con.execute("CREATE OR REPLACE TABLE listing_status_prev AS SELECT * FROM listing_status")
             self.con.register("_ls_in", df)
             new = self.con.execute("SELECT count(*) FROM _ls_in i ANTI JOIN listing_status l USING (symbol, status, ipo_date)").fetchone()[0]
-            self.con.execute(f"INSERT OR REPLACE INTO listing_status SELECT {', '.join(LISTING_COLS)} FROM _ls_in")
+            # A Delisted row keeps the later of its stored and downloaded end: close_stale_listings may have ended an
+            # interval later than the vendor's copy of that key, and next week's re-sent row must not shorten it.
+            self.con.execute(f"""INSERT INTO listing_status SELECT {', '.join(LISTING_COLS)} FROM _ls_in
+                                 ON CONFLICT (symbol, status, ipo_date) DO UPDATE SET
+                                   name = excluded.name, exchange = excluded.exchange, asset_type = excluded.asset_type,
+                                   fetched_at = excluded.fetched_at,
+                                   delisting_date = CASE WHEN excluded.status = 'Delisted'
+                                                         THEN greatest(coalesce(listing_status.delisting_date, excluded.delisting_date),
+                                                                       coalesce(excluded.delisting_date, listing_status.delisting_date))
+                                                         ELSE excluded.delisting_date END""")
             self.con.unregister("_ls_in")
             if self._listing_count("listing_status") != before + new:       # a refresh only adds rows or updates them
                 raise RuntimeError(f"listing refresh: {before} rows + {new} new != {self._listing_count('listing_status')}")

@@ -418,3 +418,18 @@ def test_audit_still_names_a_changed_holding_after_a_second_refresh_the_same_day
     audit.audit_listing(store, rep, ledger_db=ledger_with(tmp_path, [("HELD", "open")]))
     check, status, detail = rep.rows[-1][1:]
     assert status == "WARN" and "HELD listed -> not listed" in detail and "fetched 2026-09-20 -> 2026-09-27" in detail
+
+
+def test_a_closed_listing_is_not_shortened_when_the_vendor_resends_an_old_row(store):
+    # TEL: an old Delisted row with the same start as the Active row; the company really delists now under a new key
+    store.write_listing(rows(*FILL, ("TELX", "Active", "1990-01-02", None), at=T0),
+                        rows(("TELX", "Delisted", "1990-01-02", "2007-06-01"), at=T0))
+    store.write_listing(rows(*FILL), rows(("TELX", "Delisted", "1990-01-02", "2007-06-01"),
+                                          ("TELX", "Delisted", "2007-06-29", "2026-09-24")))
+    assert ("TELX", "Delisted", "1990-01-02", "2026-09-24") in table(store)
+    # a week later the vendor sends the old row again: the interval must keep its later end
+    T2 = pd.Timestamp("2026-10-04 03:00")
+    store.write_listing(rows(*FILL, at=T2), rows(("TELX", "Delisted", "1990-01-02", "2007-06-01"),
+                                                 ("TELX", "Delisted", "2007-06-29", "2026-09-24"), at=T2))
+    assert ("TELX", "Delisted", "1990-01-02", "2026-09-24") in table(store)
+    assert listed_mask(store, DATES, ["TELX"])["TELX"].loc["2016-05-20"]

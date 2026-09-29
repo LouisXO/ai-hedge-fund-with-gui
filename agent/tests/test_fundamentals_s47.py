@@ -373,7 +373,8 @@ def test_equity_is_the_parents(store):
     load(store, rows, [(t, c, "2026q2", 5) for t, c in (("XIFR", 1), ("BOTH", 2), ("PG", 3), ("UNH", 4), ("OLDNCI", 5))])
     df = F.build(store)
     latest = df.sort_values("filed").drop_duplicates("ticker", keep="last").set_index("ticker")["equity"]
-    assert latest.to_dict() == {"XIFR": 3.2e9, "BOTH": 4e9, "PG": 6e9, "UNH": 98e9, "OLDNCI": 9e9}
+    # XIFR: 10.7B - 7.0B; its 0.5B redeemable NCI is mezzanine equity, outside the total, and is not subtracted
+    assert latest.to_dict() == {"XIFR": 3.7e9, "BOTH": 4e9, "PG": 6e9, "UNH": 98e9, "OLDNCI": 9e9}
     assert row(df, "UNH", "2015-08-01")["equity"] == 58e9
     assert not set(F.HELPERS) & set(df.columns)
 

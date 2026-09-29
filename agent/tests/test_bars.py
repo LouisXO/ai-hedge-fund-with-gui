@@ -66,7 +66,8 @@ def store(tmp_path):
 
 def _list(store, symbols):
     store.insert("listing_status", pd.DataFrame({"symbol": symbols, "name": symbols, "exchange": "NYSE",
-                                                 "asset_type": "Stock", "status": "Active"}))
+                                                 "asset_type": "Stock", "status": "Active",
+                                                 "ipo_date": pd.Timestamp("2010-01-04").date()}))   # part of the key since S47
     store.insert("issuer_seen", pd.DataFrame({"ticker": symbols, "cik": "1", "quarter": "2026q2"}))
 
 

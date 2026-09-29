@@ -348,11 +348,14 @@ def _parent_equity(out: pd.DataFrame) -> pd.Series:
     """StockholdersEquity when there is a fresh one, else the total less noncontrolling interest (S47 补充 1).
 
     Noncontrolling interest counts when its period ends within SAME_PERIOD_DAYS of the total's; a tag not
-    reported counts as 0. PG, CAT and XIFR tag only the total; UNH's StockholdersEquity ends in 2015."""
+    reported counts as 0. PG, CAT and XIFR tag only the total; UNH's StockholdersEquity ends in 2015.
+    Only MinorityInterest is subtracted: redeemable NCI sits outside the total."""
     def nci(col):
         near = (out[f"{col}_asof"] - out["equity_total_asof"]).dt.days.abs() <= SAME_PERIOD_DAYS
         return out[col].where(near).fillna(0.0)
-    return out["equity"].fillna(out["equity_total"] - nci("nci") - nci("nci_redeemable"))
+    # Redeemable NCI is mezzanine equity (ASC 480-10-S99), not part of the total: subtracting it would count it twice
+    # (ADTN 129M total - 359M redeemable < 0). It is still loaded and kept, only not subtracted (2026-09-29).
+    return out["equity"].fillna(out["equity_total"] - nci("nci"))
 
 
 def _symbol_owners(tp: pd.DataFrame) -> pd.DataFrame:
