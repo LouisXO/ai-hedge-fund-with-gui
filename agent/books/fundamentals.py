@@ -56,7 +56,8 @@ INSTANT_TAGS = {
     "shares_dei": ["EntityCommonStockSharesOutstanding"],
     "shares_bs": ["CommonStockSharesOutstanding"],
 }
-QUARTER, HALF, NINE_MONTHS, YEAR = (75, 105), (165, 195), (255, 285), (350, 380)   # period lengths, days
+# period lengths in days; 12- and 16-week fiscal quarters (KR, PEP, COST) are 84 and 112
+QUARTER, HALF, NINE_MONTHS, YEAR = (75, 125), (160, 205), (245, 290), (350, 380)
 TTM_SPAN = (330, 400)            # first quarter's start to last quarter's end
 MAX_FACT_AGE_DAYS = 400          # period end to the filing a value is carried into
 SHARES_MISMATCH = 1.5            # largest / smallest of the share counts known at one filing

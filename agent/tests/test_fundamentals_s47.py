@@ -127,6 +127,15 @@ def test_ttm_needs_four_quarters_that_cover_one_year():
     assert pd.Timestamp("2024-03-31") in set(t["period_end"])
 
 
+def test_sixteen_week_quarter_is_a_quarter():
+    # KR: 16 + 12 + 12 + 12 weeks, reported year-to-date
+    ends = [("2025-05-24", "10-Q", "2025-06-27"), ("2025-08-16", "10-Q", "2025-09-19"), ("2025-11-08", "10-Q", "2025-12-12"),
+            ("2026-01-31", "10-K", "2026-03-31")]
+    f = facts([flow(1, CFO, "2025-02-02", e, v, fm, fd) for (e, fm, fd), v in zip(ends, [16, 28, 40, 52])])
+    assert F.quarterly_flows(f, "cfo", [CFO])["cfo"].tolist() == [16, 12, 12, 12]
+    assert F.ttm_flows(f, "cfo", [CFO])["cfo_ttm"].tolist() == [52]
+
+
 def test_annual_filer_takes_the_latest_year_as_ttm():
     rows = [flow(1, NI, f"{y}-01-01", f"{y}-12-31", v, "20-F", f"{y + 1}-04-10")
             for y, v in ((2022, 117.4), (2023, 12.6), (2024, -7.9))]
