@@ -200,7 +200,11 @@ def audit_listing(store, rep: Report, ledger_db: str | None = None):
     if not has_prev or not q("SELECT count(*) FROM listing_status_prev").fetchone()[0]:
         rep.add("universe", check, "PASS", "no earlier refresh to compare with")
         return
-    con = ledger.connect(ledger_db or ledger.OPTRADAR_DB, read_only=True)
+    try:
+        con = ledger.connect(ledger_db or ledger.OPTRADAR_DB, read_only=True, tries=2)
+    except Exception as exc:
+        rep.add("universe", check, "WARN", f"ledger not readable: {str(exc)[:120]}")
+        return
     try:
         held = sorted(con.execute("SELECT DISTINCT ticker FROM agent_lots WHERE status = 'open'").df()["ticker"])
     finally:

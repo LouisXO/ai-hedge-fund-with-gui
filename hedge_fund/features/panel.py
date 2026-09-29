@@ -194,7 +194,7 @@ class PanelStore:
         if fresh_at is None:
             fresh_at = self.con.execute("SELECT max(fetched_at) FROM listing_status WHERE status = 'Active'").fetchone()[0]
         stale = self.con.execute("""
-            SELECT a.symbol, a.ipo_date, a.asset_type,
+            SELECT a.symbol, a.ipo_date,
                    EXISTS (SELECT 1 FROM listing_status d WHERE d.symbol = a.symbol AND d.status <> 'Active'
                            AND d.delisting_date >= a.ipo_date) AS ended
             FROM listing_status a WHERE a.status = 'Active' AND a.fetched_at < ? ORDER BY 1, 2""", [fresh_at]).df()
