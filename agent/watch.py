@@ -17,7 +17,9 @@ import json
 import os
 import subprocess
 import time
+import re
 import urllib.request
+from zoneinfo import ZoneInfo
 
 import duckdb
 import pandas as pd
@@ -27,6 +29,27 @@ from agent.sources.alpaca_news import NEWS_DB
 from agent.sources.sec_form4 import user_agent
 from hedge_fund.features.panel import PanelStore
 from hedge_fund.paths import AGENT_DIR
+
+BEIJING, PACIFIC = ZoneInfo("Asia/Shanghai"), ZoneInfo("America/Los_Angeles")
+_BJ_STAMP = re.compile(r"^(\d{1,2})\.(\d{1,2}) (\d{1,2}):(\d{2})")
+
+
+def to_pacific(line: str, now: dt.datetime | None = None) -> str:
+    """moomoo's unusual-options lines start 'M.D HH:MM' in Beijing time; the page shows US Pacific ('9/29 06:50 PT').
+    The year is the one that puts the stamp no later than a day after `now` (a December line read in January)."""
+    m = _BJ_STAMP.match(line)
+    if not m:
+        return line
+    now = now or dt.datetime.now(BEIJING)
+    mo, d, h, mi = (int(x) for x in m.groups())
+    try:
+        t = dt.datetime(now.year, mo, d, h, mi, tzinfo=BEIJING)
+        if t > now.astimezone(BEIJING) + dt.timedelta(days=1):
+            t = t.replace(year=now.year - 1)
+    except ValueError:
+        return line
+    p = t.astimezone(PACIFIC)
+    return f"{p.month}/{p.day} {p:%H:%M} PT" + line[m.end():]
 
 WATCHLIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "watchlist.yaml")
 STATE = AGENT_DIR / "watch_state.json"
@@ -144,7 +167,7 @@ def main() -> int:
                 u = q.get_derivative_unusual(code)
                 if u[0] == 0 and isinstance(u[1], dict) and u[1].get("content"):
                     lines = [l.strip() for l in u[1]["content"].splitlines() if l.strip() and "：" not in l[:8] and not l.strip().startswith("[")]
-                    r["options_unusual"] = lines[:3]
+                    r["options_unusual"] = [to_pacific(l) for l in lines[:3]]
                 time.sleep(0.6)
         finally:
             q.close()
