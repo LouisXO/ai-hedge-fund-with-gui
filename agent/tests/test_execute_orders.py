@@ -376,6 +376,23 @@ def test_a_sell_in_flight_and_planned_again_is_counted_once():
     assert out[1]["qty"] == 197
 
 
+def test_a_buy_in_flight_holds_a_slot_unless_its_name_is_already_a_lot():
+    """Review finding (S48 fix): slots, not only cash. With $60,000 of cash, 17 lots + 3 working buys fill the
+    insider book's 20 slots: nothing is planned. A working buy of a name already held (the rest of a partial
+    fill) takes no second slot: 19 lots + that buy leave one slot, and one name is bought."""
+    cfg = BOOKS["insider"]
+    lots = [{"ticker": f"H{i}", "qty": 10, "entry_px": 15.0, "hold_until": dt.date(2026, 10, 5)} for i in range(19)]
+    ref = {**{f"H{i}": 15.0 for i in range(19)}, **{f"C{i}": 20.0 for i in range(8)}}
+    flying = [{"book": "insider", "ticker": t, "qty": 5, "limit_price": 20.6, "ref_close": 20.0} for t in ("C0", "C1", "C2")]
+    full = plan_book("insider", cfg, lots[:17], [f"C{i}" for i in range(3, 8)], set(), AS_OF, CAL[6], ref, {}, 60_000.0,
+                     set(), tif="day", inflight=flying)
+    assert full == []
+    held = [{"book": "insider", "ticker": "H0", "qty": 5, "limit_price": 15.45, "ref_close": 15.0}]
+    one = plan_book("insider", cfg, lots, [f"C{i}" for i in range(3, 8)], set(), AS_OF, CAL[6], ref, {}, 60_000.0,
+                    set(), tif="day", inflight=held)
+    assert [o["ticker"] for o in one] == ["C3"] and "slot_usd" not in one[0]
+
+
 def test_the_unfilled_part_of_a_partial_buy_is_what_stays_in_flight(con):
     fb = FakeBroker()
     coid = _sent(con, fb, _order("insider", "PRT", "buy", 100, limit=10.3))
@@ -436,6 +453,16 @@ def test_whole_multiples_are_reported_as_possible_splits():
                     "X: lots 100 vs alpaca 150"]
     assert [h["hint"] for h in split_hints(lots, positions)] == ["possible reverse split 1:10", "possible split 3:1"]
     assert split_hints(lots, {"S": {"qty": "100"}, "R": {"qty": "100"}, "X": {"qty": "2500"}}) == []   # 25:1 is out of range
+
+
+def test_a_reverse_split_that_paid_the_fraction_in_cash_is_reported():
+    """100 shares 1:3 -> 33 and a cash payment: reported. 5 of 100 fits 1:17..1:20 alike: 1:20 is exact and wins;
+    4 of 100 fits 1:21..1:25 only, out of range: nothing."""
+    assert execute.split_hint(100, 33) == "possible reverse split 1:3, fraction paid in cash"
+    assert execute.split_hint(100, 5) == "possible reverse split 1:20"
+    assert execute.split_hint(100, 4) is None and execute.split_hint(100, 60) is None
+    _, msgs = reconcile([{"ticker": "V", "qty": 100}], {"V": {"qty": "33"}})
+    assert msgs == ["V: lots 100 vs alpaca 33 (possible reverse split 1:3, fraction paid in cash)"]
 
 
 def test_cash_check_compares_books_with_the_broker_only_when_nothing_is_in_flight(con):

@@ -208,8 +208,7 @@ def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: s
         otype = "market" if tif == "opg" else "limit"
         orders.append({"client_order_id": client_id(book, as_of, t, "buy"), "book": book, "as_of": as_of,
                        "ticker": t, "side": "buy", "qty": qty, "order_type": otype, "tif": tif,
-                       "limit_price": None if otype == "market" else limit, "ref_close": px, "reason": "entry",
-                       "slot_usd": slot})                   # not a ledger column; the pre-submit cap reads it
+                       "limit_price": None if otype == "market" else limit, "ref_close": px, "reason": "entry"})
         cash_plan -= qty * limit
         n_open += 1
     return orders
@@ -437,14 +436,19 @@ def reconcile(lots: list[dict], positions: dict[str, dict]) -> tuple[set[str], l
 
 def split_hint(lot_qty: float, broker_qty: float) -> str | None:
     """'possible split 3:1' / 'possible reverse split 1:10' when the broker holds a whole multiple (2..20) or a
-    whole fraction (1/20..1/2) of the ledger's shares. Only reported: the lot stays frozen until the owner
-    confirms the corporate action and corrects qty and entry_px by hand (S48; no automatic change)."""
+    whole fraction (1/20..1/2) of the ledger's shares. A reverse split usually pays the fraction in cash (100 shares
+    1:3 -> 33), so a broker qty that is the whole part of lot / n for exactly one n in 2..20 is reported too. Only
+    reported: the lot stays frozen until the owner confirms the corporate action and corrects qty and entry_px
+    by hand (S48; no automatic change)."""
     if lot_qty <= 0 or broker_qty <= 0:
         return None
     for r, kind in ((broker_qty / lot_qty, "split {n}:1"), (lot_qty / broker_qty, "reverse split 1:{n}")):
         n = round(r)
         if 2 <= n <= 20 and abs(r - n) < 1e-6:
             return "possible " + kind.format(n=n)
+    whole = [n for n in range(2, 21) if math.floor(lot_qty / n + 1e-9) == broker_qty]
+    if len(whole) == 1:
+        return f"possible reverse split 1:{whole[0]}, fraction paid in cash"
     return None
 
 
