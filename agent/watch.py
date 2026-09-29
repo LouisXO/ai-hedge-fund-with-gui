@@ -55,6 +55,77 @@ WATCHLIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "watchlist.
 STATE = AGENT_DIR / "watch_state.json"
 OUT_DIR = "/Users/louis/optradar/out/agent"
 MOVE_PCT = 5.0
+OPTION_HISTORY = AGENT_DIR / "option_watch.json"   # {spread name: {date: {"mid": x, "legs": {code: {...}}}}}
+
+
+def spread_record(snap: dict[str, dict], legs: list[list]) -> dict:
+    """One day's record of a watched option spread from moomoo snapshot rows {code: {bid, ask, last, oi, iv, volume}}:
+    the spread's mid (sum of qty x leg mid; last price where a side is missing) and each leg's numbers."""
+    mid, out = 0.0, {}
+    for code, qty in legs:
+        r = snap[code]
+        m = (r["bid"] + r["ask"]) / 2 if r.get("bid") and r.get("ask") else r.get("last")
+        mid += qty * m
+        out[code] = {"mid": round(m, 4), "oi": r.get("oi"), "iv": r.get("iv"), "volume": r.get("volume")}
+    return {"mid": round(mid, 4), "legs": out}
+
+
+def spread_alerts(cfg: dict, today: dict, before: dict | None) -> tuple[list[str], str]:
+    """Alerts and a display line for a watched spread. `before` is the latest record of an earlier day (None on
+    the first day: open interest is then compared with the counts in cfg['seen']['oi']). Open interest that moved by
+    at least half the print's size says whether the print opened or closed a position (moomoo's snapshot carries
+    the previous session's open interest, so the day after the print is the first to show it)."""
+    seen, qty = cfg.get("seen", {}), cfg.get("seen", {}).get("qty") or 0
+    alerts, legs_txt = [], []
+    for i, (code, _) in enumerate(cfg["legs"]):
+        leg, label = today["legs"][code], cfg.get("labels", [code] * len(cfg["legs"]))[i]
+        base = (before or {}).get("legs", {}).get(code, {}).get("oi")
+        if base is None and seen.get("oi"):
+            base = seen["oi"][i]
+        oi = leg.get("oi")
+        if oi is not None and base is not None and qty and abs(oi - base) >= 0.5 * qty:
+            alerts.append(f"{cfg['name']}:{label} 持仓量 {base:,.0f} → {oi:,.0f}({oi - base:+,.0f},大单 {qty:,} 张,"
+                          + ("像是新开仓)" if oi > base else "像是平仓)"))
+        legs_txt.append(f"{label} 中间价 {leg['mid']:.2f} · 持仓量 {'—' if oi is None else f'{oi:,.0f}'}"
+                        + ("" if leg.get("iv") is None else f" · IV {leg['iv']:.0f}%"))
+    m, prev = today["mid"], (before or {}).get("mid")
+    for lvl in cfg.get("below", []):
+        if prev is not None and prev >= lvl > m:
+            alerts.append(f"{cfg['name']}:价差跌破 {lvl} → {m:.2f}")
+    for lvl in cfg.get("above", []):
+        if prev is not None and prev <= lvl < m:
+            alerts.append(f"{cfg['name']}:价差突破 {lvl} → {m:.2f}")
+    cost = seen.get("price")
+    line = (f"{cfg['name']}:价差中间价 {m:.2f}" + (f"(大单成本 {cost:.2f},{m / cost - 1:+.0%})" if cost else "")
+            + ";" + ";".join(legs_txt))
+    return alerts, line
+
+
+def watch_spreads(q, results: list[dict], wl: dict) -> None:
+    """For names with `spreads:` in the watchlist: one moomoo snapshot per spread (read-only), a record per day in
+    OPTION_HISTORY, alerts into the name's alert list and a line into r['spreads']."""
+    hist = json.load(open(OPTION_HISTORY)) if OPTION_HISTORY.exists() else {}
+    today = dt.date.today().isoformat()
+    for r in results:
+        for cfg in wl.get(r["ticker"], {}).get("spreads", []) or []:
+            codes = [c for c, _ in cfg["legs"]]
+            ret, df = q.get_market_snapshot(codes)
+            if ret != 0:
+                r.setdefault("spreads", []).append(f"{cfg['name']}:行情读取失败")
+                continue
+            snap = {row["code"]: {"bid": row.get("bid_price"), "ask": row.get("ask_price"), "last": row.get("last_price"),
+                                  "oi": row.get("option_open_interest"), "iv": row.get("option_implied_volatility"),
+                                  "volume": row.get("volume")} for row in df.to_dict("records")}
+            rec = spread_record(snap, cfg["legs"])
+            h = hist.setdefault(cfg["name"], {})
+            earlier = [d for d in sorted(h) if d < today]
+            alerts, line = spread_alerts(cfg, rec, h[earlier[-1]] if earlier else None)
+            h[today] = rec
+            r["alerts"] += alerts
+            r.setdefault("spreads", []).append(line)
+            time.sleep(0.6)
+    with open(OPTION_HISTORY, "w") as f:
+        json.dump(hist, f, indent=1, default=float)
 
 
 def load_watchlist() -> dict:
@@ -169,6 +240,7 @@ def main() -> int:
                     lines = [l.strip() for l in u[1]["content"].splitlines() if l.strip() and "：" not in l[:8] and not l.strip().startswith("[")]
                     r["options_unusual"] = [to_pacific(l) for l in lines[:3]]
                 time.sleep(0.6)
+            watch_spreads(q, results, wl)
         finally:
             q.close()
     except Exception as exc:

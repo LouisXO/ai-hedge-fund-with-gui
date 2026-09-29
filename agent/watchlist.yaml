@@ -14,7 +14,14 @@ watch:
     note: "不追大涨日;等 Iridium 投票结果 8-K 和合并完成;回踩 65–69 分批,或站上 81(200 日线)后回踩;58 收盘跌破作废"
     forms: ["10-K", "10-Q", "8-K", "425", "S-4", "S-4/A", "DEFM14A", "424B5", "4", "SCHEDULE 13D"]
     below: [69.0, 65.0, 58.0]
-    above: [81.0, 100.0]
+    above: [81.0, 90.0, 97.5, 100.0, 121.0, 150.0]   # 90 / 97.5 / 150: the 9/29 spread's long strike, breakeven, cap
+    spreads:                                          # a public print followed daily (moomoo snapshot, read-only)
+      - name: "9/29 大单 90/150 看涨价差(2027-03-19)"
+        legs: [["US.RKLB270319C90000", 1], ["US.RKLB270319C150000", -1]]
+        labels: ["90 看涨", "150 看涨"]
+        seen: {date: "2026-09-29", time_et: "09:50", qty: 1150, price: 7.50, stock: 72.1, oi: [1540, 3848]}   # 9.90 - 2.40; OI before the print
+        below: [3.1]                                  # half the print's cost at the 9/29 close mark (6.21)
+        above: [12.5, 30.0]                           # 2x that mark; half the 60 maximum
   IONQ:
     cik: "0001824920"
     note: "不追;S25 负面格子(9/22 +10% 新闻日 + 散户 20 倍);股本 18 个月翻倍,等下一轮发股落地;可能入场 $30–35;11/5 财报前不持期权"
