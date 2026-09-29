@@ -6,7 +6,7 @@ watch:
   NEOV:
     cik: "0001748137"
     note: "9/23 年报:Q4 收入 1.35 万(去年 480 万),亏损 1,170 万,现金 2,540 万;$2 亿 S-3 货架 > 市值;不入场,等 424B5 增发定价"
-    forms: ["10-K", "10-Q", "8-K", "424B5", "424B3", "S-3", "S-3/A", "4", "SCHEDULE 13D", "SCHEDULE 13G"]
+    forms: ["10-K", "10-Q", "8-K", "424B5", "424B3", "S-3", "S-3/A", "EFFECT", "4", "SCHEDULE 13D", "SCHEDULE 13G"]   # EFFECT = the $200M shelf became usable
     below: [2.05, 1.5]
     above: [3.0]
   RKLB:
