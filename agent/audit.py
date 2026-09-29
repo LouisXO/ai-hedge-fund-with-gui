@@ -11,7 +11,8 @@ changes and before any backtest is trusted:
 Checks
   fundamentals  coverage per field; internal consistency (rev >= cogs, |NI/rev| sane, equity <= assets,
                 shares x price within [50M, 10T]); staleness of the latest filing; TTM built from 4
-                quarters; spot checks of 10 large names against hand-known magnitudes
+                quarters; spot checks of 10 large names against hand-known magnitudes; a past fiscal
+                year as reported (AAPL 2023 operating cash flow)
   prices        no non-positive prices; adj/close ratio piecewise-constant (splits only); no
                 >10x day-to-day jumps in adj_close without a matching raw jump; source overlap
                 agreement (yfinance vs alpaca same date); gaps vs the SPY calendar
@@ -21,7 +22,9 @@ Checks
   universe      PIT membership ~500 per date; listing mask agrees with bars (no bars for "listed" days,
                 bars for "unlisted" days); ADV floor universe size by year
   factors       per-day universe size and NaN share per family; z-score caps (winsor) — how many
-                names sit exactly at the cap per family; families' z dispersion
+                names sit exactly at the cap per family; families' z dispersion; in the top 60, every
+                name whose B/M is at the winsor cap or whose share fact is older than 400 days
+                (run daily: --section factors)
   ledger        agent_picks/agent_orders/agent_lots consistency; paper vs model prices present
 """
 from __future__ import annotations
@@ -46,6 +49,12 @@ KNOWN = {  # rough magnitudes for the latest TTM, USD billions (2026 filings); t
     "BRK.B": {"rev": (350, 420), "ni": (50, 130), "shares_b": (1.4, 2.3)},
     "F":    {"rev": (170, 200), "ni": (2, 8), "shares_b": (3.9, 4.1)},
 }
+# A past fiscal year as the company reported it: no later filing changes it, so the tolerance is tight.
+KNOWN_FLOWS = [  # ticker, column, filing date of the 10-K, USD billions, tolerance
+    ("AAPL", "cfo_ttm", "2023-11-03", 110.5, 0.05),      # fiscal 2023; four years' first quarters added up to 150.3
+]
+TOP_KEEP = 60                   # the long book holds a name while it ranks inside this
+SHARE_FACT_MAX_AGE_DAYS = 400
 
 
 class Report:
@@ -60,6 +69,31 @@ class Report:
         n = {s: sum(1 for r in self.rows if r[2] == s) for s in ("PASS", "WARN", "FAIL")}
         print(f"\n== {n['PASS']} pass, {n['WARN']} warn, {n['FAIL']} fail")
         return n
+
+
+def known_flow_failures(f: pd.DataFrame) -> list[str]:
+    fails = []
+    for t, col, filed, usd_b, tol in KNOWN_FLOWS:
+        row = f[(f["ticker"] == t) & (f["filed"] == pd.Timestamp(filed))]
+        v = row[col].iloc[0] / 1e9 if len(row) else np.nan
+        if not abs(v / usd_b - 1) <= tol:                 # a missing value fails too
+            fails.append(f"{t} {col} in the {filed} filing: {v:.1f}B (expected {usd_b}B within {tol:.0%})")
+    return fails
+
+
+def top_list_suspects(fs: pd.DataFrame, f: pd.DataFrame, day: pd.Timestamp, n: int = TOP_KEEP) -> tuple[list[str], list[str], float]:
+    """Among the day's top n: names with B/M at the winsor cap, names with an old share fact; and the cap.
+
+    fs = factor_scores for the day's universe, f = latest_before(fund, day). A market cap that is
+    too small by a wrong share count shows up as B/M at the cap: on 2026-09-25 that was 6 of the
+    top 30 (GSBD, HG, MCHB, BZ, UHAL, GMRS)."""
+    f = f.reindex(fs.index)
+    ok = (f["equity"] > 0.05 * f["assets"]) & (f["assets"] > 1e7)          # as factor_scores
+    bm = (f["equity"].where(ok) / fs["mcap"]).replace([np.inf, -np.inf], np.nan)
+    cap = bm.quantile(0.99)
+    top = fs[fs["n_families"] >= 3].sort_values("composite", ascending=False).head(n).index
+    age = (day - pd.to_datetime(f["shares_asof"])).dt.days
+    return [t for t in top if bm[t] >= cap], [t for t in top if age[t] > SHARE_FACT_MAX_AGE_DAYS], float(cap)
 
 
 def audit_fundamentals(store, rep: Report):
@@ -103,6 +137,8 @@ def audit_fundamentals(store, rep: Report):
         if not ok:
             fails.append(f"{t}: rev {rev:.0f}B ni {ni:.0f}B shares {sh:.2f}B (expected rev {k['rev']}, ni {k['ni']}, sh {k['shares_b']})")
     rep.add("fundamentals", "spot checks vs known magnitudes", "PASS" if not fails else "FAIL", "; ".join(fails) if fails else f"{len(KNOWN)} names within range")
+    fails = known_flow_failures(f)
+    rep.add("fundamentals", "past fiscal years as reported", "PASS" if not fails else "FAIL", "; ".join(fails) if fails else f"{len(KNOWN_FLOWS)} within tolerance")
     # tag mixing: revenue jumps > 3x quarter-over-quarter in TTM (a sign of a tag switch)
     f2 = f.sort_values(["ticker", "filed"])
     jump = f2.groupby("ticker")["rev_ttm"].pct_change().abs()
@@ -177,7 +213,7 @@ def audit_universe(store, rep: Report):
 
 def audit_factors(store, rep: Report):
     from agent.books.data import fundamentals, load_market
-    from agent.books.factors import factor_scores
+    from agent.books.factors import factor_scores, latest_before
     from agent.books.long_term import ADV_FLOOR
     market = load_market(store, "2026-06-01")
     fund = fundamentals(store)
@@ -193,6 +229,18 @@ def audit_factors(store, rep: Report):
                 f"{fs[fam].isna().mean():.0%} NaN, max z {z.max():.2f}, {cap} names at the cap, sd {z.std():.2f}")
     top = fs.sort_values("composite", ascending=False).head(30)
     rep.add("factors", "top-30 family mix", "PASS", f"mean z v {top['value'].mean():+.2f} q {top['quality'].mean():+.2f} m {top['momentum'].mean():+.2f} lv {top['lowvol'].mean():+.2f}")
+    if "shares_asof" not in fund.columns:
+        rep.add("factors", f"top {TOP_KEEP}: suspect value inputs", "WARN", "fundamentals_pit has no shares_asof: rebuild it (agent.books.fundamentals.factor_inputs)")
+        return
+    f = latest_before(fund, day)
+    try:                                                   # an overridden count is as old as the override
+        ov = store.con.execute("SELECT ticker, as_of FROM shares_override").df().set_index("ticker")["as_of"]
+        f.loc[f.index.intersection(ov.index), "shares_asof"] = pd.to_datetime(ov).reindex(f.index.intersection(ov.index))
+    except Exception:
+        pass
+    at_cap, old, cap = top_list_suspects(fs, f, day)
+    rep.add("factors", f"top {TOP_KEEP}: B/M at the winsor cap ({cap:.2f})", "WARN" if at_cap else "PASS", f"{len(at_cap)} {at_cap}")
+    rep.add("factors", f"top {TOP_KEEP}: share fact older than {SHARE_FACT_MAX_AGE_DAYS} days", "WARN" if old else "PASS", f"{len(old)} {old}")
 
 
 def audit_ledger(rep: Report):

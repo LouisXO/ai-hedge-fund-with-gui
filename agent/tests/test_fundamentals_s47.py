@@ -259,3 +259,30 @@ def test_late_filing_for_an_older_period_replaces_nothing(store):
             instant(1, "Assets", "2024-06-30", 100.0, "10-Q/A", "2025-09-01")]           # first seen in an amendment
     load(store, rows, [("A", 1, "2025q3", 5)])
     assert row(F.build(store), "A", "2025-09-01")["assets"] == 200.0
+
+
+# -- audit -------------------------------------------------------------------
+
+def test_known_fiscal_year_check_catches_the_old_cash_flow():
+    from agent.audit import known_flow_failures
+    f = pd.DataFrame({"ticker": ["AAPL", "AAPL"], "filed": pd.to_datetime(["2023-08-04", "2023-11-03"]), "cfo_ttm": [113.072e9, 110.543e9]})
+    assert known_flow_failures(f) == []
+    assert len(known_flow_failures(f.assign(cfo_ttm=150.25e9))) == 1          # four years' first quarters
+    assert len(known_flow_failures(f.assign(cfo_ttm=np.nan))) == 1
+    assert len(known_flow_failures(f.iloc[:1])) == 1                           # the 10-K row is missing
+
+
+def test_top_list_check_names_capped_book_to_market_and_old_share_facts():
+    from agent.audit import top_list_suspects
+    day = pd.Timestamp("2026-09-25")
+    names = [f"T{i:03d}" for i in range(200)]
+    fs = pd.DataFrame({"composite": np.linspace(2, -2, 200), "n_families": 4, "mcap": 1e9}, index=names)
+    fs.loc["T001", "mcap"] = 1e8                                               # a share count ten times too small
+    fs.loc["T150", "mcap"] = 0.5e8                                             # the same far down the list: not reported
+    fs.loc["T002", "n_families"] = 2                                           # not scored, so not in the list
+    f = pd.DataFrame({"equity": 5e8, "assets": 2e9, "shares_asof": pd.Timestamp("2026-06-30")}, index=names)
+    f.loc["T003", "shares_asof"] = pd.Timestamp("2025-06-30")                  # fresh at the filing, 452 days old today
+    f.loc["T004", "shares_asof"] = pd.NaT
+    at_cap, old, cap = top_list_suspects(fs, f, day)
+    assert at_cap == ["T001"] and old == ["T003"]
+    assert 0.5 < cap <= 5.0
