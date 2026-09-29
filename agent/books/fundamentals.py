@@ -44,6 +44,10 @@ from hedge_fund.features.panel import PanelStore
 FLOW_TAGS = {
     # alternatives, not periods to mix: see BY_TAG
     "ni": ["NetIncomeLoss", "NetIncomeLossAvailableToCommonStockholdersBasic", "ProfitLoss"],
+    # Chosen per period, so a tag change (ASC 606, 2018) does not wait for the new tag to have a year of its own.
+    # TODO(S47 note 8): the year and its quarters can still come from different tags, and Q4 = one tag's year
+    # less another's quarters (PLXS rev_ttm 30.7B, 20.7B, 10.8B on its 2025 filings, ~40B real). Building the
+    # TTM within each tag, then choosing, fixes it but delays the 2018 switch by up to three quarters.
     "rev": ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet"],
     "gp": ["GrossProfit"],
     "cogs": ["CostOfRevenue", "CostOfGoodsAndServicesSold"],
