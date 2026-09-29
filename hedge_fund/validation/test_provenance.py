@@ -31,7 +31,7 @@ def test_committed_but_not_pushed_is_refused(repo):
     f = str(repo / "s99_experiment.py")
     p = definition_provenance(f)
     assert p["commit"] and not p["dirty"] and p["remote_branches"] == [] and not p["pushed"]
-    with pytest.raises(ProvenanceError, match="no remote branch"):
+    with pytest.raises(ProvenanceError, match="no origin branch"):
         require_pushed(f)
     assert require_pushed(f, allow_unpushed=True)["warning"].startswith("commit ")
 
@@ -55,3 +55,17 @@ def test_a_file_never_committed_is_refused(repo):
     (repo / "s98_new.py").write_text("x = 1\n")
     with pytest.raises(ProvenanceError, match="not committed"):
         require_pushed(str(repo / "s98_new.py"))
+
+
+def test_a_push_to_another_remote_is_not_origin(repo, tmp_path):
+    # A fork or upstream remote is not where the pre-registration is public: only origin/* counts.
+    fork = tmp_path / "fork.git"
+    _git(tmp_path, "init", "-q", "--bare", str(fork))
+    _git(repo, "remote", "add", "fork", str(fork))
+    _git(repo, "push", "-q", "fork", "main")
+    f = str(repo / "s99_experiment.py")
+    p = definition_provenance(f)
+    assert p["remote_branches"] == [] and not p["pushed"]
+    with pytest.raises(ProvenanceError, match="no origin branch"):
+        require_pushed(f)
+    assert require_pushed(f, remote="fork")["remote_branches"] == ["fork/main"]

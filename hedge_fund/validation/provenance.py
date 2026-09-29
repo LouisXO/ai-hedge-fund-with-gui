@@ -14,8 +14,9 @@ Use it at the top of a NEW experiment script (existing scripts are not edited):
 
 Rules (docs/AGENT_PLAN.md §5.5, thresholds v3):
   - the defining file must have no uncommitted changes;
-  - the last commit that touched it must be contained in a remote-tracking branch
-    (`git branch -r --contains <commit>`), i.e. pushed;
+  - the last commit that touched it must be contained in a tracking branch of origin
+    (`git branch -r --contains <commit>`, filtered to `origin/`), i.e. pushed; another remote
+    (a fork, an upstream) does not count;
   - the commit hash goes into the report JSON.
 
 `git branch -r` reads the local remote-tracking refs, so no network call is made; push first,
@@ -36,8 +37,11 @@ def _git(repo: str, *args: str) -> str:
     return subprocess.run(["git", "-C", repo, *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
-def definition_provenance(path: str, repo: str | None = None) -> dict:
-    """Facts about the file that defines an experiment: last commit, dirty or not, remote branches."""
+def definition_provenance(path: str, repo: str | None = None, remote: str = "origin") -> dict:
+    """Facts about the file that defines an experiment: last commit, dirty or not, branches of `remote`.
+
+    Only `remote`'s tracking branches count: a push to a fork or another remote is not public here.
+    """
     path = os.path.abspath(path)
     repo = repo or _git(os.path.dirname(path), "rev-parse", "--show-toplevel")
     rel = os.path.relpath(path, repo)
@@ -46,18 +50,18 @@ def definition_provenance(path: str, repo: str | None = None) -> dict:
     branches = []
     if commit:
         branches = [b.strip() for b in _git(repo, "branch", "-r", "--contains", commit).splitlines()
-                    if b.strip() and "->" not in b]
+                    if b.strip().startswith(remote + "/") and "->" not in b]
     return {"file": rel, "commit": commit or None, "dirty": dirty, "remote_branches": branches,
             "pushed": bool(commit) and not dirty and bool(branches),
             "checked_at": dt.datetime.now().isoformat(timespec="seconds")}
 
 
-def require_pushed(path: str, repo: str | None = None, allow_unpushed: bool = False) -> dict:
-    """definition_provenance(), raising ProvenanceError unless the definition is committed and pushed."""
-    p = definition_provenance(path, repo)
+def require_pushed(path: str, repo: str | None = None, allow_unpushed: bool = False, remote: str = "origin") -> dict:
+    """definition_provenance(), raising ProvenanceError unless the definition is committed and pushed to `remote`."""
+    p = definition_provenance(path, repo, remote)
     if not p["pushed"]:
         why = ("not committed" if not p["commit"] else "uncommitted changes" if p["dirty"]
-               else f"commit {p['commit'][:10]} is on no remote branch (push it first)")
+               else f"commit {p['commit'][:10]} is on no {remote} branch (push it first)")
         if not allow_unpushed:
             raise ProvenanceError(f"{p['file']}: {why}")
         p["warning"] = why
