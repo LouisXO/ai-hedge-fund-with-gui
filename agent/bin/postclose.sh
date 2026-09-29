@@ -12,20 +12,30 @@
 #   5. private_index               front page
 #   6. public site publish (hedge-fund.louisleng.com, paper page with today's close)
 #   7. data archives               SEC forms, Alpha Vantage estimates, moomoo IV / consensus / ratings, Alpaca borrow flags
+#
+# Step 1 feeds the books (fills, lots, cash, NAV): when it fails it writes a line with FAILED and the script
+# exits 1 after every other step has run. Every other step is a record or a page, logged "(non-fatal)".
 set -u
 cd /Users/louis/hedge-fund
 PY=/Users/louis/.hedgefund-venv/bin/python
 LOG=/Users/louis/optradar/out/agent/execute.log
 export PYTHONPATH=/Users/louis/hedge-fund
 echo "=== postclose $(date) ===" >> "$LOG"
-$PY -W ignore -m agent.execute --sync-only >> "$LOG" 2>&1 || echo "sync failed" >> "$LOG"
+FAILED_STEPS=""
+$PY -W ignore -m agent.execute --sync-only >> "$LOG" 2>&1 || { echo "sync FAILED (exit $?): fills, lots and NAV not booked" >> "$LOG"; FAILED_STEPS="$FAILED_STEPS sync"; }
 /Users/louis/.moomoo/venv/bin/python -W ignore /Users/louis/optradar/bin/account_snapshot.py --quiet >> "$LOG" 2>&1 || echo "account snapshot failed (non-fatal)" >> "$LOG"
 $PY -W ignore -m agent.watch >> "$LOG" 2>&1 || echo "watchlist failed (non-fatal)" >> "$LOG"
 $PY -W ignore -m agent.watch_reminders >> "$LOG" 2>&1 || echo "moomoo reminder sync failed (non-fatal)" >> "$LOG"   # watchlist levels -> moomoo app push
 $PY -W ignore -m agent.balder_log >> "$LOG" 2>&1 || echo "balder log failed (non-fatal)" >> "$LOG"          # posts the user dropped into iCloud/Balder, scored
 $PY -W ignore -m agent.auction_basis >> "$LOG" 2>&1 || echo "auction basis failed (non-fatal)" >> "$LOG"      # fills re-priced at the opening cross; missed-trade shadow
+if [ -f agent/dividends.py ]; then   # S48 package C; the guard lets this script run before that module is merged
+  $PY -W ignore -m agent.dividends >> "$LOG" 2>&1 || echo "dividends failed (non-fatal)" >> "$LOG"
+fi
 $PY -W ignore -m agent.shadow_v2 >> "$LOG" 2>&1 || echo "shadow v2 failed (non-fatal)" >> "$LOG"            # S44: six shadow lines replayed on the recorded lists
 $PY -W ignore -m agent.drift >> "$LOG" 2>&1 || echo "drift monitor failed (non-fatal)" >> "$LOG"                # paper vs rule replay vs backtest range
+if [ -f agent/evaluate.py ]; then    # S48 package C (frozen evaluation metrics); guarded like dividends
+  $PY -W ignore -m agent.evaluate >> "$LOG" 2>&1 || echo "evaluate failed (non-fatal)" >> "$LOG"
+fi
 $PY -W ignore -m agent.attribution >> "$LOG" 2>&1 || echo "attribution failed (non-fatal)" >> "$LOG"           # week to date; one row per week in attribution.jsonl
 $PY -W ignore -m agent.review >> "$LOG" 2>&1 || echo "review failed (non-fatal)" >> "$LOG"
 $PY -W ignore -m agent.dashboard >> "$LOG" 2>&1 || echo "dashboard failed (non-fatal)" >> "$LOG"
@@ -44,3 +54,8 @@ $PY -W ignore -m agent.backup >> "$LOG" 2>&1 || echo "backup failed (non-fatal)"
 # --- last: health with the Claude login probe and today's backup status, front page again ---
 $PY -W ignore -m agent.health >> "$LOG" 2>&1 || echo "health check failed (non-fatal)" >> "$LOG"                               # out/health.json for the front page; notifies on a new failure
 /Users/louis/.moomoo/venv/bin/python /Users/louis/optradar/bin/private_index.py >> "$LOG" 2>&1 || echo "private index failed (non-fatal)" >> "$LOG"
+if [ -n "$FAILED_STEPS" ]; then
+  echo "postclose job FAILED steps:$FAILED_STEPS ($(date))" >> "$LOG"
+  exit 1
+fi
+exit 0
