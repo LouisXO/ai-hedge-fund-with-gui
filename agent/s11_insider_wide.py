@@ -71,7 +71,7 @@ def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str],
     by_key: dict[str, list[str]] = {}
     for t in tickers:
         by_key.setdefault(segments.spelling(t), []).append(t)
-    ls = ls[ls["symbol"].map(segments.spelling).isin(by_key)]
+    ls = ls[ls["symbol"].map(segments.spelling).isin(set(by_key))]
     day = dates.to_numpy()
     arr = np.zeros((len(dates), len(tickers)), dtype=bool)
     for sym, status, ipo, delist in ls.itertuples(index=False):
