@@ -795,9 +795,10 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 
 更新:2026-09-29
 
-**今天(9/29)还要做**
-- 16:10 任务结束后部署 S48 A 包:合并 `s48/wpA` → 账本加列(ensure_schema)→ 隔离冒烟 → `--cancel-open` 只列不撤。然后创建 `~/.hedge-fund/agent/late_insider.ok`,把晚间补单任务的安装命令交给用户。
-- 13:25 任务之后核对:moomoo 股数第一次写入(`shares_override` 的 moomoo_snapshot 行)、分红和评估文件、复盘页面。
+**9/29 晚的状态**
+- S48 A 包 16:14 上线:账本加列(77 张订单回填一致)、隔离冒烟通过、`--cancel-open` 列出当晚 20 张挂单。`~/.hedge-fund/agent/late_insider.ok` 16:29 创建。
+- 16:10 的 Form 4 实时抓取失败(EFTS HTTP 500),内部人书当晚没有新买入;16:18 手工重试成功。晚间补单空跑会买 COUR 302 股。补单任务还没安装,今晚 19:16 由会话手工跑一次同一个脚本;安装命令:`cp ~/hedge-fund/agent/launchd/com.louis.agent.late_insider.plist ~/Library/LaunchAgents/ && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.louis.agent.late_insider.plist`(用户在终端跑)。
+- 关注名单的期权大单时间从北京时间改成美西时间(moomoo 原文是北京时间)。
 
 **等待中(不需要动手,只要盯)**
 - 9/30 13:25 同步之后:第一批卖单(PRTA、GSAT 到期)和长线换仓的出场价、收益、现金;同步 JSON 里的 claimed_orders、claim_error、cash_check、possible_splits、reconcile(A 包说明第 7 条)。
