@@ -13,7 +13,7 @@ FAIL=0
 # The first full refresh also brings ~4,000 companies loaded on 2026-09-20 up to the current tag list, which moves
 # the long book's list; it waits for the owner's date (docs/AGENT_PLAN.md S46): touch ~/.hedge-fund/agent/refresh_fundamentals.ok
 if [ -f "$HOME/.hedge-fund/agent/refresh_fundamentals.ok" ]; then
-  $PY -W ignore -m agent.sources.sec_xbrl load --max-age-days 6 >> "$LOG" 2>&1 || { echo "xbrl load failed" >> "$LOG"; FAIL=1; }
+  $PY -W ignore -m agent.sources.sec_xbrl load --max-age-days 6 >> "$LOG" 2>&1 || { echo "xbrl load FAILED (exit $?)" >> "$LOG"; FAIL=1; }
 else
   echo "xbrl refresh not run: waiting for the owner's go-ahead (refresh_fundamentals.ok missing)" >> "$LOG"
 fi
@@ -23,10 +23,12 @@ from agent.books.fundamentals import factor_inputs
 with PanelStore() as s:
     df = factor_inputs(s)
 print('fundamentals_pit', len(df), 'rows', df['ticker'].nunique(), 'names')
-" >> "$LOG" 2>&1 || { echo "fundamentals rebuild failed or skipped" >> "$LOG"; FAIL=1; }
-$PY -W ignore -m agent.sources.av_listing refresh >> "$LOG" 2>&1 || true
+" >> "$LOG" 2>&1 || { echo "fundamentals rebuild FAILED or skipped" >> "$LOG"; FAIL=1; }
+# the listing table is the books' universe mask: a failed refresh is logged and fails the job (it used to be '|| true')
+$PY -W ignore -m agent.sources.av_listing refresh >> "$LOG" 2>&1 || { echo "listing refresh FAILED (exit $?)" >> "$LOG"; FAIL=1; }
 $PY -W ignore -m agent.sources.finra_short update >> "$LOG" 2>&1 || echo "finra short interest update failed (non-fatal)" >> "$LOG"   # S38 data, twice-monthly source
-echo "=== done $(date) ===" >> "$LOG"
+echo "=== done $(date) ===" >> "$LOG"   # the audit and the weekly backup below stay non-fatal
 $PY -W ignore -m agent.audit >> "$LOG" 2>&1 || echo "audit reported failures" >> "$LOG"
 $PY -W ignore -m agent.backup --weekly >> "$LOG" 2>&1 || echo "weekly backup failed (non-fatal)" >> "$LOG"   # large databases to iCloud Drive (2 kept)
+[ "$FAIL" = "0" ] || echo "weekly fundamentals job FAILED ($(date))" >> "$LOG"
 exit $FAIL

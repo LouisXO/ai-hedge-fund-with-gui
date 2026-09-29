@@ -1,0 +1,97 @@
+{
+ "nav": "s47_base_nav.csv",
+ "start": "2017-01-01",
+ "end": "2026-08-31",
+ "models": {
+  "alpha2 (SPY, IWM-SPY)": {
+   "n_days": 2427,
+   "start": "2017-01-04",
+   "end": "2026-08-31",
+   "alpha_ann_pct": 8.371277975127528,
+   "alpha_t_nw": 1.4003622005285505,
+   "betas": {
+    "mkt": 1.092,
+    "size": 0.772
+   },
+   "r2": 0.579
+  },
+  "+ QQQ-SPY": {
+   "n_days": 2427,
+   "start": "2017-01-04",
+   "end": "2026-08-31",
+   "alpha_ann_pct": 6.900905379678787,
+   "alpha_t_nw": 1.1742522142856633,
+   "betas": {
+    "mkt": 0.972,
+    "size": 0.876,
+    "qqq": 0.639
+   },
+   "r2": 0.607
+  },
+  "+ momentum, value, quality, low vol": {
+   "n_days": 2427,
+   "start": "2017-01-04",
+   "end": "2026-08-31",
+   "alpha_ann_pct": 7.178136674055527,
+   "alpha_t_nw": 1.4994738446898852,
+   "betas": {
+    "mkt": 0.934,
+    "size": 0.787,
+    "mom": 1.079,
+    "val": 0.016,
+    "qual": -0.581,
+    "lowvol": -0.274
+   },
+   "r2": 0.744
+  },
+  "+ small value, small growth-value": {
+   "n_days": 2427,
+   "start": "2017-01-04",
+   "end": "2026-08-31",
+   "alpha_ann_pct": 7.11489010314664,
+   "alpha_t_nw": 1.4857063529772152,
+   "betas": {
+    "mkt": 0.939,
+    "size": 0.783,
+    "mom": 1.054,
+    "val": 0.045,
+    "qual": -0.613,
+    "lowvol": -0.248,
+    "sv": 0.056,
+    "sgv": 0.092
+   },
+   "r2": 0.744
+  },
+  "AVUV window: alpha2": {
+   "n_days": 1738,
+   "start": "2019-10-01",
+   "end": "2026-08-31",
+   "alpha_ann_pct": 12.982891610741246,
+   "alpha_t_nw": 1.6229887251554374,
+   "betas": {
+    "mkt": 1.127,
+    "size": 0.796
+   },
+   "r2": 0.573
+  },
+  "AVUV window: + all above + AVUV-IWM": {
+   "n_days": 1738,
+   "start": "2019-10-01",
+   "end": "2026-08-31",
+   "alpha_ann_pct": 10.979227466633443,
+   "alpha_t_nw": 1.8133169855565503,
+   "betas": {
+    "mkt": 0.967,
+    "size": 0.827,
+    "mom": 1.056,
+    "val": -0.005,
+    "qual": -0.766,
+    "lowvol": -0.15,
+    "sv": -0.021,
+    "sgv": 0.498,
+    "avuv": 0.601
+   },
+   "r2": 0.767
+  }
+ }
+}

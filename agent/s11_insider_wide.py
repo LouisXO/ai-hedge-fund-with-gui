@@ -37,7 +37,8 @@ OUT_DIR = os.path.join(ROOT, "site-data", "validation")
 
 
 def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str],
-                table: str = "listing_status") -> pd.DataFrame:
+                table: str = "listing_status", extra: pd.DataFrame | None = None,
+                splits: pd.DataFrame | None = None) -> pd.DataFrame:
     """True where listing_status says the symbol was trading that day.
 
     Every row is one listing interval and the mask is their union: an Active row runs from ipo_date with no
@@ -50,32 +51,48 @@ def listed_mask(store: PanelStore, dates: pd.DatetimeIndex, tickers: list[str],
     WNS, AILE; RCM, LTRY, ABST, SCU, QTNT have bars that stop well before their Delisted row ends); no list
     can hold it, since that needs a bar and ADV, and the audit counts the first kind.
 
-    TODO(S47 补充, not fixed yet): the mask says which days a name may be picked, not which prices belong to
-    the listing it is in. Factors look back by row position (agent/books/factors.py: hist.iloc[-253] and a
-    253-row volatility), so for about a year after a new listing starts on a ticker that had bars before
-    it (another company's, the pre-reorganisation stock, zero-volume filler) momentum and volatility read
-    those older prices: WOLF (new stock 2025-09-29, 17x jump at the seam), SE before 2017-10-20 (Spectra
-    Energy), VAL, GPOR, BIOA; 37 tickers and ~4,100 liquid name-days since 2017. The fix is to blank a
-    ticker's prices before the start of the listing interval it is in (a start-date twin of this function,
-    applied in agent/books/data.py load_market); it changes factor inputs, so it waits for the owner's
-    decision. Until then a momentum-only list can rank such a name first; the composite has not, because
-    the seam also inflates volatility.
+    S47b (2026-09-29), agent/books/segments.py:
+    - a reused or relisted ticker whose bars are split (SE, WOLF, VAL, DOW) is two columns: when the pseudo
+      ticker ('SE@2007') is in `tickers` it gets the interval(s) that ended before the current one started,
+      the real ticker the rest; a pseudo ticker asked for alone still gets its intervals. A caller whose
+      frame has no pseudo column (bars not split: s11-s13, the audit) keeps them on the real ticker, as
+      before S47b, since its frame holds the old security's bars under that name. `splits`:
+      agent.books.segments.load_splits of the same table, passed by a caller that already has it.
+    - a listing row matches a ticker in either spelling of a class share ('BRK-B' row, 'BRK.B' bars); when
+      both spellings are in `tickers`, only the row's own spelling gets it, so one security is never two
+      listed columns.
+    - the rows of agent/listing_supplement.yaml count as Active rows (`extra`; None reads the file).
     """
-    ls = store.con.execute(f"""SELECT symbol, status, ipo_date, delisting_date
-                               FROM {table} WHERE asset_type = 'Stock'""").df()
-    ls = ls[ls["symbol"].isin(tickers)]
+    from agent.books import segments
+    ls = segments.listing_rows(store, table, extra)
+    if splits is None:
+        splits = segments.load_splits(store, table, listing=ls)
+    route = segments.routes(splits)
     col = {t: i for i, t in enumerate(tickers)}
+    by_key: dict[str, list[str]] = {}                        # spelling -> the bars tickers that may take a row
+    for t in tickers:
+        by_key.setdefault(segments.spelling(t), []).append(t)
+    for t, (p, _) in route.items():                          # a pseudo ticker asked for without its real one
+        if p in col and t not in by_key.get(segments.spelling(t), []):
+            by_key.setdefault(segments.spelling(t), []).append(t)
+    ls = ls[ls["symbol"].map(segments.spelling).isin(set(by_key))]
     day = dates.to_numpy()
     arr = np.zeros((len(dates), len(tickers)), dtype=bool)
     for sym, status, ipo, delist in ls.itertuples(index=False):
         on = np.ones(len(day), dtype=bool) if pd.isna(ipo) else day >= pd.Timestamp(ipo).to_datetime64()
         if status != "Active" and pd.notna(delist):
             on &= day <= pd.Timestamp(delist).to_datetime64()
-        arr[on, col[sym]] = True
+        same = by_key[segments.spelling(sym)]
+        for t in [sym] if sym in same else same:
+            if t in route and route[t][0] in col and status != "Active" and pd.notna(delist) and delist < route[t][1]:
+                t = route[t][0]                              # an interval of the old security: its pseudo ticker
+            if t in col:
+                arr[on, col[t]] = True
     return pd.DataFrame(arr, index=dates, columns=tickers)
 
 
 def event_stats(ev: pd.DataFrame, fwd: pd.DataFrame, mkt: pd.Series, horizon: int, label: str) -> dict:
+    from agent.s8_insider import overlap_robust_t     # the same overlap-robust t as S8's event_stats
     rows = []
     for d, g in ev.groupby("date"):
         if d not in fwd.index or pd.isna(mkt.get(d, np.nan)):
@@ -92,7 +109,9 @@ def event_stats(ev: pd.DataFrame, fwd: pd.DataFrame, mkt: pd.Series, horizon: in
     by_year = df["abn"].groupby(df.index.year).mean()
     return {"label": label, "horizon": horizon, "n_events": int(df["n"].sum()), "n_dates": int(len(df)),
             "mean_abn_pct": float(x.mean()), "median_abn_pct": float(np.median(x)),
-            "t_nw": newey_west_t(x, lag=max(horizon // 5, 1)), "boot_ci95": [boot["lo"], boot["hi"]],
+            "t_nw": newey_west_t(x, lag=max(horizon // 5, 1)),
+            **overlap_robust_t(x, fwd.index.get_indexer(df.index), horizon),       # S48: t_nw_h, t_nonoverlap
+            "boot_ci95": [boot["lo"], boot["hi"]],
             "hit_rate": float((x > 0).mean()), "share_years_positive": float((by_year > 0).mean()),
             "first_half": float(df["abn"].iloc[: len(df) // 2].mean()),
             "second_half": float(df["abn"].iloc[len(df) // 2:].mean())}

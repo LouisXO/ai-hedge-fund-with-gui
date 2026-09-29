@@ -9,11 +9,15 @@ Code is on GitHub; the data was only on this Mac. Two tiers:
           news.db, short.db, intraday.db
 
 Each DuckDB file is copied while this process holds a read-only connection to it (so no writer can
-be mid-transaction), the copy is opened and a table is counted as a restore test, then it is
-compressed with zstd. A database that a writer holds is skipped and reported; the next run picks it up.
+be mid-transaction; a leftover WAL is folded into the copy), compressed with zstd, and then the .zst that
+was written is decompressed into an empty temp directory and must show the same tables and row counts the
+source had: the restore test covers the file that is actually kept. A database that a writer holds is
+skipped and reported; the next run picks it up.
 Secrets (~/.hedge-fund/.env, optradar/.env) are NOT copied to the cloud: keys are re-issued, not restored.
 
-Restore: `zstd -d <file>.zst -o <name>.db` into ~/.hedge-fund/agent/ (or ~/optradar/ for optradar.db).
+Restore: first move BOTH the old <name>.db and <name>.db.wal out of the way (DuckDB silently replays a WAL left
+next to the path onto the restored file), then `zstd -d <file>.zst -o <name>.db` into ~/.hedge-fund/agent/ (or
+~/optradar/ for optradar.db). docs/RUNBOOK.md section 7 has the exact commands.
 
 Usage: python -m agent.backup [--weekly] [--dest DIR]
 """
@@ -42,7 +46,26 @@ STATE_FILES = [f"{A}/watch_state.json", f"{A}/av_quota.json", f"{A}/balder_seen.
 KEEP = {"daily": 14, "weekly": 2}
 
 
+def _tables(con) -> list[str]:
+    return [r[0] for r in con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' "
+                                      "AND table_type = 'BASE TABLE' ORDER BY table_name").fetchall()]
+
+
+def _row_counts(con, tables: list[str]) -> dict[str, int]:
+    return {t: int(con.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0]) for t in tables}
+
+
+def _compress(src: str, dst: str) -> None:
+    subprocess.run([ZSTD, "-q", "-T0", "-3", "-f", src, "-o", dst], check=True)
+
+
+def _decompress(src: str, dst: str) -> None:
+    subprocess.run([ZSTD, "-q", "-d", "-f", src, "-o", dst], check=True)
+
+
 def backup_db(path: str, out_dir: str) -> dict:
+    """Copy under a read-only connection, compress, then restore-test the .zst that was written: decompress it into
+    an empty temp directory and require the same tables and row counts the source had while it was held."""
     name = os.path.basename(path)
     if not os.path.exists(path):
         return {"file": name, "status": "missing"}
@@ -52,26 +75,46 @@ def backup_db(path: str, out_dir: str) -> dict:
     except Exception as exc:
         return {"file": name, "status": "skipped: in use", "detail": str(exc)[:80]}
     tmp = tempfile.mkdtemp(prefix="bk_")
+    rdir = tempfile.mkdtemp(prefix="bk_restore_")
     try:
         try:
-            tables = [r[0] for r in con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'").fetchall()]
+            tables = _tables(con)
+            expected = _row_counts(con, tables)                 # no writer can hold the file while we do
             shutil.copy2(path, os.path.join(tmp, name))
-            if os.path.exists(path + ".wal"):
+            has_wal = os.path.exists(path + ".wal")
+            if has_wal:
                 shutil.copy2(path + ".wal", os.path.join(tmp, name + ".wal"))
         finally:
             con.close()
-        # restore test on the copy
-        chk = duckdb.connect(os.path.join(tmp, name), read_only=True)
-        rows = {t: chk.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] for t in tables[:40]}
-        chk.close()
+        if has_wal:                                             # fold the WAL into the copy: only the .db is compressed
+            w = duckdb.connect(os.path.join(tmp, name))
+            w.execute("CHECKPOINT")
+            w.close()
         dst = os.path.join(out_dir, name + ".zst")
-        subprocess.run([ZSTD, "-q", "-T0", "-3", "-f", os.path.join(tmp, name), "-o", dst], check=True)
-        return {"file": name, "status": "ok", "bytes": os.path.getsize(path), "compressed": os.path.getsize(dst), "tables": len(tables),
-                "rows": int(sum(rows.values())), "seconds": round(time.time() - t0, 1)}
+        _compress(os.path.join(tmp, name), dst)
+        shutil.rmtree(tmp, ignore_errors=True)                  # free the disk before the restore copy
+        # restore test on what was written, not on the pre-compression copy
+        restored = os.path.join(rdir, name)
+        _decompress(dst, restored)
+        chk = duckdb.connect(restored, read_only=True)
+        try:
+            got_tables = _tables(chk)
+            got = _row_counts(chk, got_tables)
+        finally:
+            chk.close()
+        bad = sorted(t for t in set(tables) | set(got_tables) if expected.get(t) != got.get(t))
+        res = {"file": name, "bytes": os.path.getsize(path), "compressed": os.path.getsize(dst), "tables": len(got_tables),
+               "rows": int(sum(got.values())), "restore": "zst", "seconds": round(time.time() - t0, 1)}
+        if bad:
+            res["status"] = f"failed: restore mismatch in {len(bad)} table(s): {', '.join(bad[:5])}"
+        else:
+            res["status"] = "ok"
+        return res
     except Exception as exc:
         return {"file": name, "status": f"failed: {str(exc)[:100]}"}
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+        shutil.rmtree(rdir, ignore_errors=True)
 
 
 def prune(kind: str, dest: str) -> list[str]:

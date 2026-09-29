@@ -161,6 +161,23 @@ def simulate(market: Market, targets: dict[pd.Timestamp, list[str]], start: str,
 
 
 def metrics(res: Result, years: float) -> dict:
+    """Book statistics against SPY.
+
+    Definitions changed on 2026-09-29 (S48); reports written before that date are not rewritten:
+      by_year        each year is measured from the previous year's last NAV, so its first trading
+                     day counts (was: first NAV of the same year, which dropped that day).
+      turnover_ann   one-sided traded value per year over the AVERAGE NAV (was: over the initial
+                     capital, which overstates turnover as the NAV grows; kept as
+                     turnover_ann_on_capital for comparison with old reports).
+    """
+    def _by_year(nav: pd.Series) -> dict:
+        # last NAV of the year over the last NAV of the year before; the first year starts from
+        # the first NAV, so the years chain to the total return
+        ends = nav.groupby(nav.index.year).last()
+        base = ends.shift(1)
+        base.iloc[0] = nav.iloc[0]
+        return {int(y): round(float(v), 4) for y, v in (ends / base - 1).items()}
+
     r = res.nav.pct_change().dropna()
     m = res.spy_nav.pct_change().reindex(r.index).fillna(0)
     total = res.nav.iloc[-1] / res.nav.iloc[0] - 1
@@ -195,12 +212,11 @@ def metrics(res: Result, years: float) -> dict:
         "alpha_t_nw": newey_west_t(resid + beta_hat[0], lag=5),
         "active_ann_pct": float(active.mean() * TRADING_DAYS * 100),
         "active_t_nw": newey_west_t(active, lag=5), "active_ci95_daily_bp": [boot["lo"] * 1e4, boot["hi"] * 1e4],
-        "avg_exposure": float(res.exposure.mean()), "turnover_ann": res.turnover,
+        "avg_exposure": float(res.exposure.mean()),
+        # res.turnover is traded / (capital x years) / 2 and the first NAV is the capital (no fills on day 1)
+        "turnover_ann": res.turnover * float(res.nav.iloc[0]) / float(res.nav.mean()), "turnover_ann_on_capital": res.turnover,
         "n_trades": len(res.trades), "trade_hit_rate": float(np.mean([w > 0 for w in wins])) if wins else float("nan"),
         "avg_trade_ret_pct": float(np.mean(wins)) if wins else float("nan"),
-        "by_year": {int(y): round(float(v), 4) for y, v in
-                    (res.nav.groupby(res.nav.index.year).last() / res.nav.groupby(res.nav.index.year).first() - 1).items()},
-        "spy_by_year": {int(y): round(float(v), 4) for y, v in
-                        (res.spy_nav.groupby(res.spy_nav.index.year).last()
-                         / res.spy_nav.groupby(res.spy_nav.index.year).first() - 1).items()},
+        "by_year": _by_year(res.nav),
+        "spy_by_year": _by_year(res.spy_nav),
     }

@@ -49,8 +49,47 @@ def load_events(store: PanelStore, start: str) -> pd.DataFrame:
         GROUP BY 1, 2""", [start]).df()
 
 
+def nonoverlap_positions(pos: np.ndarray, horizon: int) -> list[int]:
+    """Indices into the sorted trading-day positions `pos` whose windows do not overlap.
+
+    Greedy from the first event: keep a date only if it is at least `horizon` trading days after
+    the last kept one, so the kept h-day forward returns share no day.
+    """
+    keep, last = [], None
+    for i, p in enumerate(pos):
+        if last is None or p >= last + horizon:
+            keep.append(i)
+            last = p
+    return keep
+
+
+def overlap_robust_t(x: np.ndarray, pos: np.ndarray, horizon: int) -> dict:
+    """Two t-stats of mean(x) that do not ignore overlapping h-day windows (S48, 2026-09-29).
+
+    x[i] is the date-clustered abnormal h-day return on event date i, pos[i] its trading-day
+    position (sorted). Consecutive dates share h-1 days of return, so the autocorrelation runs to
+    lag h-1, while `t_nw` (lag max(h // 5, 1)) stops at lag 4 for h = 20 and can overstate |t| by
+    up to 2.1x when a name is flagged on many consecutive days (audit research #2).
+
+      t_nw_h        Newey-West with lag h - 1. Smaller than t_nw, but with few independent
+                    clusters it still over-rejects (about 2x the nominal rate in simulation).
+      t_nonoverlap  ordinary t on the event dates at least h trading days apart (greedy from the
+                    first); close to nominal, at the price of fewer observations.
+    """
+    x = np.asarray(x, dtype=float)
+    keep = nonoverlap_positions(np.asarray(pos), horizon)
+    y = x[keep]
+    t_no = float(y.mean() / (y.std(ddof=1) / np.sqrt(len(y)))) if len(y) >= 10 and y.std(ddof=1) > 0 else float("nan")
+    return {"t_nw_h": newey_west_t(x, lag=max(horizon - 1, 0)), "t_nonoverlap": t_no, "n_nonoverlap": int(len(y))}
+
+
 def event_stats(ev: pd.DataFrame, fwd: pd.DataFrame, mkt: pd.Series, horizon: int, label: str) -> dict:
-    """Mean abnormal return of the events, clustered by filing date."""
+    """Mean abnormal return of the events, clustered by filing date.
+
+    `t_nw` keeps its original lag (max(h // 5, 1)) so old reports stay comparable; the direct-test
+    pass condition from thresholds v3 (docs/AGENT_PLAN.md §5.5) reads `t_nw_h` instead, next to
+    `t_nonoverlap` (see overlap_robust_t).
+    """
     rows = []
     for d, g in ev.groupby("date"):
         if d not in fwd.index:
@@ -65,9 +104,11 @@ def event_stats(ev: pd.DataFrame, fwd: pd.DataFrame, mkt: pd.Series, horizon: in
     x = df["abn"].to_numpy()
     boot = bootstrap_ci(x, n_boot=2000)
     by_year = df["abn"].groupby(df.index.year).mean()
+    robust = overlap_robust_t(x, fwd.index.get_indexer(df.index), horizon)
     return {"label": label, "horizon": horizon, "n_events": int(df["n"].sum()), "n_dates": int(len(df)),
             "mean_abn_pct": float(x.mean()), "median_abn_pct": float(np.median(x)),
             "mean_raw_pct": float(df["raw"].mean()), "t_nw": newey_west_t(x, lag=max(horizon // 5, 1)),
+            **robust,
             "boot_ci95": [boot["lo"], boot["hi"]], "hit_rate": float((x > 0).mean()),
             "share_years_positive": float((by_year > 0).mean()),
             "first_half": float(df["abn"].iloc[: len(df) // 2].mean()),
