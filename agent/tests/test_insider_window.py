@@ -182,13 +182,21 @@ def test_insider_targets_skip_a_name_that_filled(store, con):
     assert insider_targets(store, TUE, con, SESSIONS) == ([], set(), {})
 
 
-def test_eval_progress_shows_total_and_on_time(con):
+def _no_start_config(tmp_path):
+    """The evaluation config without evaluate_from: the repo's own agent/config.yaml gained the key at the S47 cut-over."""
+    cfg = tmp_path / "config_no_start.yaml"
+    cfg.write_text("evaluate_at:\n  long:\n    n_closed_lots: 100\n    or_date: 2027-06-30\n"
+                   "  insider:\n    n_closed_lots: 200\n    or_date: 2027-06-30\n")
+    return str(cfg)
+
+
+def test_eval_progress_shows_total_and_on_time(con, tmp_path):
     con.execute("INSERT INTO agent_books VALUES ('insider', 30000, 30000, 20, '2026-09-21', now())")
     for i, kind in enumerate(["on_time", "on_time", "late", "retry", None]):
         con.execute("""INSERT INTO agent_lots (lot_id, book, ticker, qty, status, entry_kind)
                        VALUES (?, 'insider', ?, 1, 'closed', ?)""", [f"l{i}", f"T{i}", kind])
     con.execute("INSERT INTO agent_lots (lot_id, book, ticker, qty, status, entry_kind) VALUES ('o', 'insider', 'O', 1, 'open', 'on_time')")
-    line = _eval_progress(con)
+    line = _eval_progress(con, _no_start_config(tmp_path))
     assert "insider 平仓 5/200,其中按时入场 2(或" in line
     assert "long 平仓 0/100(或" in line                  # the classification is the insider book's
 
@@ -288,7 +296,7 @@ def test_eval_progress_on_a_ledger_without_the_columns(tmp_path):
     c.execute("""CREATE TABLE agent_lots (lot_id VARCHAR PRIMARY KEY, book VARCHAR, ticker VARCHAR, qty DOUBLE, status VARCHAR,
                                           entry_order VARCHAR)""")
     c.execute("INSERT INTO agent_lots VALUES ('l', 'insider', 'T', 1, 'closed', NULL)")
-    line = _eval_progress(c)
+    line = _eval_progress(c, _no_start_config(tmp_path))
     assert "insider 平仓 1/200(或" in line and "按时入场" not in line
     c.close()
 
@@ -308,7 +316,7 @@ def test_eval_progress_counts_only_entries_ordered_from_evaluate_from(con, tmp_p
     line = _eval_progress(con, str(cfg))
     assert line.startswith("评估点(预注册,之前不做判决;只计 2026-09-29 起下单的入场):")
     assert "insider 平仓 2/200,其中按时入场 1(或" in line
-    assert "insider 平仓 4/200,其中按时入场 1(或" in _eval_progress(con)       # without the key: every closed lot, as before
+    assert "insider 平仓 4/200,其中按时入场 1(或" in _eval_progress(con, _no_start_config(tmp_path))   # without the key: every closed lot
 
 
 class Recording:
