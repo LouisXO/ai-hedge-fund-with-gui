@@ -236,24 +236,26 @@ cd ~/hedge-fund && PYTHONPATH=. $PY -W ignore -m agent.health --no-llm-probe --n
 
 1. 早报第 57–58 行改成:
    ```bash
-   "$CLAUDE" -p "$(cat bin/ai_prompt.txt)" \
+   ENABLE_CLAUDEAI_MCP_SERVERS=false "$CLAUDE" -p "$(cat bin/ai_prompt.txt)" \
      --tools "Read,PushNotification" --allowedTools "Read,PushNotification" \
-     --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources "" >> "$LOG" 2>&1
+     --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources "" \
+     --no-session-persistence >> "$LOG" 2>&1
    ```
 2. 周报第 14 行的调用改成:
    ```bash
-   "$CLAUDE" -p "$PROMPT" --model opus --tools "Read" --allowedTools "Read" \
-     --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources "" > "$W/${TODAY}.md" 2>> "$LOG"
+   ENABLE_CLAUDEAI_MCP_SERVERS=false "$CLAUDE" -p "$PROMPT" --model opus --tools "Read" --allowedTools "Read" \
+     --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources "" \
+     --no-session-persistence > "$W/${TODAY}.md" 2>> "$LOG"
    ```
-   这组参数和 `integrations/claude_code_llm.py` 的 `SEALED_FLAGS` 同源,已经在本机的 CLI 版本上使用。
+   与 `integrations/claude_code_llm.py` 的对应关系:隔离部分和那里完全一致,即 `SEALED_FLAGS` 里的 `--strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources "" --no-session-persistence`,加上 `SEALED_ENV` 的环境变量 `ENABLE_CLAUDEAI_MCP_SERVERS=false`。环境变量不能省:代码在 `--strict-mcp-config` 之外单独用它关掉 claude.ai 账户上的连接器,说明只靠 `--strict-mcp-config` 可能不够;本机账户挂着 Gmail、Slack 等能对外发送的连接器,而这两个无人值守的任务会读外部文本。不同的只有两处,都是任务需要:`--tools` 放开 `Read`(早报再加 `PushNotification`),而那里是 `--tools ""`;输出用文本,不用 `--output-format json`。也可以在脚本开头 `export ENABLE_CLAUDEAI_MCP_SERVERS=false`,效果相同。
 3. 在 `~/.claude/settings.json` 的 allow 名单里删掉 `Bash(python3 -c *)`,在 `~/.claude/settings.local.json` 里删掉 `Bash(python3 -)`。审计和代理都不改 `~/.claude`,这一步只能用户本人做。
 4. 改完手工验证一次推送还能发出:
    ```bash
-   cd ~/optradar && ~/.claude/local/claude -p "用 PushNotification 发一条通知,内容是 hardening test,然后只回复 OK" \
+   cd ~/optradar && ENABLE_CLAUDEAI_MCP_SERVERS=false ~/.claude/local/claude -p "用 PushNotification 发一条通知,内容是 hardening test,然后只回复 OK" \
      --tools "Read,PushNotification" --allowedTools "Read,PushNotification" \
-     --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources ""
+     --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources "" --no-session-persistence
    ```
-   手机或 Mac 收到通知即可。收不到时,去掉 `--setting-sources ""`(保留 `--tools` 和两个 MCP 参数)再试,并在这里记下结论。
+   手机或 Mac 收到通知即可。收不到时,去掉 `--setting-sources ""`(保留环境变量、`--tools` 和两个 MCP 参数)再试,并在这里记下结论。环境变量在任何情况下都保留。
 5. 上实盘之前这一条必须完成:实盘密钥不放进 `~/.hedge-fund/.env`(见 `docs/LIVE_MIGRATION.md`)。
 
 ## 10. 公开站推送被关键词检查中止
