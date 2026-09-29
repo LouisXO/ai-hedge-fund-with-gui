@@ -8,8 +8,16 @@ shares_review.csv. moomoo's snapshot carries `issued_shares` in listing units â€
 
 Targets: the review list's liquid names (flag unconfirmed / mismatch / ads / stale, 20-day dollar
 volume >= $5M) plus the long book's current top 60 (for the audit's market-cap cross-check; an
-unflagged count with a value is never overridden, agent.books.data.fundamentals decides that).
-One row per ticker, latest wins; a manual row newer than the fetch stays.
+unflagged count with a value is never overridden, agent.books.data.fundamentals decides that), plus
+every name with a hand-checked override (S28's yfinance counts for V, STZ, ERIE, BRK.B...; manual
+rows): an override reaches only rows filed up to 120 days before its as_of, so a count fixed once
+would stop reaching new filings unless it is refreshed.
+shares_override keeps one row per ticker, latest wins; a manual row newer than the fetch stays.
+shares_override_log keeps every (ticker, as_of) row, including the ones shares_override had before
+(the fundamentals rows take the earliest override after their filing from either table).
+A count here replaces a hand-checked one only on filings after the snapshot: for multi-class names
+(moomoo may count one class) check the printed "> 30%" list before the first write and put a
+disputed count back as a manual row.
 
 moomoo is read-only here: the quote context and get_market_snapshot, nothing else. The SDK lives in
 the moomoo venv:
@@ -38,6 +46,9 @@ REVIEW_FLAGS = ("unconfirmed", "mismatch", "ads", "stale")
 TOP_KEEP = 60                     # the long book keeps a name while it ranks inside this
 DDL = ("CREATE TABLE IF NOT EXISTS shares_override(ticker VARCHAR PRIMARY KEY, shares DOUBLE, "
        "source VARCHAR, as_of DATE, xbrl_shares DOUBLE)")
+LOG_DDL = ("CREATE TABLE IF NOT EXISTS shares_override_log(ticker VARCHAR, as_of DATE, shares DOUBLE, "
+           "source VARCHAR, xbrl_shares DOUBLE, PRIMARY KEY (ticker, as_of))")
+COLS = ["ticker", "shares", "source", "as_of", "xbrl_shares"]
 
 
 class SnapshotError(RuntimeError):
@@ -132,19 +143,28 @@ def override_rows(snap: pd.DataFrame, xbrl, as_of: dt.date, tol: float = MCAP_TO
             continue
         rows.append({"ticker": r.ticker, "shares": float(n), "source": SOURCE, "as_of": as_of,
                      "xbrl_shares": float(xbrl.get(r.ticker, np.nan))})
-    cols = ["ticker", "shares", "source", "as_of", "xbrl_shares"]
-    return pd.DataFrame(rows, columns=cols), skipped
+    return pd.DataFrame(rows, columns=COLS), skipped
 
 
-def select_targets(review: pd.DataFrame, adv: pd.Series, top: Iterable[str]) -> list[str]:
-    """The review list's flagged names with 20-day dollar volume >= ADV_MIN, plus `top`."""
+def select_targets(review: pd.DataFrame, adv: pd.Series, top: Iterable[str], checked: Iterable[str] = ()) -> list[str]:
+    """The review list's flagged names with 20-day dollar volume >= ADV_MIN, plus `top`, plus `checked`."""
     flagged = review.loc[review["shares_flag"].fillna("").isin(REVIEW_FLAGS), "ticker"]
     liquid = [t for t in flagged if adv.get(t, 0) >= ADV_MIN]
-    return sorted(set(liquid) | set(top))
+    return sorted(set(liquid) | set(top) | set(checked))
+
+
+def hand_checked(store: PanelStore) -> list[str]:
+    """Tickers with an override of another source than moomoo's, now or in the log (never dropped once
+    moomoo has replaced the current row)."""
+    have = set(store.con.execute("SELECT table_name FROM information_schema.tables").df()["table_name"])
+    q = [f"SELECT ticker FROM {t} WHERE source IS DISTINCT FROM '{SOURCE}'"
+         for t in ("shares_override", "shares_override_log") if t in have]
+    return sorted(store.con.execute(" UNION ".join(q)).df()["ticker"]) if q else []
 
 
 def default_targets(store: PanelStore) -> list[str]:
-    """select_targets on today's review list, the last bar's ADV and the long book's top 60 of the last bar."""
+    """select_targets on today's review list, the last bar's ADV, the long book's top 60 of the last bar
+    and the hand-checked names."""
     from agent.books.fundamentals import review_path
     from agent.books.data import load_market
     from agent.books.live import day_scores
@@ -156,7 +176,7 @@ def default_targets(store: PanelStore) -> list[str]:
         review = pd.read_csv(review_path(store))
     except FileNotFoundError:
         review = pd.DataFrame(columns=["ticker", "shares_flag"])
-    return select_targets(review, market.adv20.loc[day], top)
+    return select_targets(review, market.adv20.loc[day], top, hand_checked(store))
 
 
 def xbrl_counts(store: PanelStore, tickers: list[str]) -> pd.Series:
@@ -166,23 +186,40 @@ def xbrl_counts(store: PanelStore, tickers: list[str]) -> pd.Series:
     return df.set_index("ticker")["shares"].reindex(tickers)
 
 
-def write_overrides(store: PanelStore, rows: pd.DataFrame) -> int:
-    """INSERT OR REPLACE, one row per ticker. A row already there is replaced when it is older than the new
-    one, or as old and from the same source (a rerun); a newer row, or a same-day row of another source, stays."""
-    store.con.execute(DDL)
-    old = store.con.execute("SELECT ticker, source AS old_source, as_of AS old_as_of FROM shares_override").df()
-    new = rows.drop_duplicates("ticker", keep="last").merge(old, on="ticker", how="left")
-    new_asof, old_asof = pd.to_datetime(new["as_of"]), pd.to_datetime(new["old_as_of"])
-    keep_old = (old_asof > new_asof) | ((old_asof == new_asof) & (new["old_source"] != new["source"]))
-    new = new.loc[~keep_old, ["ticker", "shares", "source", "as_of", "xbrl_shares"]]
-    if new.empty:
-        return 0
-    store.con.register("_moomoo_rows", new)
+def _upsert(store: PanelStore, table: str, rows: pd.DataFrame) -> None:
+    store.con.register("_moomoo_rows", rows)
     try:
-        store.con.execute("INSERT OR REPLACE INTO shares_override (ticker, shares, source, as_of, xbrl_shares) "
+        store.con.execute(f"INSERT OR REPLACE INTO {table} (ticker, shares, source, as_of, xbrl_shares) "
                           "SELECT ticker, shares, source, CAST(as_of AS DATE), xbrl_shares FROM _moomoo_rows")
     finally:
         store.con.unregister("_moomoo_rows")
+
+
+def write_overrides(store: PanelStore, rows: pd.DataFrame) -> int:
+    """INSERT OR REPLACE, one row per ticker in shares_override: a row already there is replaced when it is
+    older than the new one, or as old and from the same source (a rerun); a newer row, or a same-day row of
+    another source, stays. shares_override_log gets every row by (ticker, as_of) under the same same-day
+    rule, after taking in whatever shares_override holds now (the yfinance and manual rows) so that no
+    override is lost when its current row is replaced. Returns the shares_override rows written."""
+    store.con.execute(DDL)
+    store.con.execute(LOG_DDL)
+    store.con.execute("INSERT OR IGNORE INTO shares_override_log (ticker, as_of, shares, source, xbrl_shares) "
+                      "SELECT ticker, as_of, shares, source, xbrl_shares FROM shares_override WHERE as_of IS NOT NULL")
+    rows = rows.drop_duplicates("ticker", keep="last")
+    day = lambda x: x.assign(as_of=pd.to_datetime(x["as_of"]).astype("datetime64[ns]"))
+    logged = store.con.execute("SELECT ticker, as_of, source AS old_source FROM shares_override_log").df()
+    got = day(rows[["ticker", "as_of", "source"]]).merge(day(logged), on=["ticker", "as_of"], how="left")
+    same_day_other = (got["old_source"].notna() & (got["old_source"] != got["source"])).to_numpy()
+    if (~same_day_other).any():
+        _upsert(store, "shares_override_log", rows.loc[~same_day_other, COLS])
+    old = store.con.execute("SELECT ticker, source AS old_source, as_of AS old_as_of FROM shares_override").df()
+    new = rows.merge(old, on="ticker", how="left")
+    new_asof, old_asof = pd.to_datetime(new["as_of"]), pd.to_datetime(new["old_as_of"])
+    keep_old = (old_asof > new_asof) | ((old_asof == new_asof) & (new["old_source"] != new["source"]))
+    new = new.loc[~keep_old, COLS]
+    if new.empty:
+        return 0
+    _upsert(store, "shares_override", new)
     return len(new)
 
 

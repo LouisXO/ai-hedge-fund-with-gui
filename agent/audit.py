@@ -338,13 +338,7 @@ def audit_factors(store, rep: Report):
     if "shares_asof" not in fund.columns:
         rep.add("factors", f"top {TOP_KEEP}: suspect value inputs", "WARN", "fundamentals_pit has no shares_asof: rebuild it (agent.books.fundamentals.factor_inputs)")
         return
-    f = latest_before(fund, day)
-    try:                                                   # an overridden count is as old as the override
-        ov = store.con.execute("SELECT ticker, as_of FROM shares_override").df().set_index("ticker")["as_of"]
-        hit = f.index[f.index.isin(ov.index) & f["shares_asof"].isna() & f["shares"].notna()]   # applied only where XBRL had none
-        f.loc[hit, "shares_asof"] = pd.to_datetime(ov).reindex(hit)
-    except Exception:
-        pass
+    f = latest_before(fund, day)                           # an overridden count's shares_asof is the override's as_of (fundamentals)
     at_cap, old, cap = top_list_suspects(fs, f, day)
     rep.add("factors", f"top {TOP_KEEP}: B/M at the winsor cap ({cap:.2f})", "WARN" if at_cap else "PASS", f"{len(at_cap)} {at_cap}")
     rep.add("factors", f"top {TOP_KEEP}: share fact older than {SHARE_FACT_MAX_AGE_DAYS} days", "WARN" if old else "PASS", f"{len(old)} {old}")
