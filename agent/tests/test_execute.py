@@ -230,6 +230,7 @@ def test_a_failed_bars_update_is_named_with_failed():
 def test_class_shares_are_not_entered_but_a_held_one_is_kept():
     from agent.execute import entry_candidates
     assert entry_candidates(["AAA", "BRK-A", "LGF.B", "BWL-A", "BBB", "SPY"]) == ["AAA", "BBB", "SPY"]
+    assert entry_candidates(["SE@2007", "SE"]) == ["SE"]                 # a pseudo ticker (S47b) is never entered
     cfg = dict(BOOKS["long"], max_positions=3)
     lots = [_lot("BWL-A", 100)]
     ranked = entry_candidates(["BRK-A", "AAA"])

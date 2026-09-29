@@ -270,8 +270,10 @@ def bars_update_note(stats: dict | None) -> str | None:
 
 def entry_candidates(ranked: list[str]) -> list[str]:
     """No book enters a class share ('BRK-A', 'LGF.B') for now: the panel and the broker spell it
-    differently (S47 addendum, 2026-09-28). A held one is unaffected: its exits do not go through here."""
-    return [t for t in ranked if "-" not in t and "." not in t]
+    differently (S47 addendum, 2026-09-28). A held one is unaffected: its exits do not go through here.
+    Nor a pseudo ticker ('SE@2007', an earlier security under a reused ticker, S47b): load_market refuses a
+    market where one is listed on the last bar, and this is the second guard (a --date replay)."""
+    return [t for t in ranked if "-" not in t and "." not in t and "@" not in t]
 
 
 # ---------------------------------------------------------------- ledger helpers ------

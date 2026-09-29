@@ -138,8 +138,9 @@ def _paper_rows(live_db) -> str:
                                    WHERE filled_qty > 0 AND dry_run = FALSE
                                      AND CAST(filled_at AS DATE) = (SELECT max(CAST(filled_at AS DATE)) FROM agent_orders WHERE filled_qty > 0)
                                    ORDER BY book, side, ticker""").fetchall()
-        pend = live_db.execute("""SELECT count(*) FROM agent_orders WHERE dry_run = FALSE
-                                  AND status NOT IN ('filled','canceled','expired','rejected','done_for_day','replaced')""").fetchone()[0]
+        from agent.execute import FINAL_SQL
+        pend = live_db.execute(f"""SELECT count(*) FROM agent_orders WHERE dry_run = FALSE
+                                   AND status NOT IN ({FINAL_SQL})""").fetchone()[0]
         gap = live_db.execute("""SELECT avg(CASE WHEN side='buy' THEN (filled_avg_px/model_px-1) ELSE (model_px/filled_avg_px-1) END)*100,
                                         count(*) FROM agent_orders WHERE filled_qty > 0 AND model_px > 0 AND dry_run = FALSE""").fetchone()
     except Exception:

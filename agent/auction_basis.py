@@ -181,7 +181,8 @@ def main(argv: list[str] | None = None) -> int:
                                FROM agent_orders WHERE dry_run = FALSE AND filled_qty > 0""").df()
         missed = con.execute("""SELECT client_order_id, book, ticker, as_of, qty, reason, status FROM agent_orders
                                 WHERE dry_run = FALSE AND side = 'buy' AND book = 'insider' AND (filled_qty IS NULL OR filled_qty = 0)
-                                  AND status IN ('expired', 'canceled', 'rejected', 'done_for_day')""").df()
+                                  AND status IN ('expired', 'canceled', 'rejected', 'done_for_day')
+                                  AND alpaca_id IS NOT NULL""").df()          # a POST the broker refused (S48) never met a price
         bought = con.execute("""SELECT ticker, as_of FROM agent_orders
                                 WHERE dry_run = FALSE AND side = 'buy' AND book = 'insider' AND filled_qty > 0""").df()
         nav = con.execute("SELECT as_of, book, equity_usd FROM agent_book_nav ORDER BY as_of").df()
