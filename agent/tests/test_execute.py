@@ -148,3 +148,50 @@ def test_frozen_ticker_gets_no_order_of_either_side():
     orders = plan_book("insider", cfg, lots, ["N"], set(), AS_OF, NEXT, {"H": 20.0, "K": 20.0, "N": 8.0},
                        {"N": 0.4}, cash_usd=28_000.0, blocked={"H"}, tif="day", frozen={"H"})
     assert [(o["ticker"], o["side"]) for o in orders] == [("K", "sell"), ("N", "buy")]
+
+
+def _panel(rows: dict[str, list]):
+    """date x ticker frame over four sessions, None = no bar."""
+    return pd.DataFrame(rows, index=pd.to_datetime(["2026-09-23", "2026-09-24", "2026-09-25", "2026-09-28"]), dtype=float)
+
+
+def test_bars_coverage_counts_liquid_names_that_lost_their_bar():
+    """The date check passes when one symbol has today's bar; coverage is what sees a batch that failed
+    (2026-09-28 audit: three batches of 100 without data for a week)."""
+    from agent.execute import COVERAGE_MIN, bars_coverage
+    names = [f"S{i:02d}" for i in range(50)]
+    close = _panel({t: [10.0] * 4 for t in names} | {"THIN": [10.0] * 4, "NEWCO": [None, None, None, 10.0]})
+    adv = _panel({t: [5e6] * 4 for t in names} | {"THIN": [1e6] * 4, "NEWCO": [None] * 4})
+    day = close.index[-1]
+    assert bars_coverage(close, adv, day) == 1.0
+    close.loc[day, ["S00", "S01", "THIN"]] = None                 # THIN is under $3M: not in the base
+    cov = bars_coverage(close, adv, day)
+    assert cov == pytest.approx(48 / 50) and cov < COVERAGE_MIN   # nothing is planned
+    assert f"bars coverage {cov:.1%}" == "bars coverage 96.0%"    # the skipped_reason main() writes
+    close.loc[day, "S01"] = 10.0
+    assert bars_coverage(close, adv, day) == pytest.approx(0.98)  # one name gone in fifty: a delisting, not a failure
+    assert not bars_coverage(close, adv, day) < COVERAGE_MIN
+    assert bars_coverage(close, adv, close.index[0]) is None      # no earlier session to compare with
+
+
+def test_held_ticker_without_a_bar_is_kept_not_sold_as_rank_out():
+    """A data gap must not cause a sale: GAP has no bar on the scoring day, so it has no rank and is not in keep."""
+    from agent.execute import held_without_bar
+    cfg = dict(BOOKS["long"], max_positions=4)
+    lots = [_lot("A", 100), _lot("GAP", 100), _lot("NUL", 100), _lot("Z", 100)]
+    adj = _panel({"A": [10.0] * 4, "NUL": [10.0, 10.0, 10.0, None], "Z": [10.0] * 4, "C": [10.0] * 4})   # GAP: no column at all
+    day = adj.index[-1]
+    no_bar = held_without_bar(lots, adj, day)
+    assert no_bar == ["GAP", "NUL"]
+    assert held_without_bar(lots, adj, adj.index[-2]) == ["GAP"]
+    keep = {"A", "C"}                                             # what the ranking returned: Z really fell out
+    close = {"A": 10.0, "Z": 10.0, "C": 10.0}
+    before = plan_book("long", cfg, lots, ["A", "C"], keep, AS_OF, NEXT, close, {}, cash_usd=1000.0, blocked=set(), tif="day")
+    assert [(o["ticker"], o["reason"]) for o in before if o["side"] == "sell"] == [("GAP", "rank_out"), ("NUL", "rank_out"), ("Z", "rank_out")]
+    orders = plan_book("long", cfg, lots, ["A", "C"], keep | set(no_bar), AS_OF, NEXT, close, {}, cash_usd=1000.0,
+                       blocked=set(), tif="day")
+    assert [(o["ticker"], o["side"], o["reason"]) for o in orders] == [("Z", "sell", "rank_out"), ("C", "buy", "entry")]
+    # an insider lot leaves on its date whether or not it has a bar: the exit is not a ranking
+    ins = [dict(_lot("GAP", 50, hold_until=NEXT), book="insider")]
+    out = plan_book("insider", BOOKS["insider"], ins, [], set(), AS_OF, NEXT, {}, {}, cash_usd=0.0, blocked=set(), tif="day")
+    assert [(o["ticker"], o["reason"]) for o in out] == [("GAP", "hold_expired")]

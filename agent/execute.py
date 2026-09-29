@@ -160,6 +160,34 @@ def plan_book(book: str, cfg: dict, lots: list[dict], ranked: list[str], keep: s
     return orders
 
 
+# ---------------------------------------------------------------- bars guards (pure) --
+COVERAGE_ADV = 3e6          # liquid enough to trade every session: a missing bar is a data gap, not a quiet day
+COVERAGE_MIN = 0.98
+
+
+def bars_coverage(close: pd.DataFrame, adv20: pd.DataFrame, day: pd.Timestamp) -> float | None:
+    """Of the names with ADV >= $3M and a bar on the session before `day`, the share with a bar on `day`.
+
+    The date check compares the newest bar with the last session, so it passes when a single symbol has
+    today's bar: three batches of 100 symbols went without data for a week that way (audit 2026-09-28).
+    Below COVERAGE_MIN nothing is planned. None when there is no earlier session to compare with.
+    """
+    i = close.index.get_loc(day)
+    if i == 0:
+        return None
+    prev = close.index[i - 1]
+    base = close.loc[prev].notna() & (adv20.loc[prev] >= COVERAGE_ADV)
+    return float(close.loc[day][base].notna().mean()) if base.any() else None
+
+
+def held_without_bar(lots: list[dict], adj: pd.DataFrame, day: pd.Timestamp) -> list[str]:
+    """Held tickers with no adjusted close on the scoring day. Such a name is not tradable that day
+    (agent/books/data.py), so it gets no rank and would leave the keep zone: the book would sell a
+    position because a request failed. It is kept until a bar says where it ranks."""
+    row = adj.loc[day]
+    return sorted({l["ticker"] for l in lots if l["ticker"] not in row.index or pd.isna(row[l["ticker"]])})
+
+
 # ---------------------------------------------------------------- ledger helpers ------
 def ensure_books(con) -> dict[str, dict]:
     rows = {r[0]: {"book": r[0], "alloc_usd": r[1], "cash_usd": r[2], "max_positions": r[3]}
@@ -367,10 +395,15 @@ def main() -> int:
     past = [d for d in calendar if d < now_et.date() or (d == now_et.date() and now_et.hour >= 16)]
     last_session = past[-1]
 
+    bars_stats = None
     if not args.no_update:
         with PanelStore() as store:
             held = list(broker.positions())
-            print("bars:", update_bars(store, 7, held))
+            bars_stats = update_bars(store, 7, held)
+            print("bars:", {k: (len(v) if isinstance(v, list) else v) for k, v in bars_stats.items()})
+            if bars_stats["failed_symbols"]:                  # a request that failed is named, never dropped in silence
+                print(f"bars: NO DATA for {len(bars_stats['failed_symbols'])} symbols in {bars_stats['n_batches_failed']} "
+                      f"batches: {bars_stats['failed_symbols'][:20]}")
             try:
                 backfill_index(store)
             except Exception as exc:
@@ -391,10 +424,15 @@ def main() -> int:
             market_hours = now_et.date() in calendar and dt.time(9, 25) <= now_et.time() < dt.time(16, 5)
             skipped_reason = ("bar date != last session" if stale else
                               "market hours: orders are only planned between 16:05 and 09:25 ET" if (market_hours and args.submit) else None)
+            # ---- bars guards (S47 item 4): the date check above passes as soon as ONE symbol has today's bar
+            coverage = bars_coverage(market.close, market.adv20, day)
+            if skipped_reason is None and coverage is not None and coverage < COVERAGE_MIN:
+                skipped_reason = f"bars coverage {coverage:.1%}"
             sync = sync_fills(con, broker, calendar)
             n_model = fill_model_px(con, store)
             positions = broker.positions()
             lots_all = open_lots(con)
+            no_bar = held_without_bar([l for l in lots_all if l["book"] == "long"], market.adj, day)   # bars guard, see plan below
             blocked, msgs = reconcile(lots_all, positions)
             next_session = _sessions_after(calendar, day.date(), 1)
             tif = "opg" if (os.environ.get("AGENT_TIF") == "opg" and opg_window(dt.datetime.now(ET))) else "day"   # DAY on paper; see plan_book
@@ -414,6 +452,7 @@ def main() -> int:
                     if book == "long":
                         ranked, keep, scored = long_targets(store, market, day, con)
                         retries = set()
+                        keep = keep | set(no_bar)         # no bar today = no rank today: a data gap is not a rank_out
                     elif book == "core":
                         ranked, keep, scored, retries = [CORE_TICKER], {CORE_TICKER}, True, set()
                     else:
@@ -464,6 +503,10 @@ def main() -> int:
                "reconcile": msgs, "targets": targets_dbg, "books": nav,
                "orders": [{k: (str(v) if isinstance(v, (dt.date, pd.Timestamp)) else v) for k, v in o.items()} for o in sent],
                "skipped_duplicates": skipped, "generated_at": dt.datetime.now().isoformat(timespec="seconds")}
+    summary.update({"bars_coverage_pct": None if coverage is None else round(coverage * 100, 2),
+                    "bars_missing_for_held": no_bar, "bars_update": bars_stats})
+    if no_bar:
+        print(f"  held without a bar on {day.date()} (kept, not ranked): {no_bar}")
     os.makedirs(args.out_dir, exist_ok=True)
     with open(os.path.join(args.out_dir, f"{'sync' if args.sync_only else 'exec'}_{day.date()}.json"), "w") as f:
         json.dump(summary, f, indent=1, default=str)
