@@ -199,19 +199,57 @@ def test_update_refetches_in_full_the_symbol_whose_factor_moved(store):
     assert ab.adjustment_breaks(store.con, DAYS[0]).empty
 
 
-def test_update_writes_nothing_of_a_symbol_whose_full_refetch_fails(store):
+def test_a_failed_full_refetch_keeps_the_window_and_is_tried_again_the_next_evening(store):
+    """The day's bar must not depend on the second round: ex-date peaks (quarter ends) hold back more than
+    2% of the liquid names, and a failed re-fetch would then stop every book for the evening."""
     _list(store, ["AAA", "BBB"])
     for s in ("AAA", "BBB"):
         _stored(store, s, {d: (10.0, 10.0) for d in DAYS[:-1]})
     v = Vendor({"AAA": _flat(), "BBB": _flat()}, adj={"AAA": {**_flat(9.7), DAYS[-1]: 10.0}, "BBB": _flat()})
     v.fail = lambda symbols, adjustment, start, token: 500 if start == "2015-01-01" else None
     st = ab.update(store, 7, http=v, sleep=Naps(), keys=KEYS)
-    assert st["refetched"] == [] and st["failed_symbols"] == ["AAA"] and st["n_batches_failed"] == 1
+    assert st["breaks"] == ["AAA"] and st["refetched"] == [] and st["failed_symbols"] == ["AAA"]
     a = _bars(store, "AAA")
-    assert len(a) == len(DAYS) - 1 and (a["fetched_at"] == OLD).all() and (a["adj_close"] == 10.0).all()
-    assert len(_bars(store, "BBB")) == len(DAYS)                             # the rest of the batch is stored
-    v.fail = lambda *a: None                                                 # next evening: same difference, found again
-    assert ab.update(store, 7, http=v, sleep=Naps(), keys=KEYS)["refetched"] == ["AAA"]
+    assert len(a) == len(DAYS) and a["adj_close"].iloc[-1] == 10.0           # today's bar is there
+    assert ab.adjustment_breaks(store.con, DAYS[0])["ticker"].tolist() == ["AAA"]   # and the break with it
+    v.fail = lambda *a: None                                                 # a later evening: the window has moved on,
+    st = ab.update(store, 4, http=v, sleep=Naps(), keys=KEYS)                # the break is behind it and still found
+    assert st["refetched"] == ["AAA"] and st["failed_symbols"] == []
+    assert ab.adjustment_breaks(store.con, DAYS[0]).empty and _bars(store, "AAA")["fetched_at"].nunique() == 1
+
+
+def test_a_break_is_found_when_yfinance_rows_cover_the_window(store):
+    """The 08:41 job rewrites the last 10 days of S&P names as yfinance rows, so tonight's window has no
+    stored Alpaca row of the same date: the break is between adjacent Alpaca rows (MDT, 2026-09-28 review)."""
+    _list(store, ["MDT"])
+    _stored(store, "MDT", {d: (10.0, 10.0) for d in DAYS[:4]})
+    _stored(store, "MDT", {d: (10.0, 10.0) for d in DAYS[4:-1]}, source="yfinance")
+    v = Vendor({"MDT": _flat()}, adj={"MDT": {**_flat(9.8), DAYS[-1]: 10.0}})
+    st = ab.update(store, 7, http=v, sleep=Naps(), keys=KEYS)
+    assert st["refetched"] == ["MDT"] and st["failed_symbols"] == []
+    m = _bars(store, "MDT")
+    assert m["adj_close"].tolist() == [9.8] * (len(DAYS) - 1) + [10.0] and m["fetched_at"].nunique() == 1
+
+
+def test_missed_evenings_are_filled_and_the_window_overlaps_the_stored_rows(store):
+    days = [(TODAY - dt.timedelta(days=n)).isoformat() for n in range(30, 0, -1)]
+    _list(store, ["AAA", "BBB"])
+    for s in ("AAA", "BBB"):
+        _stored(store, s, {d: (10.0, 10.0) for d in days[:10]})               # the job last ran 21 days ago
+    ex = days[15]                                                            # AAA went ex-dividend in the gap
+    v = Vendor({"AAA": _flat(10.0, days), "BBB": _flat(10.0, days)},
+               adj={"AAA": {d: (9.7 if d < ex else 10.0) for d in days}, "BBB": _flat(10.0, days)})
+    st = ab.update(store, 7, http=v, sleep=Naps(), keys=KEYS)
+    assert v.calls[0][2] == (pd.Timestamp(days[9]).date() - dt.timedelta(days=ab.OVERLAP)).isoformat()
+    assert st["refetched"] == ["AAA"] and "gap" not in st
+    assert len(_bars(store, "BBB")) == len(days)                             # no hole left
+    assert ab.adjustment_breaks(store.con, days[0]).empty
+
+    far = [(TODAY - dt.timedelta(days=n)).isoformat() for n in (90, 89)]
+    _stored(store, "OLD", {d: (5.0, 5.0) for d in far})
+    store.con.execute("DELETE FROM bars WHERE ticker <> 'OLD'")
+    st = ab.update(store, 7, http=Vendor({}), sleep=Naps(), keys=KEYS)       # more than MAX_WINDOW days: cut, and said
+    assert "backfill" in st["gap"]
 
 
 def test_update_gives_a_symbol_without_stored_rows_its_whole_history(store):
@@ -291,6 +329,41 @@ def test_audit_fails_on_a_break_and_passes_without_one(store):
     audit_prices(store, rep)
     row = [r for r in rep.rows if r[1] == check][0]
     assert row[2] == "FAIL" and "DIV" in row[3] and "1 rows" in row[3]
+
+
+def test_the_same_class_share_in_two_spellings_is_neither_lost_nor_doubled(store):
+    """The universe spells it 'BRK-A', the broker 'BRK.A': one vendor symbol, and neither spelling loses its bars."""
+    v = Vendor({"AAA": _flat(), "BRK.A": _flat(700_000.0)})
+    bars, failed = ab.fetch_batch(["AAA", "BRK-A", "BRK.A"], DAYS[0], DAYS[-1], "k", "s", "raw", v, Naps())
+    assert v.calls[0][0] == ["AAA", "BRK.A"] and failed == []
+    assert sorted(bars) == ["AAA", "BRK-A", "BRK.A"] and bars["BRK-A"] == bars["BRK.A"]
+    _list(store, ["AAA", "BRK-A"])
+    _stored(store, "BRK-A", {d: (700_000.0, 700_000.0) for d in DAYS[:-1]})
+    v.calls.clear()
+    ab.update(store, 7, extra=["BRK.A"], http=v, sleep=Naps(), keys=KEYS)    # a held position, as the broker spells it
+    assert v.calls[0][0] == ["AAA", "BRK.A"]
+    assert store.con.execute("SELECT count(*) FROM bars WHERE ticker = 'BRK.A'").fetchone()[0] == 0
+    assert len(_bars(store, "BRK-A")) == len(DAYS) and ab.panel_symbol("BRK.B") == "BRK-B" and ab.panel_symbol("AAPL") == "AAPL"
+
+
+def test_rounding_of_a_two_decimal_adj_close_is_not_a_break(store):
+    """One basis (0.97), two fetches, adj_close rounded to cents: the factor moves -0.095% (10.19/10.50 ->
+    10.51/10.84). A real break of the same size on a $230 stock is still one (STX 2026-09-17, -0.08%)."""
+    t = [pd.Timestamp(f"2026-09-{d} 16:10:00") for d in (21, 22)]
+    _stored(store, "RND", {"2026-09-14": (10.50, 10.19)}, t[0])
+    _stored(store, "RND", {"2026-09-15": (10.84, 10.51)}, t[1])
+    _stored(store, "STX", {"2026-09-14": (230.00, 230.00)}, t[0])
+    _stored(store, "STX", {"2026-09-15": (231.00, 230.82)}, t[1])
+    br = ab.adjustment_breaks(store.con, "2026-09-14")
+    assert br["ticker"].tolist() == ["STX"] and br["change_pct"].round(3).tolist() == [-0.078]
+    assert ab.adjustment_breaks(store.con, "2026-09-14", tickers=["RND"]).empty
+
+
+def test_a_200_answer_that_is_not_an_object_fails_the_batch_not_the_run(store):
+    for body in ("[]", '"maintenance"', '{"bars": [1, 2]}'):              # before: AttributeError, the run stopped
+        st = ab.backfill(store, DAYS[0], DAYS[-1], symbols=["AAA", "BBB"], quiet=True,
+                         http=lambda url, headers, b=body: (200, b), sleep=Naps(), keys=KEYS)
+        assert st["failed_symbols"] == ["AAA", "BBB"] and st["rows"] == 0 and st["n_batches_failed"] == 1
 
 
 def test_a_malformed_answer_fails_the_symbol_not_the_run(store):

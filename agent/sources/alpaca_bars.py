@@ -26,11 +26,11 @@ Two rules since the 2026-09-28 audit (S47 items 4 and 5):
 - One symbol, one adjustment basis. adj_close is adjusted as of the day it
   was fetched, so a 7-day update leaves the older rows on the basis of
   their own fetch day: every later dividend then shows as a false drop at
-  the edge of the window, every split as a false jump. update() compares
-  the fetched adj_close/close with the stored one on the same dates and
-  re-fetches the whole history of a symbol whose basis moved. A full
-  re-fetch multiplies the history by a constant, so past returns do not
-  change.
+  the edge of the window, every split as a false jump. update() writes the
+  window, then looks for such a break between adjacent Alpaca rows of the
+  symbols it wrote and re-fetches the whole history of a symbol that has
+  one. A full re-fetch multiplies the history by a constant, so past
+  returns do not change.
 
 Usage:
   python -m agent.sources.alpaca_bars backfill [--start 2015-01-01] [--limit 500]
@@ -65,7 +65,11 @@ ABORT_AFTER = 3                   # consecutive batches without any answer: the 
 FACTOR_TOL = 0.0005               # 0.05%: adj_close/close moving by more than this is another adjustment basis
 SPLIT_MIN = 1.25                  # a factor change of this ratio or more is a split (or a false one), not a dividend
 REPAIR_SINCE = "2026-09-14"       # the first trade date written by the incremental update
+OVERLAP = 3                       # update(): the window reaches this many days behind the newest stored bar ...
+MAX_WINDOW = 60                   # ... but never further back than this: a longer gap is a backfill by hand
+LOOKBACK = 30                     # update(): a break this many days before the window is still found (a failed re-fetch)
 CLASS_SHARE = re.compile(r"^[A-Z]+-[A-Z]$")
+VENDOR_CLASS = re.compile(r"^[A-Z]+\.[A-Z]$")
 
 Http = Callable[[str, dict], tuple[int, str]]
 Sleep = Callable[[float], None]
@@ -87,6 +91,12 @@ def vendor_symbol(sym: str) -> str:
     """The panel's spelling → Alpaca's. A class share is 'BRK-A' in listing_status and 'BRK.A' at Alpaca,
     which refuses the whole request when one symbol has a hyphen (batches 11, 12, 44 until 2026-09-28)."""
     return sym.replace("-", ".") if CLASS_SHARE.match(sym) else sym
+
+
+def panel_symbol(sym: str) -> str:
+    """Alpaca's spelling (and the broker's) → the panel's: 'BRK.A' → 'BRK-A'. A held 'BRK.A' passed to
+    update() next to the universe's 'BRK-A' is then one symbol, not two spellings of one request symbol."""
+    return sym.replace(".", "-") if VENDOR_CLASS.match(sym) else sym
 
 
 # ---------------------------------------------------------------- requests -------------
@@ -113,6 +123,8 @@ def _request(symbols: list[str], start: str, end: str, headers: dict, adjustment
             payload = json.loads(body)
         except ValueError:                   # a truncated body
             return 0, {}
+        if not isinstance(payload, dict) or not isinstance(payload.get("bars") or {}, dict):
+            return 0, {}                     # 200 with a list or a string: a failed page, not a crash of the run
         for sym, bars in (payload.get("bars") or {}).items():
             out.setdefault(sym, []).extend(bars)
         token = payload.get("next_page_token")
@@ -150,7 +162,9 @@ def fetch_batch(symbols: list[str], start: str, end: str, key: str, secret: str,
     """(bars by panel symbol, symbols the vendor did not answer for). A symbol in neither was answered
     with no bars: unknown to Alpaca, or no trade in the period."""
     headers = {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
-    panel = {vendor_symbol(s): s for s in symbols}
+    panel: dict[str, list[str]] = {}                     # vendor spelling -> every panel spelling asked for
+    for s in dict.fromkeys(symbols):                     # 'BRK-A' and 'BRK.A' in one batch: both get the bars
+        panel.setdefault(vendor_symbol(s), []).append(s)
 
     def call(batch: list[str]) -> tuple[int, dict[str, list[dict]]]:
         return _request(batch, start, end, headers, adjustment, http, sleep)
@@ -159,7 +173,7 @@ def fetch_batch(symbols: list[str], start: str, end: str, key: str, secret: str,
     failed: list[str] = []
     if code != 200:
         bars, failed = _isolate(list(panel), code, call)
-    return {panel.get(s, s): b for s, b in bars.items()}, [panel[s] for s in failed]
+    return {p: b for s, b in bars.items() for p in panel.get(s, [s])}, [p for s in failed for p in panel[s]]
 
 
 def _end_now() -> str:
@@ -195,7 +209,7 @@ def _drop_unreturned(store: PanelStore, frame: pd.DataFrame, now: pd.Timestamp) 
 
 
 def _load(store: PanelStore, syms: list[str], start: str, end: str, pause: float, quiet: bool, replace: bool,
-          before_write, http: Http, sleep: Sleep, keys: tuple[str, str] | None) -> tuple[dict, list[str]]:
+          http: Http, sleep: Sleep, keys: tuple[str, str] | None) -> tuple[dict, list[str]]:
     """The loop behind backfill(). Returns (stats, symbols written)."""
     key, secret = keys or keys_from_env("alpaca")
     stats = {"symbols": len(syms), "rows": 0, "with_data": 0, "failed_symbols": [], "n_batches_failed": 0}
@@ -229,15 +243,12 @@ def _load(store: PanelStore, syms: list[str], start: str, end: str, pause: float
             stats["n_batches_failed"] += 1
         if frames:
             frame = pd.concat(frames, ignore_index=True)
-            if before_write is not None:
-                frame = frame[~frame["ticker"].isin(before_write(frame))]
-            if not frame.empty:
-                stats["rows"] += store.upsert_bars(frame)
-                if replace:
-                    _drop_unreturned(store, frame, now)
-                names = frame["ticker"].unique().tolist()
-                stats["with_data"] += len(names)
-                written += names
+            stats["rows"] += store.upsert_bars(frame)
+            if replace:
+                _drop_unreturned(store, frame, now)
+            names = frame["ticker"].unique().tolist()
+            stats["with_data"] += len(names)
+            written += names
         if not quiet:
             print(f"  [{min(i + BATCH, len(syms))}/{len(syms)}] rows {stats['rows']} "
                   f"symbols with data {stats['with_data']} failed {len(stats['failed_symbols'])}", flush=True)
@@ -249,40 +260,36 @@ def _load(store: PanelStore, syms: list[str], start: str, end: str, pause: float
 
 def backfill(store: PanelStore, start: str, end: str, limit: int | None = None,
              pause: float = 0.35, symbols: list[str] | None = None, quiet: bool = False,
-             replace: bool = False, before_write=None, http: Http = _get,
+             replace: bool = False, http: Http = _get,
              sleep: Sleep = time.sleep, keys: tuple[str, str] | None = None) -> dict:
     """Raw and adjusted bars of [start, end], 100 symbols per request.
 
     stats["failed_symbols"]: symbols with nothing stored because a request failed (after retries and
-    halving); stats["n_batches_failed"]: batches of 100 with at least one of them. `before_write(frame)`
-    sees each batch before it is stored and returns the symbols to hold back. `replace`: the fetch is a
-    symbol's whole history, so its stored rows are replaced, not merged. `http` and `keys` are there
-    for the tests: no credentials, no network.
+    halving); stats["n_batches_failed"]: batches of 100 with at least one of them. `replace`: the fetch
+    is a symbol's whole history, so its stored rows are replaced, not merged. `http` and `keys` are
+    there for the tests: no credentials, no network.
     """
     syms = symbols if symbols is not None else universe(store, limit)
-    return _load(store, syms, start, end, pause, quiet, replace, before_write, http, sleep, keys)[0]
+    return _load(store, syms, start, end, pause, quiet, replace, http, sleep, keys)[0]
 
 
 # ---------------------------------------------------------------- adjustment basis -----
-def basis_moved(store: PanelStore, frame: pd.DataFrame) -> list[str]:
-    """Symbols of `frame` (rows just fetched, not yet stored) whose adj_close/close differs from the stored
-    Alpaca row of the same date by more than FACTOR_TOL: a dividend or a split since that row was fetched."""
-    store.con.register("_new_in", frame[["ticker", "trade_date", "close", "adj_close"]])
-    df = store.con.execute("""
-        SELECT DISTINCT n.ticker FROM _new_in n
-        JOIN bars b ON b.ticker = n.ticker AND b.trade_date = n.trade_date AND b.source = ?
-        WHERE n.close > 0 AND n.adj_close > 0 AND b.close > 0 AND b.adj_close > 0
-          AND abs((n.adj_close / n.close) / (b.adj_close / b.close) - 1) > ?
-        ORDER BY 1""", [SOURCE, FACTOR_TOL]).df()
-    store.con.unregister("_new_in")
-    return df["ticker"].tolist()
+def _tick(px: pd.Series) -> np.ndarray:
+    """The increment the vendor rounded a price to, as the stored value shows it: $0.01 when it has at most
+    two decimals (almost every adj_close from $10 up), $0.001 with three, else $0.0001."""
+    p = px.to_numpy(dtype=float)
+    return np.where(np.abs(p - p.round(2)) < 1e-9, 0.01, np.where(np.abs(p - p.round(3)) < 1e-9, 0.001, 0.0001))
 
 
-def adjustment_breaks(con, since: str = REPAIR_SINCE) -> pd.DataFrame:
-    """Rows where the adjustment basis breaks between two fetches, from `since` on.
+def adjustment_breaks(con, since: str = REPAIR_SINCE, tickers: list[str] | None = None) -> pd.DataFrame:
+    """Rows where the adjustment basis breaks between two fetches, from `since` on (of `tickers` if given).
 
-    Two adjacent rows of one symbol, fetched at different times, whose adj_close/close differs by more
-    than FACTOR_TOL. What the vendor's own corporate actions explain is not a break:
+    Two adjacent Alpaca rows of one symbol, fetched at different times, whose adj_close/close differs by
+    more than FACTOR_TOL plus the vendor's rounding: half a tick of adj_close on each row. On one basis a
+    $12 stock with a two-decimal adj_close moves its factor by up to 0.09% from row to row (NEWT
+    2026-09-21, -0.076%); without the rounding every dividend payer between $10 and $20 would show
+    breaks once its rows come from different evenings. What the vendor's own corporate actions explain
+    is not a break either:
     - the factor rises by less than SPLIT_MIN: an ex-dividend date;
     - the factor moves by SPLIT_MIN or more and the raw close moves the other way, so that the adjusted
       return is the smaller of the two: a split on its ex-date (HUBC 2026-09-14, 1:25: factor 25 → 1,
@@ -294,15 +301,19 @@ def adjustment_breaks(con, since: str = REPAIR_SINCE) -> pd.DataFrame:
     df = con.execute("""
         WITH x AS (
             SELECT ticker, trade_date, close, adj_close, adj_close / close AS factor, fetched_at,
-                   lag(trade_date) OVER w AS prev_date, lag(close) OVER w AS prev_close,
+                   lag(trade_date) OVER w AS prev_date, lag(close) OVER w AS prev_close, lag(adj_close) OVER w AS prev_adj,
                    lag(adj_close / close) OVER w AS prev_factor, lag(fetched_at) OVER w AS prev_fetched_at
-            FROM bars WHERE source = ? AND close > 0 AND adj_close > 0
-                        AND trade_date >= CAST(? AS DATE) - INTERVAL 10 DAY
+            FROM bars WHERE source = ? AND close > 0 AND adj_close > 0     -- the previous Alpaca row can be weeks back:
+                        AND trade_date >= CAST(? AS DATE) - INTERVAL 30 DAY  -- the 08:41 job rewrites S&P rows as yfinance
             WINDOW w AS (PARTITION BY ticker ORDER BY trade_date))
         SELECT * FROM x
         WHERE trade_date >= CAST(? AS DATE) AND fetched_at <> prev_fetched_at
           AND abs(factor / prev_factor - 1) > ?
         ORDER BY ticker, trade_date""", [SOURCE, since, since, FACTOR_TOL]).df()
+    if tickers is not None:
+        df = df[df["ticker"].isin(set(tickers))]
+    tol = FACTOR_TOL + _tick(df["adj_close"]) / 2 / df["adj_close"] + _tick(df["prev_adj"]) / 2 / df["prev_adj"]
+    df = df[(df["factor"] / df["prev_factor"] - 1).abs() > tol].reset_index(drop=True)
     g = np.log(df["factor"] / df["prev_factor"])
     raw = np.log(df["close"] / df["prev_close"])
     big = g.abs() >= np.log(SPLIT_MIN)
@@ -346,33 +357,45 @@ def update(store: PanelStore, days: int = 7, extra: list[str] | None = None, htt
     withholds the last 15 minutes of intraday data), so an after-close run gets
     the completed bar the books need. ~170 requests, about two minutes.
 
-    Before a batch is written its adj_close/close is compared with the stored rows of the same dates.
-    A symbol whose factor moved (an ex-date since those rows were fetched), and a symbol with no stored
-    Alpaca row (a new listing), is held back and fetched in full from HISTORY_START instead, 100 per
-    request. If that fetch fails nothing of the symbol is written: the next run finds the same
-    difference and tries again, and the panel never holds two bases of one symbol.
+    After missed evenings the window starts OVERLAP days before the newest stored Alpaca bar instead,
+    so the gap is filled and the window still overlaps stored rows; never more than MAX_WINDOW days
+    back (stats["gap"]: the rest is a backfill by hand).
+
+    The window is written first, so the day's bar exists whatever happens next. Then the symbols just
+    written are checked for a break in the adjustment basis between ADJACENT Alpaca rows: an ex-date
+    since the older rows were fetched shows at the edge of the window. Not a comparison of the same
+    date: the 08:41 yfinance job rewrites the recent rows of S&P names, so the window often has no
+    stored Alpaca row of its own dates to compare with. A symbol with a break, or with no Alpaca row
+    before the window (a new listing, a name that never had data), is fetched again in full from
+    HISTORY_START, 100 per request, and its rows replaced. If that fails the window rows stay, the
+    symbol is in failed_symbols, and the next evenings find the same break (LOOKBACK days back) and
+    try again.
     """
-    syms = sorted(set(universe(store)) | set(extra or []))
-    start = (dt.date.today() - dt.timedelta(days=days)).isoformat()
+    syms = sorted(set(universe(store)) | {panel_symbol(s) for s in extra or []})
+    today = dt.date.today()
+    newest = store.con.execute("SELECT max(trade_date) FROM bars WHERE source = ?", [SOURCE]).fetchone()[0]
+    start = today - dt.timedelta(days=days)
+    if newest is not None:
+        start = min(start, newest - dt.timedelta(days=OVERLAP))
+    gap = None
+    if start < today - dt.timedelta(days=MAX_WINDOW):
+        start = today - dt.timedelta(days=MAX_WINDOW)
+        gap = f"no Alpaca bar since {newest}: window cut to {start}, run backfill --start {newest} by hand"
     end = _end_now()
-    known = {r[0] for r in store.con.execute("SELECT DISTINCT ticker FROM bars WHERE source = ?", [SOURCE]).fetchall()}
-    full: list[str] = []
-
-    def hold_back(frame: pd.DataFrame) -> list[str]:
-        hit = sorted(set(basis_moved(store, frame)) | (set(frame["ticker"]) - known))
-        full.extend(hit)
-        return hit
-
-    stats = backfill(store, start, end, symbols=syms, pause=0.2, quiet=True, before_write=hold_back,
-                     http=http, sleep=sleep, keys=keys)
-    stats["refetched"] = []
+    stats, written = _load(store, syms, start.isoformat(), end, 0.2, True, False, http, sleep, keys)
+    older = {r[0] for r in store.con.execute("SELECT DISTINCT ticker FROM bars WHERE source = ? AND trade_date < ?",
+                                             [SOURCE, start]).fetchall()}
+    breaks = adjustment_breaks(store.con, (start - dt.timedelta(days=LOOKBACK)).isoformat(), written)
+    full = sorted(set(breaks["ticker"]) | (set(written) - older))
+    stats.update({"breaks": sorted(set(breaks["ticker"])), "refetched": []})
     if full:
-        again, written = _load(store, full, HISTORY_START, end, 0.2, True, True, None, http, sleep, keys)
-        stats["refetched"] = written
+        again, done = _load(store, full, HISTORY_START, end, 0.2, True, True, http, sleep, keys)
+        stats["refetched"] = done
         stats["rows"] += again["rows"]
-        stats["with_data"] += again["with_data"]
-        stats["failed_symbols"] += [s for s in full if s not in written]
+        stats["failed_symbols"] += [s for s in full if s not in done]
         stats["n_batches_failed"] += again["n_batches_failed"]
+    if gap:
+        stats["gap"] = gap
     stats["last_bar"] = store.con.execute("SELECT max(trade_date) FROM bars WHERE source = ?", [SOURCE]).fetchone()[0]
     return stats
 
