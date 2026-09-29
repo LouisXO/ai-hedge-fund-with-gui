@@ -21,12 +21,14 @@ def store(tmp_path):
     s = PanelStore(tmp_path / "p.db")
     rows = []
     # all ~ $10M-$50M ADV: inside the book's range, so only the filing rules decide
-    for t, px, vol in [("AAA", 20.0, 500_000), ("BBB", 50.0, 1_000_000), ("CCC", 10.0, 2_000_000)]:
+    # THIN trades $2.7M a day until a $27M Tuesday lifts its 20-day mean over the $3M floor
+    for t, px, vol in [("AAA", 20.0, 500_000), ("BBB", 50.0, 1_000_000), ("CCC", 10.0, 2_000_000), ("THIN", 3.0, 900_000)]:
         for d in SESSIONS:
             if d > TUE.date():
                 break
+            v = vol * 10 if (t == "THIN" and d == TUE.date()) else vol
             rows.append({"ticker": t, "trade_date": d, "open": px, "high": px, "low": px,
-                         "close": px, "adj_close": px, "volume": float(vol), "source": "test",
+                         "close": px, "adj_close": px, "volume": float(v), "source": "test",
                          "fetched_at": pd.Timestamp.now()})
     s.upsert_bars(pd.DataFrame(rows))
     yield s
@@ -83,6 +85,29 @@ def test_trigger_is_the_most_recent_qualifying_day_and_ranks_by_its_amount(store
     assert df.loc["AAA", "buy_usd"] == pytest.approx(300_000)
     assert df.loc["BBB", "trigger_filing_day"] == MON.date() and df.loc["BBB", "lag_sessions"] == 1
     assert list(df.index) == ["BBB", "AAA"]              # larger purchase first, as the backtest fills its slots
+
+
+def test_adv_range_is_tested_on_the_filing_day(store):
+    """MX, filed 2026-09-25 under the floor and over it on 09-28: not an entry in the backtest, not one here."""
+    insider(store, "THIN", "X", 400_000, MON)
+    df = signals_insider.candidates(store, TUE, 2, SESSIONS).set_index("ticker")
+    assert not df.loc["THIN", "eligible"] and df.loc["THIN", "reason"] == "adv_below_floor"
+    assert df.loc["THIN", "adv20"] == pytest.approx(2.7e6)
+    insider(store, "THIN", "X", 300_000, TUE)            # a filing on the day it is liquid enough is an entry
+    df = signals_insider.candidates(store, TUE, 2, SESSIONS).set_index("ticker")
+    assert df.loc["THIN", "eligible"] and df.loc["THIN", "trigger_filing_day"] == TUE.date()
+    assert df.loc["THIN", "adv20"] == pytest.approx((19 * 2.7e6 + 27e6) / 20)
+
+
+def test_an_eligible_filing_day_is_preferred_to_a_later_one_outside_the_range(store):
+    # Monday $27M: 20-day mean $3.9M, inside. Tuesday $2.7B: the mean jumps over the $100M ceiling.
+    store.con.execute("UPDATE bars SET volume = 9000000 WHERE ticker = 'THIN' AND trade_date = ?", [MON.date()])
+    store.con.execute("UPDATE bars SET volume = 900000000 WHERE ticker = 'THIN' AND trade_date = ?", [TUE.date()])
+    insider(store, "THIN", "X", 400_000, MON)
+    insider(store, "THIN", "X", 900_000, TUE)
+    df = signals_insider.candidates(store, TUE, 2, SESSIONS).set_index("ticker")
+    assert df.loc["THIN", "eligible"] and df.loc["THIN", "trigger_filing_day"] == MON.date() and df.loc["THIN", "lag_sessions"] == 1
+    assert df.loc["THIN", "buy_usd"] == pytest.approx(400_000)
 
 
 def test_without_a_calendar_the_panel_bar_dates_are_the_sessions(store):

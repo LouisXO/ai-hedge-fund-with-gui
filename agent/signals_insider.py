@@ -47,19 +47,31 @@ def window_sessions(as_of: dt.date, window: int, sessions: list[dt.date]) -> lis
     return sorted(d for d in set(sessions) if d <= as_of)[-window:]
 
 
-def triggers(events: pd.DataFrame, days: list[dt.date]) -> pd.DataFrame:
-    """Per ticker, the most recent filing day inside `days` that qualifies on its own.
+def triggers(events: pd.DataFrame, days: list[dt.date], adv: pd.DataFrame) -> pd.DataFrame:
+    """Per ticker, the most recent filing day inside `days` that is an entry in the backtest.
 
     events: the backtest's event list (InsiderBuys.events), one row per qualifying (filing day,
     ticker). Nothing is added up across days: one small buyer on each of two days is not a
-    cluster here because it is not one in the backtest. lag_sessions = sessions from the trigger
-    day to the last of `days`; 0 is the backtest's entry (filed on D, bought at the open of D+1).
+    cluster here because it is not one in the backtest.
+    adv: 20-day dollar volume, date x ticker. The ADV range is tested on the FILING day's bar, as
+    the backtest tests it (Market.tradable[d, t]): a name too thin on the day of the filing and
+    liquid enough a session later was never an entry there (MX, filed 2026-09-25).
+    lag_sessions = sessions from the trigger day to the last of `days`; 0 is the backtest's entry
+    (filed on D, bought at the open of D+1). A name with no filing day inside the ADV range keeps
+    its latest day, with the reason it is excluded.
     """
     lag = {pd.Timestamp(d): len(days) - 1 - i for i, d in enumerate(days)}
-    ev = events[events["date"].isin(list(lag))].sort_values(["date", "strength"]).drop_duplicates("ticker", keep="last")
+    ev = events[events["date"].isin(list(lag))].copy()
+    ev["adv20"] = [float(adv.at[d, t]) if (d in adv.index and t in adv.columns) else np.nan
+                   for d, t in zip(ev["date"], ev["ticker"])]
+    ev["reason"] = np.where(ev["adv20"] < MIN_ADV, "adv_below_floor",
+                            np.where(ev["adv20"] > MAX_ADV, "adv_above_ceiling", ""))
+    ev["eligible"] = ev["adv20"].notna() & (ev["reason"] == "")
+    ev = ev.sort_values(["eligible", "date"]).drop_duplicates("ticker", keep="last")
     return pd.DataFrame({"ticker": ev["ticker"], "trigger_filing_day": ev["date"].dt.date,
                          "lag_sessions": ev["date"].map(lag).astype(int), "buy_usd": ev["strength"].astype(float),
-                         "kind": ev["detail"]}).reset_index(drop=True)
+                         "kind": ev["detail"], "adv20": ev["adv20"], "reason": ev["reason"],
+                         "eligible": ev["eligible"]}).reset_index(drop=True)
 
 
 def entry_kind(lag_sessions: int, retry: bool) -> str:
@@ -88,23 +100,19 @@ def candidates(store: PanelStore, as_of: pd.Timestamp, window: int = 3,
     days = window_sessions(as_of.date(), window, sessions)
     if not days:
         return pd.DataFrame()
-    ev = triggers(InsiderBuys().events(store, days[0].isoformat(), days[-1].isoformat()), days)
+    adv = (close * vol).rolling(20).mean()
+    ev = triggers(InsiderBuys().events(store, days[0].isoformat(), days[-1].isoformat()), days, adv)
     if ev.empty:
         return ev
     flows = insider_flows(store, days[0].isoformat()).set_index(["date", "ticker"])["n_buyers"]   # for display only
     ev["n_buyers"] = [int(flows.get((pd.Timestamp(d), t), 0)) for d, t in zip(ev["trigger_filing_day"], ev["ticker"])]
     ev["last_filing"] = ev["trigger_filing_day"]
 
-    adv = (close * vol).rolling(20).mean()
     day = close.index[close.index <= as_of][-1]
     ev = ev[ev["ticker"].isin(close.columns)].copy()
-    ev["adv20"] = [float(adv.at[day, t]) if t in adv.columns else np.nan for t in ev["ticker"]]
-    ev["last_close"] = [float(close.at[day, t]) if t in close.columns else np.nan for t in ev["ticker"]]
+    ev["last_close"] = [float(close.at[day, t]) for t in ev["ticker"]]
     ev = ev.dropna(subset=["adv20", "last_close"])
     ev["bucket"] = pd.cut(ev["adv20"], BUCKETS, labels=LABELS)
-    ev["reason"] = np.where(ev["adv20"] < MIN_ADV, "adv_below_floor",
-                            np.where(ev["adv20"] > MAX_ADV, "adv_above_ceiling", ""))
-    ev["eligible"] = ev["reason"] == ""
     ev["bar_date"] = day.date()
     return ev.sort_values(["eligible", "buy_usd"], ascending=[False, False])
 
