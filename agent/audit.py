@@ -22,8 +22,9 @@ Checks
                 outliers > $50M; source mix by date
   universe      PIT membership ~500 per date; listing mask agrees with bars (no bars for "listed" days,
                 bars for "unlisted" days); ADV floor universe size by year; no liquid name with an Active
-                row outside the mask; the listing list is fresh (<= 8 days behind the bars); held names
-                whose listing state changed at the last refresh
+                row outside the mask; no liquid name without any listing row (S47b: WARN, either spelling
+                of a class share and agent/listing_supplement.yaml count); the listing list is fresh (<= 8
+                days behind the bars); held names whose listing state changed at the last refresh
   factors       per-day universe size and NaN share per family; z-score caps (winsor) — how many
                 names sit exactly at the cap per family; families' z dispersion; in the top 60, every
                 name whose B/M is at the winsor cap or whose share fact is older than 400 days
@@ -242,6 +243,15 @@ def audit_listing(store, rep: Report, ledger_db: str | None = None):
     out = adv[[t for t in liquid if t in active and not lm[t]]].sort_values(ascending=False)
     rep.add("universe", "liquid names with an Active row that the listing mask excludes", "PASS" if out.empty else "FAIL",
             f"{len(out)} of {len(liquid)} with a bar on {last.date()} and ADV >= $5M {out.index[:10].tolist() if len(out) else ''}".rstrip())
+
+    # S47b item 3: a stock the vendor's list lacks entirely (NRG) is never listed, so never picked; it belongs in
+    # agent/listing_supplement.yaml once checked by hand. Either spelling of a class share counts as a row.
+    from agent.books.segments import spelling, supplement
+    keys = {spelling(s) for s in set(q("SELECT DISTINCT symbol FROM listing_status").df()["symbol"]) | set(supplement()["symbol"])}
+    none = adv[[t for t in liquid if spelling(t) not in keys]].sort_values(ascending=False)
+    rep.add("universe", "liquid names with no listing row at all (check by hand, add to agent/listing_supplement.yaml)",
+            "WARN" if len(none) else "PASS",
+            f"{len(none)} with a bar on {last.date()} and ADV >= $5M {none.index[:20].tolist() if len(none) else ''}".rstrip())
 
     # the weekly refresh can fail quietly (throttling, the truncated-list guard): the mask then runs on an old list,
     # new listings stay out and delistings are not recorded

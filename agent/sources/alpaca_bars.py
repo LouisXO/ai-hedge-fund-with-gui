@@ -75,16 +75,26 @@ Http = Callable[[str, dict], tuple[int, str]]
 Sleep = Callable[[float], None]
 
 
-def universe(store: PanelStore, limit: int | None = None) -> list[str]:
-    q = """
-        SELECT DISTINCT l.symbol FROM listing_status l
-        JOIN (SELECT DISTINCT ticker FROM issuer_seen) i ON i.ticker = l.symbol
-        WHERE l.exchange IN ('NYSE','NASDAQ','AMEX','NYSE MKT','NYSE ARCA','BATS')
-          AND l.asset_type = 'Stock'
-        ORDER BY l.symbol"""
-    if limit:
-        q += f" LIMIT {limit}"
-    return store.con.execute(q).df()["symbol"].tolist()
+def universe(store: PanelStore, limit: int | None = None, extra: pd.DataFrame | None = None) -> list[str]:
+    """Exchange-listed stocks with a Form 4 issuer. The listing rows are listing_status's and the hand-checked
+    ones of agent/listing_supplement.yaml (S47b item 3: NRG is not in the vendor's list; `extra`, None reads
+    the file)."""
+    from agent.books.segments import supplement
+    sup = supplement() if extra is None else extra
+    sup = pd.DataFrame({"symbol": pd.Series(sup["symbol"], dtype=str), "exchange": pd.Series(sup["exchange"], dtype=str)})
+    store.con.register("_listing_supplement", sup)
+    try:
+        q = """
+            SELECT DISTINCT l.symbol FROM (SELECT symbol, exchange FROM listing_status WHERE asset_type = 'Stock'
+                                           UNION ALL SELECT symbol, exchange FROM _listing_supplement) l
+            JOIN (SELECT DISTINCT ticker FROM issuer_seen) i ON i.ticker = l.symbol
+            WHERE l.exchange IN ('NYSE','NASDAQ','AMEX','NYSE MKT','NYSE ARCA','BATS')
+            ORDER BY l.symbol"""
+        if limit:
+            q += f" LIMIT {limit}"
+        return store.con.execute(q).df()["symbol"].tolist()
+    finally:
+        store.con.unregister("_listing_supplement")
 
 
 def vendor_symbol(sym: str) -> str:
