@@ -50,7 +50,9 @@ CONTROLS = {"insider_5d", "short_insider_5d"}          # the same v1 insider boo
 ALIASES = {"long_composite_daily_n30": "base",         # S19's daily composite is S24's base
            "insider_buy_h5": "insider_v1_5d"}           # the v1 line under the event-line interface (S23 control)
 SECTIONS = {"s30_momentum_book_": "full"}              # reports whose books sit under another key than `books`
-PRE_AUDIT = {"s24_long_v2_": {"n50", "invvol", "stop20", "issuance", "secneutral", "combo"}}
+# Keyed by the exact report file: a later S24 re-run on the corrected data (s24_long_v2_<newer date>.json)
+# replaces these rows through the "later report wins" rule and must not inherit the flag.
+PRE_AUDIT = {"s24_long_v2_2026-09-22.json": {"n50", "invvol", "stop20", "issuance", "secneutral", "combo"}}
 SAME_T_TOL = 1e-3
 EULER_GAMMA = 0.5772156649015329
 N = NormalDist()
@@ -93,7 +95,7 @@ def collect(reports: str = REPORTS) -> list[dict]:
         books = _books(fname, d) if isinstance(d, dict) else None
         if not books:
             continue
-        pre_audit = next((v for p, v in PRE_AUDIT.items() if fname.startswith(p)), set())
+        pre_audit = PRE_AUDIT.get(fname, set())
         for name, m in books.items():
             t = m.get("alpha2_t_nw") if isinstance(m, dict) else None
             if t is None or (isinstance(t, float) and math.isnan(t)) or not m.get("n_trades"):
@@ -216,9 +218,12 @@ def render(rows: list[dict], dsr: dict | None = None, dsr_note: str | None = Non
     if dsr is None:
         L.append(f"Not computed: {dsr_note or 'no NAV / panel given'}.")
     else:
+        source = (" This NAV is the S47 restatement on the corrected data; the base row in the ledger above still comes "
+                  "from its own report, so its t and alpha2 can differ from these."
+                  if dsr["nav_file"] == BASE_NAV else "")
         L += [f"alpha2 series (alpha + residual on SPY and IWM − SPY) of `{dsr['nav_file']}` [{dsr['column']}], "
               f"{dsr['start']} → {dsr['end']}, T = {dsr['T']}: alpha2 {dsr['alpha2_ann_pct']:+.2f}%/yr, "
-              f"NW t {dsr['t_nw']:.2f} (iid t {dsr['t_iid']:.2f}).", "",
+              f"NW t {dsr['t_nw']:.2f} (iid t {dsr['t_iid']:.2f}).{source}", "",
               f"**PSR(0) = {dsr['psr0']:.3f}** (no selection at all; the usual bar is 0.95).", "",
               "| trials N | E[max t] | SR0 (ann.) | SR (ann.) | DSR |", "|---|---|---|---|---|"]
         for x in dsr["trials"]:

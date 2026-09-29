@@ -6,7 +6,11 @@ import math
 
 import numpy as np
 
-from hedge_fund.validation.family_log import (collect, deflated_sharpe, expected_max_t, holm, render)
+import pandas as pd
+import pytest
+
+from hedge_fund.validation.family_log import (BASE_NAV, base_book_dsr, collect, deflated_sharpe, expected_max_t, holm,
+                                              render)
 
 
 def _book(t, n, a=5.0):
@@ -52,3 +56,48 @@ def test_deflated_sharpe_is_psr_at_one_trial_and_falls_with_more_trials():
     d = [deflated_sharpe(x, n)["dsr"] for n in (1, 5, 13, 100)]
     assert all(a > b for a, b in zip(d, d[1:]))
     assert deflated_sharpe(x, 1, nw_ratio=0.5)["dsr"] < psr                 # serial correlation widens it
+
+
+def test_a_later_s24_rerun_replaces_the_row_without_the_pre_audit_flag(tmp_path):
+    _write(tmp_path, "s24_long_v2_2026-09-22.json", {"books": {"n50": _book(1.89, 2132), "invvol": _book(1.20, 1500)}})
+    _write(tmp_path, "s24_long_v2_2026-10-20.json", {"books": {"n50": _book(1.10, 2100)}})      # re-run on corrected data
+    rows = {r["variant"]: r for r in collect(str(tmp_path))}
+    assert rows["n50"]["report"] == "s24_long_v2_2026-10-20.json" and not rows["n50"].get("pre_audit")
+    assert rows["invvol"].get("pre_audit")                        # not re-run yet: still the old data
+
+
+def _panel_and_nav(tmp_path, n=600):
+    from hedge_fund.features.panel import PanelStore
+
+    rng = np.random.default_rng(1)
+    days = pd.bdate_range("2020-01-02", periods=n)
+    spy = rng.normal(0.0004, 0.01, n)
+    iwm = spy + rng.normal(0.0, 0.006, n)
+    book = 0.0003 + 0.9 * spy + 0.3 * (iwm - spy) + rng.normal(0.0, 0.006, n)
+    frames = []
+    for sym, r in (("SPY", spy), ("IWM", iwm)):
+        px = 100 * np.cumprod(1 + r)
+        frames.append(pd.DataFrame({"symbol": sym, "trade_date": days.date, "open": px, "high": px, "low": px,
+                                    "close": px, "adj_close": px, "source": "test", "fetched_at": pd.Timestamp.now()}))
+    panel = tmp_path / "panel.db"
+    with PanelStore(panel) as st:
+        st.upsert_index(pd.concat(frames, ignore_index=True))
+    nav = tmp_path / BASE_NAV
+    pd.DataFrame({"trade_date": days, "v1c": 60_000 * np.cumprod(1 + book)}).to_csv(nav, index=False)
+    return str(nav), str(panel)
+
+
+@pytest.mark.filterwarnings("ignore:.*encountered in matmul:RuntimeWarning")   # macOS Accelerate BLAS, results are finite
+def test_base_book_dsr_reads_the_nav_and_panel_and_renders(tmp_path):
+    nav, panel = _panel_and_nav(tmp_path)
+    d = base_book_dsr(nav, panel, [5, 13, 40])
+    assert d["nav_file"] == BASE_NAV and d["column"] == "v1c" and d["T"] == 599
+    assert d["start"] == "2020-01-02" and abs(d["alpha2_ann_pct"] - 0.0003 * 252 * 100) < 5
+    assert 0 < d["psr0"] < 1 and [x["n_trials"] for x in d["trials"]] == [5, 13, 40]
+    dsrs = [x["dsr"] for x in d["trials"]]
+    assert all(a > b for a, b in zip(dsrs, dsrs[1:])) and d["psr0"] > dsrs[0]
+    assert d["dsr_range"] == [min(dsrs), max(dsrs)]
+    assert abs(d["t_nw"] / d["t_iid"] - 1) < 0.5                  # iid data: NW and iid t are close
+    text = render(holm([{"variant": "base", "report": "r.json", "t": 1.46, "alpha2_ann_pct": 8.1, "n_trades": 10}]), d)
+    assert "PSR(0) = " in text and "DSR range " in text and "Not computed" not in text
+    assert "S47 restatement" in text                               # the ledger row and this NAV are different sources
