@@ -11,10 +11,10 @@ watch:
     above: [3.0]
   RKLB:
     cik: "0001819994"
-    note: "不追大涨日;等 Iridium 投票结果 8-K 和合并完成;回踩 65–69 分批,或站上 81(200 日线)后回踩;58 收盘跌破作废"
-    forms: ["10-K", "10-Q", "8-K", "425", "S-4", "S-4/A", "DEFM14A", "424B5", "4", "SCHEDULE 13D"]
-    below: [69.0, 65.0, 58.0]
-    above: [81.0, 90.0, 97.5, 100.0, 121.0, 150.0]   # 90 / 97.5 / 150: the 9/29 spread's long strike, breakeven, cap
+    note: "不追大涨日;ATM 9/15 已卖完;Iridium 9/24 投票通过,交割 mid-2027(FCC 等审批);换股 10 日 VWAP,67.50/112.50 上下限;回踩 65–69 分批,或站上 81(200 日线)后回踩;58 收盘跌破作废。事件日历见 docs/notes/RKLB.md"
+    forms: ["10-K", "10-Q", "NT 10-Q", "8-K", "425", "S-4", "S-4/A", "DEFM14A", "424B5", "424B7", "S-3ASR", "4", "144", "SCHEDULE 13D", "SCHEDULE 13G"]   # 424B5 = a new ATM
+    below: [69.0, 67.5, 65.0, 58.0, 52.0]             # 67.5 exchange-ratio floor; ~52 Nasdaq-100 removal risk (estimate, 2026-09-29)
+    above: [81.0, 90.0, 97.5, 100.0, 112.5, 121.0, 150.0]   # 90 / 97.5 / 150: the 9/29 spread's long strike, breakeven, cap; 112.5 ratio cap
     spreads:                                          # a public print followed daily (moomoo snapshot, read-only)
       - name: "9/29 大单 90/150 看涨价差(2027-03-19)"
         legs: [["US.RKLB270319C90000", 1], ["US.RKLB270319C150000", -1]]
@@ -22,6 +22,28 @@ watch:
         seen: {date: "2026-09-29", time_et: "09:50", qty: 1150, price: 7.50, stock: 72.1, oi: [1540, 3848]}   # 9.90 - 2.40; OI before the print
         below: [3.1]                                  # half the print's cost at the 9/29 close mark (6.21)
         above: [12.5, 30.0]                           # 2x that mark; half the 60 maximum
+    events:                                           # docs/notes/RKLB.md calendar (2026-09-29); estimates say so
+      - {date: "2026-10-09", text: "FINRA 空头数据(9/30 结算;9/15 为 4,348 万股)"}
+      - {date: "2026-10-15", text: "FCC 评论和反对申请截止(Iridium 执照转让,GN 26-257)"}
+      - {date: "2026-10-16", text: "月度期权到期"}
+      - {date: "2026-10-22", text: "Iridium Q3 财报(估计)"}
+      - {date: "2026-10-30", text: "FCC 回应截止"}
+      - {date: "2026-11-09", text: "Q3 10-Q 法定截止 + FCC 答复截止(财报日公司未公布)"}
+      - {date: "2026-11-20", text: "月度期权到期"}
+      - {date: "2026-11-30", text: "纳斯达克 100 年度重构参考日(约 52 以下有剔除风险,估算)"}
+      - {date: "2026-12-11", text: "纳斯达克 100 年度重构公告(收盘后)"}
+      - {date: "2026-12-18", text: "四巫日 + 纳斯达克 100 调仓"}
+      - {date: "2026-12-21", text: "GAO 对火星轨道器合同抗议的法定裁决期限(约)"}
+      - {date: "2027-01-15", text: "期权到期(未平仓最大的一期)"}
+      - {date: "2027-02-19", text: "月度期权到期"}
+      - {date: "2027-02-26", text: "Q4 财报约在此前后(估计)+ 纳斯达克 100 季度参考日"}
+      - {date: "2027-03-01", text: "10-K 法定截止"}
+      - {date: "2027-03-12", text: "纳斯达克 100 季度调整公告"}
+      - {date: "2027-03-19", text: "90/150 价差到期,四巫日 + 纳斯达克 100 调仓"}
+  IRDM:
+    cik: "0001418819"
+    note: "RKLB 收购对象:每股 $27 现金 + RKLB 股票(0.24–0.40 股);9/24 投票通过;盯 FCC 和海外审批、交割 8-K、摘牌"
+    forms: ["8-K", "425", "10-Q", "DEFA14A", "25-NSE", "15-12B"]
   IONQ:
     cik: "0001824920"
     note: "不追;S25 负面格子(9/22 +10% 新闻日 + 散户 20 倍);股本 18 个月翻倍,等下一轮发股落地;可能入场 $30–35;11/5 财报前不持期权"

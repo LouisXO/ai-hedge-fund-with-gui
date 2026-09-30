@@ -101,6 +101,15 @@ def spread_alerts(cfg: dict, today: dict, before: dict | None) -> tuple[list[str
     return alerts, line
 
 
+def event_reminders(events: list[dict], today: dt.date, n: int = 3) -> tuple[list[str], list[str]]:
+    """Dated events from the watchlist ({date, text}): alerts on the day before and the day itself, and the next
+    `n` events for the page."""
+    rows = sorted((dt.date.fromisoformat(str(e["date"])), str(e["text"])) for e in events or [])
+    alerts = [f"{'今天' if d == today else '明天'}:{t}" for d, t in rows if 0 <= (d - today).days <= 1]
+    upcoming = [f"{d.month}/{d.day} {t}" for d, t in rows if d >= today][:n]
+    return alerts, upcoming
+
+
 def watch_spreads(q, results: list[dict], wl: dict) -> None:
     """For names with `spreads:` in the watchlist: one moomoo snapshot per spread (read-only), a record per day in
     OPTION_HISTORY, alerts into the name's alert list and a line into r['spreads']."""
@@ -199,7 +208,10 @@ def check(name: str, cfg: dict, store: PanelStore, state: dict, ua: str) -> dict
         n.close()
     except Exception:
         pass
-    return {"ticker": name, "note": cfg.get("note", ""), "last": last, "prev": prev, "alerts": alerts, "headlines": headlines}
+    ev_alerts, upcoming = event_reminders(cfg.get("events"), dt.date.today())
+    alerts += ev_alerts
+    return {"ticker": name, "note": cfg.get("note", ""), "last": last, "prev": prev, "alerts": alerts, "headlines": headlines,
+            "upcoming": upcoming}
 
 
 def main() -> int:

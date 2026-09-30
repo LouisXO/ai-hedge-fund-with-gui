@@ -31,3 +31,14 @@ def test_value_levels_fire_on_the_crossing_day_only():
     alerts, _ = spread_alerts(CFG, rec(15.0, 16.0, 2690, 2.0, 2.2, 4998), before)   # mid 13.4
     assert alerts == ["RKLB 90/150:价差突破 12.5 → 13.40"]
     assert spread_alerts(CFG, rec(15.0, 16.0, 2690, 2.0, 2.2, 4998), rec(15.0, 16.0, 2690, 2.0, 2.2, 4998))[0] == []
+
+
+def test_event_reminders_alert_the_day_before_and_the_day_and_list_the_next_three():
+    import datetime as dt
+    from agent.watch import event_reminders
+    ev = [{"date": "2026-10-15", "text": "FCC 截止"}, {"date": "2026-10-16", "text": "期权到期"},
+          {"date": "2026-10-22", "text": "IRDM 财报"}, {"date": "2026-11-09", "text": "10-Q 截止"}, {"date": "2026-09-01", "text": "旧"}]
+    alerts, upcoming = event_reminders(ev, dt.date(2026, 10, 15))
+    assert alerts == ["今天:FCC 截止", "明天:期权到期"]
+    assert upcoming == ["10/15 FCC 截止", "10/16 期权到期", "10/22 IRDM 财报"]
+    assert event_reminders(ev, dt.date(2026, 10, 1))[0] == [] and event_reminders(None, dt.date(2026, 10, 1)) == ([], [])
