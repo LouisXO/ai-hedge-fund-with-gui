@@ -5,8 +5,11 @@ which is fine for research and useless for trading. EDGAR publishes a
 daily index of every filing; this pulls the Form 4s from it and parses the
 XML, so the live signal sees a filing the morning after it lands.
 
-Only open-market purchases are kept (transactionCode P with a positive
-price), matching the research definition in S11/S13.
+Open-market purchases (transactionCode P, acquired, positive price) — the
+research definition in S11/S13 and all the insider book reads — and, since
+2026-09-30, open-market sales (S, disposed, positive price) for the
+watchlist's and the review's insider-selling checks, as the quarterly bulk
+data sets carry them; nothing else (grants, exercises, tax withholding).
 
 SEC asks for 10 requests/second at most and a contact in the User-Agent
 (SEC_USER_AGENT in ~/.hedge-fund/.env).
@@ -172,7 +175,7 @@ def _xml_url(path: str) -> str:
 
 
 def parse_filing(path: str, http: Http) -> list[dict]:
-    """Fetch a filing's XML and return its open-market purchase rows (a failed request is counted by http)."""
+    """Fetch a filing's XML and return its open-market purchase and sale rows (a failed request is counted by http)."""
     listing = http.get(_xml_url(path))
     if not listing:
         return []
@@ -203,7 +206,8 @@ def parse_filing(path: str, http: Http) -> list[dict]:
     filed = text(root, "periodOfReport")
     rows = []
     for tx in root.findall("nonDerivativeTable/nonDerivativeTransaction"):
-        if text(tx, "transactionCoding", "transactionCode") != "P":
+        code = text(tx, "transactionCoding", "transactionCode")
+        if code not in ("P", "S"):
             continue
         amounts = tx.find("transactionAmounts")
         if amounts is None:
@@ -211,7 +215,7 @@ def parse_filing(path: str, http: Http) -> list[dict]:
         shares = text(amounts, "transactionShares", "value")
         price = text(amounts, "transactionPricePerShare", "value")
         disp = text(amounts, "transactionAcquiredDisposedCode", "value")
-        if disp != "A" or not shares or not price:
+        if disp != ("A" if code == "P" else "D") or not shares or not price:
             continue
         try:
             sh, pr = float(shares), float(price)
@@ -223,7 +227,7 @@ def parse_filing(path: str, http: Http) -> list[dict]:
                      "issuer_cik": cik, "trans_date": pd.to_datetime(text(tx, "transactionDate", "value"),
                                                                      errors="coerce").date(),
                      "owner_name": owner, "relationship": roles, "officer_title": title,
-                     "trans_code": "P", "acq_disp": "A", "shares": sh, "price": pr,
+                     "trans_code": code, "acq_disp": disp, "shares": sh, "price": pr,
                      "value_usd": sh * pr, "shares_after": None, "period_of_report": filed})
     return rows
 

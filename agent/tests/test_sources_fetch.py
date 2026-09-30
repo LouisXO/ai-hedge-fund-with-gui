@@ -228,3 +228,23 @@ def test_a_new_archive_has_the_same_column_order():
     con = duckdb.connect(":memory:")
     daily_archive.ensure_schema(con)
     assert [r[0] for r in con.execute("DESCRIBE borrow").fetchall()] == daily_archive.BORROW_COLS
+
+
+def test_open_market_sales_are_kept_and_other_codes_are_not():
+    sale = XML.replace("<transactionCode>P<", "<transactionCode>S<").replace("<value>A</value>", "<value>D</value>")
+    grant = XML.replace("<transactionCode>P<", "<transactionCode>A<")
+
+    class H:
+        n_failed, errors = 0, []
+
+        def __init__(self, body):
+            self.body = body
+
+        def get(self, url, missing_ok=False):
+            return '<a href="/x/doc.xml">' if url.endswith("/") else self.body
+
+    rows = f4.parse_filing("edgar/data/1234/0001234567-26-000001.txt", H(sale))
+    assert [(r["trans_code"], r["acq_disp"], r["value_usd"]) for r in rows] == [("S", "D", 12500.0)]
+    assert f4.parse_filing("edgar/data/1234/0001234567-26-000001.txt", H(grant)) == []
+    buy = f4.parse_filing("edgar/data/1234/0001234567-26-000001.txt", H(XML))
+    assert [(r["trans_code"], r["acq_disp"]) for r in buy] == [("P", "A")]
