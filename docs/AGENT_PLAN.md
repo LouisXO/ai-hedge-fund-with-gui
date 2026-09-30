@@ -799,6 +799,8 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - S48 A 包 16:14 上线:账本加列(77 张订单回填一致)、隔离冒烟通过、`--cancel-open` 列出当晚 20 张挂单。`~/.hedge-fund/agent/late_insider.ok` 16:29 创建。
 - 16:10 的 Form 4 实时抓取失败(EFTS HTTP 500),内部人书当晚没有新买入;16:18 手工重试成功。晚间补单空跑会买 COUR 302 股。补单任务还没安装,今晚 19:16 由会话手工跑一次同一个脚本;安装命令:`cp ~/hedge-fund/agent/launchd/com.louis.agent.late_insider.plist ~/Library/LaunchAgents/ && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.louis.agent.late_insider.plist`(用户在终端跑)。
 - 关注名单的期权大单时间从北京时间改成美西时间(moomoo 原文是北京时间)。
+- 晚间补单任务已由用户安装,19:15 第一次正式运行:抓到 655 份申报(新增 6 行买入),发出 COUR 302 股限价 4.81(已接受),16:10 已发的两张卖单按同一订单号跳过。
+- **内部人数据缺口(19:00 核对 UBER 时发现)**:`insider_tx` 在 2026-07-01 到 09-16 之间没有任何行。季度批量数据(sec_form345)只到 2026-06-30,每日索引抓取 9/17 才开始,中间没人补。漏掉的例子:UBER CEO 9/10 公开市场买入 141,000 股、约 1,000 万美元。实盘内部人书只看最近 2–3 个交易日,不受影响;受影响的是回测和重述里 2026-07/08 的内部人事件(S47、S47b 的内部人重述在这两个月没有事件)和这段时间的关注名单提醒。修复:17:55 起用每日索引按 10 天一段补抓(`crawl(days=10, today=段末)`,每段约 1 小时,进度记在会话目录),9/30 12:30 前停;补完后重跑 `agent.s47_restate --name s47b`,季度批量数据 2026Q3 发布后再和批量数据核对一次。
 
 **等待中(不需要动手,只要盯)**
 - 9/30 13:25 同步之后:第一批卖单(PRTA、GSAT 到期)和长线换仓的出场价、收益、现金;同步 JSON 里的 claimed_orders、claim_error、cash_check、possible_splits、reconcile(A 包说明第 7 条)。
