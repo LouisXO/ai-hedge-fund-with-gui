@@ -57,7 +57,7 @@
 - **2026-07-16，当天 +1.9%、次日 −2.1%**：宣布以每股 €41.50 现金收购 Delivery Hero，股权价值 $148 亿（8-K）。这笔收购会让杠杆上升。
 - **2026-07-24，−4.3%，收一年最低**：Waymo 宣布 2028-01 在 Austin 和 Atlanta 上线自己的 App，结束和 Uber 的独家合作（TNW）。
 - **2026-08-05，−5.3%**：二季报给的三季度每股指引 $0.84–0.88，低于预期的 $0.89；同时宣布多年投入超过 $100 亿做无人车（Reuters）。
-- **2026-09-03 起**：Tesla 在 Austin 的无人车开始收费（来源级别低）。股价从 9/2 的 $76.45 跌到 9/15 的 $71.43。
+- **2026-09-03**：Tesla 在 Austin 办没有方向盘的 Cybercab 邀请制首发(AP)。更正(9/30):Tesla 在 Austin 收费载客是 2025-06-22 起(当时有安全员),2026-01-22 起部分车无人,不是 9 月才开始。股价从 9/2 的 $76.45 跌到 9/15 的 $71.43。
 
 ### 4. "名人都买了"能当证据吗
 
@@ -122,3 +122,127 @@
 - 下跌原因：[Fortune 2025-11-04](https://fortune.com/2025/11/04/uber-earnings-479-million-charge-legal-proceedings-shares-fall-7-percent/)、[StockStory 2025-12-10](https://finance.yahoo.com/news/why-uber-uber-shares-trading-180635117.html)、[Yahoo 2026-02-04](https://finance.yahoo.com/news/uber-shares-tumble-q4-earnings-123223364.html)、[TNW 2026-07-25](https://thenextweb.com/news/waymo-uber-exclusivity-ends-austin-atlanta-robotaxi)、[Reuters/BNN 2026-08-05](https://www.bnnbloomberg.ca/business/company-news/2026/08/05/uber-forecasts-weak-quarterly-profit-doubles-down-on-robotaxi-investment-plans/)、[FinanceFeeds 2026-09-16](https://financefeeds.com/tesla-vs-uber-stock-robotaxi-launch/)
 - 我们的研究记录：/Users/louis/hedge-fund/docs/AGENT_PLAN.md §9（S8、S11、S13、S14、S15、S19、S21、S23、S31、S32、S37、S45、S47b），/Users/louis/hedge-fund/docs/DATA_SOURCES.md
 - 排名输出：/private/tmp/claude-501/-Users-louis-Downloads-Personal/b6d8bbed-176a-4ac4-b6c3-9ccb54e2004f/scratchpad/uber/valuation_ours/ours_out.txt
+
+
+## 2026-09-30:Uber 的自动驾驶什么时候能出来
+
+**简短回答：** 已经上线了，但规模很小。Uber 不造车，也没有自己的自动驾驶系统。它在 2020 年把自研部门 ATG 卖给了 Aurora，现在是把合作方的车接进 Uber App。
+
+- 现在能在 Uber 上叫到自动驾驶车的城市，我数到 **9 个**，其中**车里完全没人的只有 4 个**。美国只有 Austin 和 Atlanta，都是 Waymo 的车。
+- 要在美国多个大城市做到"车上没人、规模像样"，公司自己的时间表集中在 **2027–2028 年**。
+- 过去定过明确日期的目标，大约一半晚了，或者到现在还没兑现。
+- Uber 从来没公布过自己平台上的自动驾驶单量或收入。公司 2026-02 说全球自动驾驶行程（包括不在 Uber 上的）"accounting for just 0.1% of global rideshare trips"（[AV Spotlight](https://s23.q4cdn.com/407969754/files/doc_financials/2025/q4/Uber-Q4-25-Earnings-AV-Spotlight.pdf)）。
+
+---
+
+### 1. 今天在 Uber 上能叫到的
+
+| 城市 | 合作方 | 在 Uber 上线 | 规模 | 车上有人吗 | 状态 |
+|---|---|---|---|---|---|
+| Austin | Waymo | 2025-03-04 [来源](https://investor.uber.com/news-events/news/press-release-details/2025/Ride-Into-the-Future-With-Waymo-on-Uber-in-Austin/default.aspx) | 两城合计"hundreds of Waymo AVs"（Uber 对 [TechCrunch](https://techcrunch.com/2026/06/29/waymo-and-uber-quietly-part-ways-in-phoenix/) 说的） | 没有 | live |
+| Atlanta | Waymo | 2025-06-24 [来源](https://investor.uber.com/news-events/news/press-release-details/2025/Atlanta-The-Future-is-Here-with-Waymo-and-Uber-2025-y1tuDCCSgu/default.aspx) | 同上 | 没有 | live |
+| Abu Dhabi | WeRide | 2024-12 上线时有安全员；2025-11-26 起无人 [来源](https://investor.uber.com/news-events/news/press-release-details/2025/WeRide-and-Uber-Launch-Middle-Easts-First-Fully-Driverless-Robotaxi-Commercial-Operations-in-Abu-Dhabi-UAE/default.aspx) | WeRide 中东全部车队约 400 辆（截至 7/31，不全在 Uber 上）[6-K](https://www.sec.gov/Archives/edgar/data/1867729/000110465926094571/tm2622690d2_ex99-1.htm) | 没有 | live |
+| Dubai | WeRide | 2025-12-12 上线；2026-03-31 起无人 [来源](https://investor.uber.com/news-events/news/press-release-details/2026/WeRide-and-Uber-Launch-Fully-Driverless-Robotaxi-Fare-Charging-Operations-in-Dubai-Accelerating-Autonomous-Mobility-in-the-Middle-East-2026-NSiF0EFKhd/default.aspx) | 同上 | 没有 | live |
+| Dubai | 百度 Apollo Go | 2026-08-20 [来源](https://investor.uber.com/news-events/news/press-release-details/2026/Uber-Launches-Baidus-Fully-Driverless-Apollo-Go-in-Dubai-Establishing-the-First-Multi-Partner-Autonomous-Network-Globally/default.aspx) | 未披露 | 没有 | live |
+| Dallas | Avride | 2025-12-03 [来源](https://investor.uber.com/news-events/news/press-release-details/2025/Uber-and-Avride-Launch-Robotaxi-Rides-in-Dallas/default.aspx) | 在 Uber 上累计 6 万单以上 [Nebius](https://www.sec.gov/Archives/edgar/data/1513845/000110465926094568/tm2622968d1_ex99-2.htm) | 有，驾驶位坐着专员 | pilot |
+| Las Vegas | Motional | 2026-03-13 [来源](https://investor.uber.com/news-events/news/press-release-details/2026/Uber-and-Motional-Launch-Robotaxi-Service-in-Las-Vegas/default.aspx) | 未披露 | 有，目标年底撤掉 | pilot |
+| Riyadh | WeRide | 2025-10-24 [来源](https://investor.uber.com/news-events/news/press-release-details/2025/Uber-and-WeRide-Begin-Offering-Autonomous-Robotaxi-Passenger-Rides-in-Saudi-Arabia/default.aspx) | 未披露 | 上线时有，之后有没有撤掉没查到 | pilot |
+| Zagreb | Pony.ai + Verne | 2026-08-19 [来源](https://investor.uber.com/news-events/news/press-release-details/2026/Uber-Launches-Autonomous-Rides-in-Europe/default.aspx) | 未披露 | 有 | pilot |
+| London | Wayve | 2026-09-03 [来源](https://investor.uber.com/news-events/news/press-release-details/2026/Wayve-and-Uber-Launch-First-Ever-Autonomous-Rides-in-the-UK-2026-VoFQI1WbQi/default.aspx) | "a small number of vehicles" | 有，TfL 持证司机 | pilot |
+| Phoenix | Waymo | 2023 年起，**2026-05 结束** | 按 Uber 的说法，专门投入的车 "just over a dozen vehicles" | — | ended |
+
+各行原文（顺序同上表）：
+- "Starting today, Austin riders can be matched with a Waymo autonomous vehicle (AV) on the Uber app"
+- "Starting today, Atlantans can get matched with a Waymo autonomous vehicle (AV) exclusively on the Uber app"
+- "Public commercial operations commenced today without a vehicle specialist inside the AV, starting with Yas Island."
+- "Public commercial operations began today without a vehicle operator on board"
+- "Starting today, riders in Dubai requesting an UberX or Uber Comfort may be matched with a fully driverless Apollo Go vehicle."
+- "At launch, an on-board specialist will be monitoring behind the wheel"
+- "Initially, Motional robotaxis will feature a vehicle operator monitoring the road ahead from behind the steering wheel."
+- "each Robotaxi will include a vehicle operator"
+- "At launch, a licensed operator will be on-board monitoring behind the wheel"
+- "a trained and TfL licensed private hire driver is onboard to oversee the trip"
+- Phoenix 的结束日期是 Waymo 对 TechCrunch 说的 "happened in May"；Uber 说这是 "the contracted end date"。
+
+**Uber 官方的在线城市数：** 2026-02 是 7 个，5 月是 8 个，8/5 又回到 7 个（Phoenix 退出）。原文是 "AVs are live on Uber in 7 cities, on track for as many as 15 by year-end"（[Q2 讲稿](https://s23.q4cdn.com/407969754/files/doc_earnings/2026/q2/transcript/Uber-Q2-26-Prepared-Remarks.pdf)）。之后又加了 Zagreb 和 London，所以是 9 个。这是我自己数的，Uber 还没更新。注意 Uber 的口径把车上有安全员的城市也算在内。
+
+---
+
+### 2. 接下来的时间表，以及这些日期靠不靠谱
+
+**以前定过的目标兑现了多少：**
+
+| 以前的目标（原文） | 什么时候说的 | 结果 |
+|---|---|---|
+| Waymo Austin 和 Atlanta："Beginning in early 2025" [来源](https://investor.uber.com/news-events/news/press-release-details/2024/Uber-and-Waymo-Expand-Partnership-to-Bring-Autonomous-Ride-Hailing-to-Austin-and-Atlanta/default.aspx) | 2024-09 | Austin 按期；Atlanta 6 月才上，晚了约一个季度 |
+| Avride Dallas："later next year"（即 2025 年） [来源](https://investor.uber.com/news-events/news/press-release-details/2024/Uber-and-Avride-Announce-Autonomous-Delivery-and-Mobility-Partnership/default.aspx) | 2024-10 | 2025-12-03 上线，按期，但卡在年底 |
+| WeRide Abu Dhabi 无人："planned for later in 2025" [来源](https://investor.uber.com/news-events/news/press-release-details/2024/Uber-and-WeRide-Launch-Autonomous-Mobility-Service-in-Abu-Dhabi/default.aspx) | 2024-12 | 2025-11-26，按期 |
+| Riyadh："launching in Riyadh later this year" [Q2'25 讲稿](https://s23.q4cdn.com/407969754/files/doc_earnings/2025/q2/transcript/Uber-Q2-25-Prepared-Remarks.pdf) | 2025-08 | 2025-10-24，按期 |
+| WeRide Dubai 无人："fully driverless commercial service in early 2026" [来源](https://investor.uber.com/news-events/news/press-release-details/2025/WeRide-and-Uber-Launch-Autonomous-Robotaxi-Rides-in-Dubai-Expanding-AV-Footprint-in-the-UAE/default.aspx) | 2025-12 | 2026-03-31，按期 |
+| Wayve London："in London next year"（Q2'25 讲稿） | 2025-08 | 2026-09-03，按期，但车上有司机 |
+| 下半年上 5 个城市："around 5 new deployments across the U.S. (Dallas and Arlington, Texas), Middle East (UAE and Saudi Arabia), and Asia in H2"（同上） | 2025-08 | 兑现 3 个；Arlington 和亚洲没上 |
+| 百度："first deployments are expected in Asia and the Middle East later this year" [来源](https://investor.uber.com/news-events/news/press-release-details/2025/Baidu-and-Uber-Join-Forces-to-Accelerate-Autonomous-Vehicle-Deployment-2025-OfJR8lmv7m/default.aspx) | 2025-07 | 迪拜晚了约 8 个月；亚洲到现在还没有 |
+| 百度迪拜："Expected to launch in the coming month" [来源](https://investor.uber.com/news-events/news/press-release-details/2026/Baidu-and-Uber-Partner-to-Bring-Apollo-Go-Autonomous-Ride-hailing-to-Dubai-in-Collaboration-with-Dubais-Roads-and-Transport-Authority/default.aspx) | 2026-02-10 | 8/20 才上线，晚了约 5 个月 |
+| Pony.ai："first launch in a key market in the Middle East later this year"（即 2025 年） [来源](https://investor.uber.com/news-events/news/press-release-details/2025/PONY-AI-Inc--and-Uber-Announce-Strategic-Partnership-to-Advance-Autonomous-Mobility/default.aspx) | 2025-05 | 没兑现。8/14 的公告仍只写 "includes plans to deploy Robotaxis in the Middle East" [6-K](https://www.sec.gov/Archives/edgar/data/1969302/000110465926096218/tm2623123d1_ex99-1.htm) |
+| May Mobility："initial launch planned for Arlington, Texas, by the end of 2025" [来源](https://investor.uber.com/news-events/news/press-release-details/2025/Uber-and-May-Mobility-Announce-Strategic-Partnership-to-Scale-Autonomous-Vehicles/default.aspx) | 2025-05 | 没兑现。现在说 "in Q4 2026 or Q1 2027" [SEC](https://www.sec.gov/Archives/edgar/data/2111542/000121390026100367/ea030470201ex99-1.htm) |
+| Momenta："in Europe at the beginning of 2026" [来源](https://investor.uber.com/news-events/news/press-release-details/2025/Uber-and-Momenta-Announce-Strategic-Agreement-for-Robotaxi-Deployment/default.aspx) | 2025-05 | 没兑现。2025-09 改口成"2026 年在慕尼黑开始测试"，2026-07-29 才拿到德国测试许可 [Momenta](https://www.momenta.cn/en/article/596.html) |
+| Motional："launching the driverless service to the public in 2023" [来源](https://motional.com/news/motional-launches-first-robotaxi-service-uber-network) | 2022-12 | 没兑现，现在的目标改成 2026 年底 |
+| Zoox 拉斯维加斯："launch in Las Vegas this summer" [来源](https://investor.uber.com/news-events/news/press-release-details/2026/Zoox-and-Uber-Announce-Strategic-Partnership/default.aspx)；Q1 讲稿写 "in Q3" | 2026-03 / 05 | 到 9/30 没看到上线，**已错过** |
+| Cruise："plan to launch the partnership next year"（即 2025 年） [来源](https://investor.uber.com/news-events/news/press-release-details/2024/Uber-and-Cruise-to-Deploy-Autonomous-Vehicles-on-the-Uber-Platform/default.aspx) | 2024-08 | 项目取消，GM 说 "will no longer fund Cruise's robotaxi development" [SEC](https://www.sec.gov/Archives/edgar/data/1467858/000119312524274336/d917047dex991.htm) |
+| 年底城市数：先说 "at least 10 cities by the end of 2026"（Q3'25），后改为 "as many as 15" | 2025-11 → 2026-02 | 还没到期，现在是 9 个 |
+
+**规律：** WeRide 在中东的项目和 Waymo 基本按期。新签的美国和欧洲合作方大多晚了半年到一年以上。
+
+**还没到期的目标：**
+
+| 时间 | 项目 | 车上有人吗 | 可靠度（我的判断） |
+|---|---|---|---|
+| 2026 年底 | 15 个城市（现在 9 个），Q4 要再上 6 个 | — | 偏难。需要慕尼黑、东京、洛杉矶、湾区、马德里、苏黎世都在 3 个月内上线 |
+| 2026 年内 | Nuro + Lucid 旧金山湾区，Uber 独家。原文："initially launch in the San Francisco Bay Area later this year" [来源](https://investor.uber.com/news-events/news/press-release-details/2026/Uber-Nuro-and-Lucid-to-Bring-Robotaxi-Service-to-Houston-in-2027/default.aspx) | 先有安全员。Nuro 只拿到 CPUC 有人试点许可 [Nuro](https://www.nuro.ai/blog/nuro-secures-cpuc-permit-for-testing-robotaxi-passenger-service-in-california) | 中。4 月起只有员工试乘。8/4 Lucid 只写 "in active testing and validation, supported by a fleet of nearly 100 vehicles across the San Francisco Bay Area and Houston" [8-K](https://www.sec.gov/Archives/edgar/data/1811210/000162828026052548/q2fy26ex991earnings.htm)，没给时间 |
+| 2026 年底 | Motional 拉斯维加斯撤掉安全员："expected to begin by the end of this year" | — | 低。同一目标 2023 年错过过 |
+| late 2026 | MOIA/VW 洛杉矶："Rides on the Uber platform are planned for late 2026" [来源](https://investor.uber.com/news-events/news/press-release-details/2026/MOIA-America-to-deploy-autonomous-ID--Buzz-vehicles-on-the-Uber-platform-in-Los-Angeles-by-the-end-of-2026-2026-sJHS8F1vOr/default.aspx) | 有 | 中 |
+| late 2026 | Wayve + 日产 东京试点："scheduled to launch in late 2026" [来源](https://investor.uber.com/news-events/news/press-release-details/2026/Uber-Partners-with-Hinomaru-Kotsu-for-Robotaxi-Pilot-Deployment-in-Tokyo/default.aspx) | 有 | 中 |
+| 2026 年底 | WeRide 马德里："expected to begin by the end of 2026" [来源](https://investor.uber.com/news-events/news/press-release-details/2026/WeRide-Uber-and-AVOMO-Receive-Spains-First-National-Operating-Permit-for-Level-4-Autonomous-Passenger-Vehicles/default.aspx)；苏黎世 "later this year" [来源](https://investor.uber.com/news-events/news/press-release-details/2026/WeRide-and-Uber-Plan-to-Launch-Commercial-Robotaxi-Service-in-Zurich-Expanding-European-Partnership-2026-lbSmf_S3R_/default.aspx) | 马德里有 | 中偏高。WeRide 过去的记录好，马德里已拿到全国 L4 许可 |
+| 2026 年底（Uber 8/5 城市名单） | 慕尼黑。Uber 没写是哪家，可能是 Momenta 或 Autobrains；Autobrains 原文："Pending regulatory approval" | ? | 低 |
+| 2026（CEO 口头说的） | 百度伦敦："Baidu also in London"（[Q2 电话会](https://s23.q4cdn.com/407969754/files/doc_events/2026/Aug/05/Uber-Q2-26-Earnings-Call-Transcript.pdf)） | — | 低。8 月百度说的还是 "began open-road testing" [6-K](https://www.sec.gov/Archives/edgar/data/1329099/000119312526355431/d112854dex991.htm) |
+| 2026Q4 或 2027Q1 | May Mobility Arlington | 有 | 低 |
+| 2027 上半年 | NVIDIA 方案：先洛杉矶和旧金山，"scaling across 28 cities globally by 2028" [来源](https://investor.uber.com/news-events/news/press-release-details/2026/NVIDIA-to-Launch-L4-Software-Driven-Robotaxis-on-Uber-Across-28-Cities-by-2028/default.aspx) | 先用数据采集车 | 未知，全新项目 |
+| 2027 年中 | Nuro + Lucid 休斯敦 "in mid-2027"；Zoox 洛杉矶 "by mid-2027" | — | 中。休斯敦 2026-02 已在"待上线"名单里，后来才定到 2027 年中 |
+| "as soon as 2027" | WeRide 中东三城至少 1,200 辆 [来源](https://investor.uber.com/news-events/news/press-release-details/2026/WeRide-and-Uber-to-Deploy-1200-Robotaxis-in-the-Middle-East-2026--kIzNfL9kh/default.aspx) | 没有 | 中 |
+| 2028 | Rivian 旧金山、迈阿密："expected to begin in San Francisco and Miami in 2028 and will expand to 25 cities by 2031" [来源](https://investor.uber.com/news-events/news/press-release-details/2026/Uber-and-Rivian-Partner-to-Deploy-up-to-50000-Fully-Autonomous-Robotaxis-2026-TViR4R05gi/default.aspx) | 没有 | 远。CEO 8/5 口头说成 "perhaps San Francisco and Miami in 2028" |
+
+**车辆供应的风险：** Lucid 不是只给 Uber 供车。9/17 它和欧洲的 Bolt 签了 "at least 25,000" 辆的意向，但 "No money has changed hands"，也没有时间表。同一篇报道说，Lucid 把中型车平台的首款车推迟了近一年，到 "the second half of 2027"（[TechCrunch](https://techcrunch.com/2026/09/17/lucid-motors-has-a-potential-robotaxi-partner-for-europe/)）。Uber 对这个项目"至少 35,000 辆"的规划里包括这款中型车。
+
+---
+
+### 3. 绕开 Uber、自己直接做的对手
+
+- **Waymo**
+  - 美国 15 个服务城市里，13 个只能用 Waymo 自家 App。只有 Austin 和 Atlanta 标着 "Ride on Uber"（[waymo.com/rides](https://waymo.com/rides/)）。
+  - 规模：Alphabet 4/29 说 "surpassed 500,000 fully autonomous rides per week"（[Google](https://blog.google/company-news/inside-google/message-ceo/alphabet-earnings-q1-2026/)）；目标是 2026 年底 "more than one million paid trips per week"（[Investing.com/Yahoo](https://finance.yahoo.com/news/waymo-eyes-1-million-paid-152515066.html)）。
+  - 海外：伦敦 "intend to offer rides ... in 2026"，用自家 App，现在还列在 "Up Next"；东京 2027 年，走 GO 和 Waymo 两个 App（[Waymo](https://waymo.com/blog/2026/09/opening-tokyo-in-2027-with-nihon-kotsu-go)）。
+  - **Austin 和 Atlanta：** Uber 自己对 TechCrunch 证实，"Waymo already told Uber that it intends to offer robotaxis on its own app in those markets starting in January 2028 and alongside the existing offering"，而且 "the contract ... ends in May 2028"（[TechCrunch 7/24](https://techcrunch.com/2026/07/24/waymo-reportedly-mulling-a-breakup-with-uber/)）。
+- **Tesla**
+  - 只用自家 App，没看到接入 Uber 或其他平台。
+  - Q2 材料（7/22）里：Austin、Dallas、Houston、Miami、Orlando、Tampa 标为 "Ramping Unsupervised"；湾区标为 "Safety Driver"；Phoenix 和 Las Vegas 标为 "Preparations Underway"。这两个城市在 Q4 材料里原定 "1H 2026"，已经错过（[SEC 8-K 附件](https://www.sec.gov/Archives/edgar/data/1318605/000162828026049213/exhibit991.htm)，图片 OCR）。
+  - Austin 从 2025-06-22 起收费，当时副驾坐着安全员（[TechCrunch](https://techcrunch.com/2025/06/22/tesla-launches-robotaxi-rides-in-austin-with-big-promises-and-unanswered-questions/)）；2026-01-22 起部分车没有安全员（[TechCrunch](https://techcrunch.com/2026/01/22/tesla-launches-robotaxi-rides-in-austin-with-no-human-safety-driver/)）。9/3 是没有方向盘的 Cybercab 首发，原文 "invitation-only launch event"（AP）。
+  - 车队规模没有官方数字。
+- **Zoox**：8/10 起在拉斯维加斯用自家 App 收费。全部约 100 辆车，分布在 4 个城市（[TechCrunch](https://techcrunch.com/2026/09/17/amazon-owned-zooxs-100-robotaxi-limit-in-nevada-is-about-to-disappear/)）。Uber 渠道还没上线。
+- **百度**：在迪拜先自营，之后才上 Uber。原文："rides also available through the Uber app, in addition to its own app"（[6-K](https://www.sec.gov/Archives/edgar/data/1329099/000119312526355431/d112854dex991.htm)）。
+- **Uber 的主要反驳：** 合作方的车放在 Uber 上，每辆车每天的单量约比 Waymo 自营高 30%（AV Spotlight 原文 "~30% higher"）。这是 Uber 用第三方数据自己估的。
+
+---
+
+**对论点(公开结论)**:自动驾驶在 Uber 总单量里不到 1%,2028-01 之前不会体现在财报数字上,能动股价的是预期和新闻;2028-01 之前的节点都是"又上了几个城市或试点",在这之前没有哪个已知日期会让这件事见分晓。
+
+### 4. 没查到的
+
+- Uber 平台上的自动驾驶单量、收入、抽成，以及每个城市有多少车。公司从未披露。
+- CEO 说 "hundreds of thousands of trips per week ... less than 0.5%"，这句话的主语不清楚，很可能指全行业。
+- Zoox 在 Uber 上到底有没有上线。Uber IR 最新一条是 9/16 的 Costco 新闻；Google News 检索 9 月也没有上线报道；Zoox 官网是 JS 渲染，读不到。所以我标为"未见上线"，没有确认。
+- Nuro/Lucid 湾区公开上线的具体月份；Nuro 拿到加州收费或无人运营许可的证据。
+- Motional、WeRide Riyadh、Avride Dallas 什么时候撤掉安全员。
+- Waymo 2028-01 和 2028-05 这两个日期：只有 Uber 对媒体的说法，没有 Waymo 的公开原文，也没有 SEC 文件。
+- 慕尼黑对应的是哪家合作方；Hong Kong 和 Houston 为什么从 Uber 的 2026 名单里消失。
+- $10B 每年投多少、会计上怎么处理。
+- 本次 WebSearch 额度已用完。9/16 之后的新闻是用 Google News RSS 补查的。Axios 9/23 的两篇、Lucid CFO 9/24 的采访返回 403，没读到。
