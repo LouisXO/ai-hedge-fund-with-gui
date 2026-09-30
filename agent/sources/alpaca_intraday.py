@@ -45,8 +45,9 @@ def _headers() -> dict:
 def fetch(symbols: list[str], timeframe: str, start: dt.date, end: dt.date, headers: dict) -> pd.DataFrame:
     end_ts = min(dt.datetime.combine(end, dt.time(23, 59), dt.timezone.utc), dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=20))
     frames, token = [], None
+    alp = {s.replace("-", "."): s for s in symbols}      # a class share is BRK.A at Alpaca, BRK-A in the listing (400 on 2026-09-30)
     while True:
-        q = {"symbols": ",".join(symbols), "timeframe": timeframe, "start": f"{start}T00:00:00Z", "end": end_ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        q = {"symbols": ",".join(alp), "timeframe": timeframe, "start": f"{start}T00:00:00Z", "end": end_ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
              "limit": 10000, "feed": "sip", "adjustment": "split", "sort": "asc"}
         if token:
             q["page_token"] = token
@@ -63,7 +64,7 @@ def fetch(symbols: list[str], timeframe: str, start: dt.date, end: dt.date, head
         for sym, bars in (d.get("bars") or {}).items():
             if bars:
                 f = pd.DataFrame(bars)
-                f["ticker"] = sym
+                f["ticker"] = alp.get(sym, sym)
                 frames.append(f)
         token = d.get("next_page_token")
         time.sleep(0.31)

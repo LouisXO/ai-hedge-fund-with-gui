@@ -87,7 +87,7 @@ def runs(db):
 
 
 def crawl(db, fake, **kw):
-    return f4.crawl(path=db, http=f4.Http("test", opener=fake, pause=0), today=TODAY, **kw)
+    return f4.crawl(path=db, http=f4.Http("test", opener=fake, pause=0, retry_waits=(0, 0)), today=TODAY, **kw)
 
 
 def test_realtime_writes_rows_and_an_ok_run_with_no_connection_open_during_downloads(panel):
@@ -248,3 +248,33 @@ def test_open_market_sales_are_kept_and_other_codes_are_not():
     assert f4.parse_filing("edgar/data/1234/0001234567-26-000001.txt", H(grant)) == []
     buy = f4.parse_filing("edgar/data/1234/0001234567-26-000001.txt", H(XML))
     assert [(r["trans_code"], r["acq_disp"]) for r in buy] == [("P", "A")]
+
+
+def test_a_server_error_is_tried_again_and_a_throttle_is_not():
+    calls = {"n": 0}
+
+    def flaky(req, timeout=None):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise urllib.error.HTTPError(req.full_url, 500, "Server Error", None, None)
+        return io.BytesIO(b"ok")
+
+    h = f4.Http("test", opener=flaky, pause=0, retry_waits=(0, 0))
+    assert h.get("https://efts.sec.gov/LATEST/search-index?q=x") == "ok" and h.n_failed == 0 and h.n_retries == 2
+
+    def throttled(req, timeout=None):
+        calls["n"] += 1
+        raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", None, None)
+
+    calls["n"] = 0
+    h = f4.Http("test", opener=throttled, pause=0, retry_waits=(0, 0))
+    assert h.get("https://www.sec.gov/x") is None and calls["n"] == 1 and h.n_failed == 1
+
+
+def test_todays_index_answering_403_is_not_published_yet_but_a_past_day_is_a_failure():
+    def forbidden(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", None, None)
+
+    h = f4.Http("test", opener=forbidden, pause=0, retry_waits=(0, 0))
+    assert f4.index_form4(TODAY, h, TODAY) == [] and h.n_failed == 0
+    assert f4.index_form4(TODAY - dt.timedelta(days=1), h, TODAY) is None and h.n_failed == 1

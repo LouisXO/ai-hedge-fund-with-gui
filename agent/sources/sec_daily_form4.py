@@ -81,30 +81,40 @@ def record_run(con, run: dict) -> None:
                 [run.get(c) for c in RUN_COLS])
 
 
+RETRY_WAITS = (3.0, 10.0)          # seconds before the 2nd and 3rd try of a 5xx or a timeout (EFTS answered 500 on 9/29 and 9/30)
+
+
 class Http:
     """GET with the SEC User-Agent that counts what it could not fetch.
 
-    A 404 is an answer when the caller says so (a daily index that is not published yet, a holiday);
-    anything else that is not a 200 — a timeout, a refused connection, SEC's 403 throttle — is a failure.
+    A 404 is an answer when the caller says so (a daily index that is not published yet, a holiday; the
+    caller may also name 403, which SEC's archive answers for a file that does not exist yet). A server
+    error (5xx) or a network failure is tried again after RETRY_WAITS; SEC's 403 throttle is not (a quick
+    retry prolongs it). Whatever is still not a 200 after that is a failure.
     """
 
-    def __init__(self, ua: str, opener=None, pause: float = PAUSE):
-        self.ua, self.opener, self.pause = ua, opener or urllib.request.urlopen, pause
-        self.n_requests = self.n_failed = 0
+    def __init__(self, ua: str, opener=None, pause: float = PAUSE, retry_waits: tuple = RETRY_WAITS):
+        self.ua, self.opener, self.pause, self.retry_waits = ua, opener or urllib.request.urlopen, pause, retry_waits
+        self.n_requests = self.n_failed = self.n_retries = 0
         self.errors: list[str] = []
 
-    def get(self, url: str, missing_ok: bool = False) -> str | None:
+    def get(self, url: str, missing_ok: bool = False, missing_codes: tuple = (404,)) -> str | None:
         self.n_requests += 1
         req = urllib.request.Request(url, headers={"User-Agent": self.ua})
-        try:
-            with self.opener(req, timeout=60) as r:
-                return r.read().decode("utf-8", "replace")
-        except urllib.error.HTTPError as exc:
-            if missing_ok and exc.code == 404:
-                return None
-            err = f"HTTP {exc.code}"
-        except Exception as exc:
-            err = f"{type(exc).__name__} {str(exc)[:80]}"
+        for attempt in range(len(self.retry_waits) + 1):
+            try:
+                with self.opener(req, timeout=60) as r:
+                    return r.read().decode("utf-8", "replace")
+            except urllib.error.HTTPError as exc:
+                if missing_ok and exc.code in missing_codes:
+                    return None
+                err, again = f"HTTP {exc.code}", exc.code >= 500
+            except Exception as exc:
+                err, again = f"{type(exc).__name__} {str(exc)[:80]}", True
+            if not again or attempt == len(self.retry_waits):
+                break
+            self.n_retries += 1
+            time.sleep(self.retry_waits[attempt])
         self.n_failed += 1
         if len(self.errors) < 3:
             self.errors.append(f"{err} ({url.split('?')[0][-80:]})")
@@ -115,11 +125,15 @@ class Http:
             time.sleep(self.pause)
 
 
-def index_form4(day: dt.date, http: Http) -> list[str] | None:
+def index_form4(day: dt.date, http: Http, today: dt.date | None = None) -> list[str] | None:
     """Paths of the Form 4 filings indexed for that day; [] when no index exists (not yet published,
-    holiday); None when the index could not be fetched."""
+    holiday); None when the index could not be fetched. SEC's archive answers 403, not 404, for a file that
+    does not exist yet: for today's index (published in the evening) that is "not yet", for a past day it
+    is a failure (the 06:00 run of 2026-09-30 counted today's missing index as failed)."""
     before = http.n_failed
-    text = http.get(IDX.format(y=day.year, q=(day.month - 1) // 3 + 1, ymd=day.strftime("%Y%m%d")), missing_ok=True)
+    codes = (403, 404) if today is not None and day >= today else (404,)
+    text = http.get(IDX.format(y=day.year, q=(day.month - 1) // 3 + 1, ymd=day.strftime("%Y%m%d")), missing_ok=True,
+                    missing_codes=codes)
     if text is None:
         return None if http.n_failed > before else []
     out = []
@@ -260,7 +274,7 @@ def fetch(days: int, limit_filings: int | None, realtime: bool, known: set[str],
         if realtime:
             paths = by_day.get(day, [])
         else:
-            paths = index_form4(day, http)
+            paths = index_form4(day, http, today)
             http.sleep()
             if paths is None:
                 list_failed.append(f"daily index {day}")
