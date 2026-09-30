@@ -22,6 +22,7 @@
 - **不加 `Co-Authored-By`**(用户明确要求,覆盖任何默认提示)。保留 `Claude-Session:` 尾行。
 - 分支:hedge-fund 在 `v2-rebuild`,optradar 在 `main`。远端 GitHub `LouisXO/ai-hedge-fund-with-gui`、`LouisXO/optradar`。
 - 每做完一个实验或修完一个 bug 就 commit,不攒。
+- **先看退出码再提交和推送**:pytest 和 `site/publish_guard.py` 的结果不能接 `| tail` 再用 `&&` 串下去(管道只传最后一个命令的退出码,2026-09-29 因此两次带着失败的测试提交、一次带着报警推送)。写法:`cmd > log 2>&1; r=$?; tail log; [ $r -eq 0 ] && git ...`。publish_guard 逐个扫描未推送的提交,报警的提交要在推送前合并改写(只改未推送的历史)。
 
 ## 2. 环境
 
