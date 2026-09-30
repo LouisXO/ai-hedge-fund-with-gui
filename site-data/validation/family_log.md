@@ -120,7 +120,7 @@ One backtest, one row: 10 re-runs of the same book under another name (same trad
 
 ## Base book: PSR(0) and deflated Sharpe
 
-alpha2 series (alpha + residual on SPY and IWM − SPY) of `s47_base_nav.csv` [v1c], 2017-01-03 → 2026-08-31, T = 2427: alpha2 +8.55%/yr, NW t 1.44 (iid t 1.36). This NAV is the latest restatement on the corrected data (agent/s47_restate.py: S47, then S47b); the base row in the ledger above still comes from its own report, so its t and alpha2 can differ from these.
+alpha2 series (alpha + residual on SPY and IWM − SPY) of `s47_base_nav.csv` [v1c], 2017-01-03 → 2026-08-31, T = 2427: alpha2 +8.54%/yr, NW t 1.44 (iid t 1.36). This NAV is the latest restatement on the corrected data (agent/s47_restate.py: S47, then S47b); the base row in the ledger above still comes from its own report, so its t and alpha2 can differ from these.
 
 **PSR(0) = 0.924** (no selection at all; the usual bar is 0.95).
 
