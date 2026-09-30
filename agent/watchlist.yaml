@@ -44,6 +44,20 @@ watch:
     cik: "0001418819"
     note: "RKLB 收购对象:每股 $27 现金 + RKLB 股票(0.24–0.40 股);9/24 投票通过;盯 FCC 和海外审批、交割 8-K、摘牌"
     forms: ["8-K", "425", "10-Q", "DEFA14A", "25-NSE", "15-12B"]
+  UBER:
+    cik: "0001543151"
+    note: "无系统信号(长线排名 1550/2219);自动驾驶担忧压低估值,盈利仍在增长;财报前不追;论点失效:总交易额增速 < 15% 或下修指引、再有独家合作方改推自家 App、Delivery Hero 发股融资或评级下调。见 docs/notes/UBER.md"
+    forms: ["10-Q", "10-K", "8-K", "4", "144", "424B2", "424B5", "SCHEDULE 13D", "SCHEDULE 13G"]   # 424B5 = equity issuance
+    below: [66.0, 65.94, 58.5]                        # 65.94 one-year closing low (2026-07-24); 58.5 two-year low (2024-08-05)
+    above: [75.0, 80.0]
+    events:                                           # docs/notes/UBER.md (2026-09-29/30); estimates say so
+      - {date: "2026-10-28", text: "Tesla Q3 财报(估计),看 Robotaxi 新城市"}
+      - {date: "2026-11-03", text: "Uber Q3 财报窗口 11/3–11/5(估计,盘前);期权定价单日约 ±5–7%"}
+      - {date: "2026-11-05", text: "Delivery Hero 要约接受期截止(纽约 18:00)"}
+      - {date: "2026-11-20", text: "月度期权到期"}
+      - {date: "2026-12-31", text: "Uber 年底 15 城自动驾驶目标、湾区 Nuro/Lucid 公开上线的检查点"}
+      - {date: "2027-01-15", text: "期权到期"}
+      - {date: "2027-02-03", text: "Uber Q4 财报(估计)"}
   IONQ:
     cik: "0001824920"
     note: "不追;S25 负面格子(9/22 +10% 新闻日 + 散户 20 倍);股本 18 个月翻倍,等下一轮发股落地;可能入场 $30–35;11/5 财报前不持期权"
