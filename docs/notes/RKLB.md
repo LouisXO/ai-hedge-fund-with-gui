@@ -116,3 +116,115 @@
 22. "Sir Peter Beck | Chief Executive Officer | March 27, 2026 | 5,000,000 | July 8, 2026"
 23. "While the window for an end-of-year launch date is narrowing, we are balancing the schedule of the first launch with entering Neutron into service as a system ready for full-scale production and high-cadence launch beyond flight one. Exact launch timing will also depend on the outcome of first stage qualification and other critical tests occurring later in 2026."
 24. "(i) if the Rocket Lab Common Stock Price is equal to or less than $67.50, then the Exchange Ratio will be 0.4000; (ii) if the Rocket Lab Common Stock Price is greater than $67.50 but less than $112.50, then the Exchange Ratio will be the quotient obtained by dividing $27.00 by the Rocket Lab Common Stock Price … (iii) … equal to or greater than $112.50, then the Exchange Ratio will be 0.2400."；VWAP 的区间（424B3）："the ten consecutive trading days ending on and including the second full trading day prior to the First Effective Time"
+
+
+## 2026-09-30 更新:Synspective 20 次 Electron 合同(收盘后发布)
+
+### 结论
+今天只有一条新消息：收盘后，Rocket Lab 宣布 Synspective 再签 20 次 Electron 发射，执行期 2028–2031 年。方向是利好，但金额小、时间远。按我的估算，合同约 1.4–1.8 亿美元，不到市值的 0.4%，2027 年以前不产生收入。另外两条"新闻"都是旧闻：Kepler 的 Neutron 合同，和 Iridium 的"final hurdle"。**RKLB 的加仓计划和 90/150 价差的读法都不用改。**
+
+### 1. 发生了什么
+
+**① Synspective 20 次 Electron：新消息，已核实一手来源**
+- **时间**：GlobeNewswire 稿件标注 "September 30, 2026 19:00 ET"，也就是 16:00 PT，收盘后 3 小时。Synspective 10/1（东京时间）同步发了英文稿和 TDnet 公告。
+- **内容**：
+  - "signed a multi-year launch agreement for 20 new Electron missions"
+  - "scheduled to take place annually from 2028 through 2031"
+  - 从新西兰 LC-1 发射到太阳同步轨道（SSO）。
+- **确定订单还是期权**：三份文件都写的是 20 次（"20 dedicated launches"／「20機の専用打上げ」），都没有出现 option 或 up to。但也都没有写 firm，取消条款和付款条款都没披露。所以只能说"文件里没有期权"，不能确认 20 次全部不可撤销。
+- **金额**：没有披露，原文是 "The remaining terms of the deal are undisclosed." 公司也没为此提交 8-K，EDGAR 上最新一份仍是 9/15 的。
+- **累计**：Synspective 的合同发射共 47 次，"34 of which have yet to fly"。拆开看：截至 9/25 已发射 13 颗；旧合同剩 14 次，加上这次新增 20 次，共 34 次。Rocket Lab 称发射积压 "beyond 100 missions"，8/10 Q2 财报时是 "90+ launches"。
+- **"史上最大"要打折看**：Rocket Lab 的原话是 "largest commercial launch contract for Electron"，限定在 Electron 的商业合同。公司史上最大的发射合同仍是 5/7 那份（5 次 Neutron 加 3 次 Electron）。Synspective 英文稿也只说是 "one of the largest multi-launch agreements Rocket Lab has signed with a single customer"。
+- **对 Synspective 自身的影响**：TDnet 公告说，对它 2026 财年业绩预测「影響はございません」。
+
+**② Kepler 的 Neutron 合同：旧闻**
+- Kepler 在 8/10 16:10 ET 就公布了：1 次专用 Neutron 发射，"scheduled no earlier than 2028"，金额未披露。
+- Motley Fool 9/30 那篇只是评论文章。
+- Investing.com 9/30 把它写成 "a newly reported dedicated launch contract"，这个说法是错的。
+
+**③ biggo 的 "Iridium Deal Clears Final Hurdle"：旧闻重炒**
+- 原文写的是 "cleared the final shareholder hurdle"，指的是 9/24 的股东投票，不是监管批准。
+- FCC 案卷 26-257 里最新的文件仍是 9/23 的 ex parte，没有批准。10/15 的评论截止日照旧。
+- IRDM 最新的 SEC 申报是 9/24 的 8-K。
+
+### 2. 有多大（我的估算，不是公司数据）
+单价假设为每次 700–920 万美元。920 万是 10-Q 披露的 2026 年上半年每次发射收入（revenue per launch），其中含单价更高的 HASTE；批量加单的价格大概率不会更高。
+
+| 项目 | 估算 |
+|---|---|
+| 20 次合计 | 1.4–1.8 亿美元 |
+| 每年金额（平均每年约 5 次，按均匀分布假设） | 3,500–4,600 万美元 |
+| 占 6/30 总积压 23.56 亿美元 | 6–8% |
+| 占其中发射积压 9.40 亿美元 | 15–20% |
+| 每年金额 ÷ 2025 年发射收入 1.99 亿美元 | 18–23% |
+| 每年金额 ÷ 当前年化收入约 10.3 亿美元（Q3 指引中值 × 4） | 3–4.5% |
+| 占市值约 440–470 亿美元（股数：8/5 普通股 5.98 亿股，加 ATM 2,930 万股，是否计入 4,100 万优先股决定上下限） | 0.3–0.4% |
+| 对 2026–2027 年收入的贡献 | 0（发射完成时才确认收入，最早 2028 年） |
+
+**对手方风险：中等，但金额小，对 RKLB 不构成实质问题。**
+- **Synspective 还在亏损**：上半年营业亏损 33.5 亿日元。半年报里写了「継続企業の前提に重要な疑義を生じさせる事象又は状況が存在」，但结论是「重要な不確実性は認められない」。
+- **付款来源**：
+  - 6/30 现金 162 亿日元；
+  - 9/17 签的 200 亿日元无担保银团贷款，用途写明是「衛星の製造・打上げ費用」；
+  - 防卫省卫星星座项目里，它参与的三方合同 1,056 亿日元，期限到 2031 年 3 月。
+- **H3 订单**：它 9/18 还订了 2027 年用日本 H3 火箭发射 2 颗卫星。
+- **Rocket Lab 给客户提供融资**：RKLB 的 10-Q 显示，公司给三家签了多次发射合同的商业客户提供次级贷款，6/30 余额 3,215 万美元，没有写客户名。
+
+### 3. 股价反应
+- **盘中冲高后回落，和这条新闻无关**：Investing.com 10:17 AM 报道 "surged 5.1% in morning trading today, reaching $73.23"。文中列的原因包括：
+  - PCE 低于预期；
+  - ARK 买入；
+  - Cantor 维持 Overweight 评级和 $122 目标价；
+  - 被误当成新闻的 Kepler 合同。
+
+  收盘 69.68，前收 69.70，基本平盘，早盘涨幅全部回吐。Synspective 的消息是收盘后 3 小时才发的。
+- **盘后才是对 Synspective 的反应**：盘后 71.72（+2.9%），夜盘 71.59。Stocktwits 20:57 ET 报道 "jumped 3% in after-hours trading"。
+- **市场在定价什么**：+2.9% 约等于市值增加 13–14 亿美元，是合同估算额的 7–10 倍。所以市场买的是信号：Electron 的需求能延续到 2031 年、积压超过 100 次、老客户继续加单。买的不是这份合同的现金流。
+- **还要看 10/1 正式开盘**：盘后成交稀薄，要看 10/1 正常交易时间能否守住 71–72。早盘在 73 附近被压回，20 日区间上沿约 74.4，这一带是近处的卖压位（我的判断）。
+
+### 4. 对我们的含义
+
+**RKLB 加仓计划：不变。**
+- 盘后价 71.7 高于 65–69 的加仓区，低于确认线 81，按计划没有动作。
+- 今天属于"新闻加上涨"，按规则不追，至少等 5 个交易日。
+- 作废线 58 不变。
+- 关键事件仍是两个：Q3 财报（日期公司未公布，MarketBeat 估计 11/9）和 Neutron。Neutron 的目标是 Q4 运到发射台，年底前首飞的窗口 "is narrowing"。
+
+**90/150 价差：读法不变。**
+- 这份合同的收入全部在 2027-03-19 到期之后。
+- 从收盘 69.68 涨到 90 需要 +29%；从盘后 71.72 算，需要 +25%。
+- 按收盘中间价 8.65 和 2.41，价差成本约 6.24，到期盈亏平衡点约 96.2，比收盘价高 38%。
+- 能推动这种幅度的仍然只有 Neutron 进展和财报。这条新闻最多改善情绪。
+
+**Q3 财报时可以顺带核对两点：**
+1. 积压次数和积压金额有没有计入这份合同。10-Q 的积压口径不含未行使的期权，而且签约日在 9/30 或之前才会计入 Q3。
+2. Electron 的每次发射收入有没有变化。
+
+### 5. 没查到的
+- 合同金额、付款节奏、取消条款；20 次是否全部不可撤销。
+- 签约日期，这决定是否计入 Q3 积压。
+- Synspective 是否属于那三家拿到 Rocket Lab 次级贷款的商业客户。
+- Synspective 的 200 亿日元贷款 9/30 是否已经放款（公告写的是「予定」）。
+- 盘后成交量，以及盘后涨幅里有多少来自这条新闻。
+- 9/28–29 Stocktwits 报道 "Rocket Lab Tops 400 Archimedes Hot Fires, Neutron Engine Set Enters Production"（Archimedes 是 Neutron 的发动机），我没找到一手来源。
+- rocketlabcorp.com 被 Cloudflare 拦截，所以 Rocket Lab 的原文取自 GlobeNewswire。
+
+### 来源
+- Rocket Lab 新闻稿，9/30 19:00 ET：https://www.globenewswire.com/news-release/2026/09/30/3372466/0/en/rocket-lab-secures-largest-ever-electron-commercial-deal-20-launch-contract-for-synspective.html
+- Synspective 英文稿：https://www.synspective.com/news/rocketlab_20_mla/
+- Synspective TDnet 公告，10/1：https://www.release.tdnet.info/inbs/140120261001543778.pdf
+- 第 97 次发射新闻稿（13 颗已发射、剩 14 次）：https://www.globenewswire.com/news-release/2026/09/26/3369387/0/en/mission-success-rocket-lab-launches-97th-electron-mission.html
+- 5/7 公司史上最大发射合同：https://www.globenewswire.com/news-release/2026/05/07/3290605/0/en/rocket-lab-s-biggest-launch-deal-yet-confidential-customer-books-multiple-neutron-and-electron-launches.html
+- Kepler 新闻稿，8/10：https://www.globenewswire.com/news-release/2026/08/10/3342240/0/en/kepler-selects-rocket-lab-s-neutron-for-first-dedicated-launch-as-network-expansion-accelerates.html
+- RKLB Q2 10-Q（积压、每次发射收入、客户融资、Neutron）：https://www.sec.gov/Archives/edgar/data/1819994/000181999426000062/rklb-20260630.htm
+- RKLB Q2 财报新闻稿（90+ 次、Q3 指引）：https://www.sec.gov/Archives/edgar/data/1819994/000181999426000061/rklb-08102026ex991.htm
+- RKLB FY2025 10-K（2025 年发射收入 1.99 亿美元）：https://www.sec.gov/Archives/edgar/data/1819994/000181999426000013/rklb-20251231.htm
+- EDGAR 申报列表：https://data.sec.gov/submissions/CIK0001819994.json ；https://data.sec.gov/submissions/CIK0001418819.json
+- FCC 案卷 26-257：https://publicapi.fcc.gov/ecfs/filings?proceedings.name=26-257
+- Synspective 半年报（决算短信）：https://contents.xj-storage.jp/xcontents/AS04951/a2ff282d/b52b/434a/b0c8/068121216c16/140120260813519868.pdf
+- Synspective 银团贷款公告：https://www.release.tdnet.info/inbs/140120260917538149.pdf
+- Synspective 防卫省合同：https://www.synspective.com/jp/news/satellite-constellation-project_2/
+- Synspective H3 发射合同：https://www.synspective.com/news/mhi_lsa/
+- biggo（二手来源）：https://finance.biggo.com/news/710b3f95-12b0-41ec-a78c-94974a9d7d0f
+- Investing.com（二手来源）：https://www.investing.com/news/stock-market-news/why-is-rocket-lab-stock-rallying-today-93CH-4925419
+- Stocktwits 盘后报道（二手来源）：https://stocktwits.com/news-articles/markets/equity/rklb-stock-rocketlab-biggest-commercial-electron-deal-20-new-launches/cZDiVjDRBLZ
