@@ -702,14 +702,35 @@ RULE_NAMES = {"paper_rejected": "模拟盘订单被拒", "paper_reconcile": "账
               "real_vs_insiders": "实盘逆内部人卖出买入", "real_concentration": "实盘单一持仓 ≥ 40%", "real_add_same_day": "实盘同一合约当日加仓"}
 
 
+def balder_record_block() -> str:
+    """Balder's public record (agent/balder_record.py): both books' closed trades against QQQ over each trade's window."""
+    try:
+        b = json.load(open(os.path.join(OUT_DIR, "balder_record.json")))
+    except Exception:
+        return ""
+    if not b.get("n"):
+        return ""
+    line = lambda name, s: (f"<tr><td>{esc(name)}</td><td>{s.get('n', 0)}</td><td>{pct(s.get('mean_ret'))}</td><td>{pct(s.get('mean_qqq'))}</td>"
+                            f"<td>{pct(s.get('mean_ex_qqq'))}</td><td>{'' if s.get('t') is None else s['t']}</td>"
+                            f"<td>{'' if s.get('beat_qqq') is None else format(s['beat_qqq'], '.0%')}</td></tr>")
+    rows = line("短线算法(全部)", b.get("algo", {})) + line("长线书(全部)", b.get("long", {}))
+    rows += "".join(line(f"短线 · {k}", v) for k, v in sorted(b.get("by_strategy", {}).items()))
+    rows += line("短线(近 7 天)", b.get("week", {}).get("algo", {})) + line("长线(近 7 天)", b.get("week", {}).get("long", {}))
+    opn = "、".join(f"{o['symbol']} {o['ret_pct']:+.1f}%" for o in b.get("open", []))
+    return (f"<p class='muted'>来源:balder-ai.com/record 公开记录(每天 16:10 取一次,含亏损单)。每笔按自己的进出日期对比同期 QQQ;只做记分对照,不进任何信号。</p>"
+            f"<div class='tbl'><table><tr><th></th><th>笔数</th><th>平均</th><th>同期 QQQ</th><th>超额</th><th>t</th><th>跑赢 QQQ</th></tr>{rows}</table></div>"
+            + (f"<p class='muted'>在场:{esc(opn)}</p>" if opn else ""))
+
+
 def balder_block() -> str:
     """Trades forwarded from Balder's X posts (agent/balder_log.py), scored 1/5/20 sessions vs SPY. Private site only."""
+    rec = balder_record_block()
     try:
         b = json.load(open(os.path.join(OUT_DIR, "balder_latest.json")))
     except Exception:
-        return "<p class='muted'>还没有记录。把 Balder 的帖子以文本分享到 iCloud Drive 的 Balder 文件夹,收盘后自动解析记分。</p>"
+        return rec + "<p class='muted'>X 订阅帖子:还没有记录。把 Balder 的帖子以文本分享到 iCloud Drive 的 Balder 文件夹,收盘后自动解析记分。</p>"
     if not b.get("n"):
-        return "<p class='muted'>还没有记录(把帖子文本放进 iCloud Drive/Balder,每天 13:25 解析)。</p>"
+        return rec + "<p class='muted'>X 订阅帖子:还没有记录(把帖子文本放进 iCloud Drive/Balder,每天 13:25 解析)。</p>"
     score = ""
     for book, s in b.get("by_book", {}).items():
         cells = "".join(f"<td>{v['n']}</td><td>{pct(v['mean'])}</td><td>{pct(v['mean_abn'])}</td><td>{'' if v['hit'] is None else format(v['hit'], '.0%')}</td>" for v in (s["h1"], s["h5"], s["h20"]))
@@ -718,7 +739,7 @@ def balder_block() -> str:
                    f"<td>{'' if r.get('price') is None else format(r['price'], '.2f')}</td><td class='muted'>{esc(r.get('strategy') or '')}</td>"
                    f"<td>{pct(r.get('ret1'))}</td><td>{pct(r.get('ret5'))}</td><td>{pct(r.get('ret20'))}</td><td class='muted'>{esc(r.get('note') or '')}</td></tr>"
                    for r in b.get("recent", []))
-    return (f"<p class='muted'>来源:Balder 在 X 的订阅帖子,由用户转存;只做记分对照,不进任何信号,不上公开站。开仓从帖子次日开盘起算收益。共 {b['n']} 条。</p>"
+    return rec + (f"<p class='muted'>来源:Balder 在 X 的订阅帖子,由用户转存;只做记分对照,不进任何信号,不上公开站。开仓从帖子次日开盘起算收益。共 {b['n']} 条。</p>"
             f"<div class='tbl'><table><tr><th>书</th><th>1日 n</th><th>均值</th><th>超额</th><th>胜率</th><th>5日 n</th><th>均值</th><th>超额</th><th>胜率</th><th>20日 n</th><th>均值</th><th>超额</th><th>胜率</th></tr>{score}</table></div>"
             f"<div class='tbl'><table><tr><th>日期</th><th>书</th><th>代码</th><th>动作</th><th>价格</th><th>策略</th><th>1日</th><th>5日</th><th>20日</th><th>摘要</th></tr>{rows}</table></div>")
 

@@ -26,6 +26,7 @@ else
   $PY -W ignore -m agent.execute >> "$LOG" 2>&1 || { echo "execute (dry) FAILED (exit $?)" >> "$LOG"; FAILED_STEPS="$FAILED_STEPS execute_dry"; }
 fi
 $PY -W ignore -m agent.watch >> "$LOG" 2>&1 || echo "watchlist failed (non-fatal)" >> "$LOG"
+$PY -W ignore -m agent.balder_record >> "$LOG" 2>&1 || echo "balder record failed (non-fatal)" >> "$LOG"   # balder-ai.com/record, once a day; private
 $PY -W ignore -m agent.dashboard >> "$LOG" 2>&1 || echo "dashboard failed (non-fatal)" >> "$LOG"
 $PY -W ignore site/build_paper.py >> "$LOG" 2>&1 || echo "paper page failed (non-fatal)" >> "$LOG"      # private copy of the public paper page (+ public copy, pushed at 08:41)
 $PY -W ignore -m agent.health --no-llm-probe >> "$LOG" 2>&1 || echo "health check failed (non-fatal)" >> "$LOG"                               # out/health.json for the front page; notifies on a new failure
