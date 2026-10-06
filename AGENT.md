@@ -48,7 +48,7 @@
 | 周一到周五 13:25 | `com.louis.agent.postclose` | `agent/bin/postclose.sh`(收盘后 25 分钟):`agent.execute --sync-only`(当日 bars、成交同步、对账、记净值,不下单)→ moomoo 账户快照 → moomoo 股数核对(`agent.sources.moomoo_shares`,只读行情接口,S47b)→ `agent.watch` → **`agent.review` 今日复盘**(模拟盘 + 实盘每笔交易、规则检查、30 日教训计数、通知)→ `agent.dashboard` → 私有站 |
 | (13:25 任务末尾) | 数据存档 | `sec_forms update`(424B5/S-3/144)、`av_estimates --max 20`(每天 20 家盈利预测,最大市值优先)、`daily_archive`(moomoo IV/HV、目标价共识、券商评级明细;Alpaca 难借券标记)。盘中 K 线 `alpaca_intraday`(30 分钟全池 2019 起、5 分钟期权名 2023-12 起,只存正常交易时段)。时点数据库:`filings.db`、`estimates.db`、`archive.db`、`auctions.db`、`short.db`、`intraday.db` |
 | (13:25 任务最后;周日 03:00) | 备份 + 健康检查 | `agent.backup`:每日档(optradar.db、archive/estimates/retail/auctions/filings、状态文件、out/agent;留 14 份),周日 `--weekly`(panel/options/news/short/intraday;留 2 份)→ iCloud Drive `OptRadarBackup/`。复制时持只读连接、复制后做恢复测试、zstd 压缩;被写入占用的库跳过并在健康页标出。**密钥不备份到云**。恢复:`zstd -d x.db.zst -o x.db`。`agent.health`:每个定时任务结束时写 `out/health.json`(launchd 任务是否加载/按时跑、18 个数据集的新鲜度、OpenD、Alpaca、Claude 登录、电源、磁盘、AV 配额、备份),私有站首页顶部显示,出现新的故障时推送通知 |
-| 周一到周五 16:10 | `com.louis.agent.execute` | `agent/bin/execute.sh`:实时 Form 4(EFTS)→ 13D → Alpaca 新闻 → **`agent.execute --submit`**(仅 `AGENT_EXEC=on`)→ `agent.watch`(晚间申报)→ 私有站。留在 16:10 是因为 OPG 窗口 19:00 ET 才开,且当天 Form 4 多在 16:00–18:00 ET 提交 |
+| 周一到周五 16:10 | `com.louis.agent.execute` | `agent/bin/execute.sh`:实时 Form 4(EFTS)→ 13D → Alpaca 新闻 → **`agent.execute --submit`**(仅 `AGENT_EXEC=on`)→ `agent.watch`(晚间申报)→ `agent.market_breadth`(大盘体检)→ 私有站。留在 16:10 是因为 OPG 窗口 19:00 ET 才开,且当天 Form 4 多在 16:00–18:00 ET 提交 |
 | 周一到周五 19:15 | `com.louis.agent.late_insider` | `agent/bin/late_insider.sh`(S47b):EDGAR 22:00 ET 停止受理后再抓一次当天 Form 4,只给内部人书下单;同一信号日的订单号相同,不会重复。**要同时有 AGENT_EXEC=on 和 `~/.hedge-fund/agent/late_insider.ok` 才发单**,否则只打印计划;日志 `out/agent/late_insider.log`。plist 在 `agent/launchd/`,由用户安装 |
 | 周六 09:30 | `com.louis.optradar.weekly` | 周报 |
 | 周日 03:00 | `com.louis.agent.fundamentals` | XBRL 基本面周更 + 七层数据审计(`agent/audit.py`) |
@@ -75,7 +75,7 @@
 - 长线 v1 的真实性质(S24/S29/S30):**基本面过滤后的动量尾部 + 深度价值簇**,两簇各占约 45%/48%。行业中性、rank-normal、纯动量都比它差。只有 momcrash(SPY 低于 2 年高点 20% 时停用动量)有帮助,做成 v2 影子线 `composite_long_v2`,每天并排记录,不交易。
 - 长线回测(2017–2026-08,S47b 重述):alpha2 +8.55%/年(t 1.44),CAGR 20.0%。加入动量、价值、质量、低波 ETF 后还剩 +7.2%/年(t 1.5),动量暴露 +1.08(S45 D3)。这是弱证据,所以模拟盘要攒记录。
 - 唯一 Holm 显著的信号是**负面**的:S25 "大涨日 + 新闻"后续跑输。S32 看跌期权流也是负面因子。这两个列入待预注册的负面过滤器。
-- 模拟器成交按开盘后第一个卖一,不是开盘印,小盘股偏贵约 0.6%。`agent_orders.model_px` 记当天开盘价,差值就是要测的东西。S27 工具在 ≥ 20 次竞价成交后跑。
+- 模拟器成交按开盘后第一个卖一,不是开盘印,小盘股偏贵约 0.6%。`agent_orders.model_px` 记当天开盘价,差值就是要测的东西。**S27 已于 2026-10-06 重跑**:长线实测 0.59%/边 → alpha2 +2.6%(t 0.43);内部人 1.04%/边 → −51.7%(t −12)。盈亏平衡约为长线 0.95%/边、内部人 0.30%/边(描述性扫描):**内部人书只有以开盘竞价成交才可能赚钱,模拟器口径必亏**;页面头条和偏离监控都按竞价口径。
 - 模拟盘保真缺口:whole shares 让 $2k 槽位在高价股上欠配;EDGAR 每日索引 16:40 ET 后才出,所以实时线用 EFTS。
 - **评估点已预注册**(`agent/config.yaml`,2026-09-23):长线 100 笔平仓或 2027-06-30,内部人 200 笔平仓或 2027-06-30,先到为准。之前不对任何一本书下判决;早报模拟盘一节显示进度。
 - 否定过的线(不要再提议):13D 举牌(S21)、小盘 PEAD(S22)、大动 ± 新闻四格(S25)、8-K 回购公告(S34)、异常期权流做多(S32)、大盘选股九个规则(S37)、空头持仓否决(S38)、增发/货架/Form 144 否决(S39)、内部人当天盘中入场(S41)、期权便宜度门含 5 分钟 RV 版本(S26/S42:比率门的显著性是陈旧成交价伪影,VWAP 计价后为零)。
@@ -93,6 +93,8 @@ agent/
   dividends.py / evaluate.py   分红计入净值(不计入现金);评估指标(只写 out/agent/evaluate.json,不上页面头条)
   daily.py / brief.py   早报 ⑨ 节(模拟盘、关注名单、叙述)
   watch.py + watchlist.yaml   关注名单:申报/内部人/13D/新闻/价位/散户热度/分析师共识/期权大单 → 通知
+  market_breadth.py     大盘体检(16:10 后):前 500 大市值加权 vs 等权、广度、拉动/拖累、前 15 大 + TSM/ASML、近期财报(AV 日历,3 天一取)
+                        → out/agent/market_breadth.json → 私有站。只看,不进任何一本书(S37)
   balder_log.py         Balder(X 订阅)帖子 → 跟单记分:用户把帖子文本放进 iCloud Drive/Balder,收盘后密封 LLM 提取交易、按次日开盘记 1/5/20 日收益。**不抓 X,不上公开站,不进信号**
   watch_reminders.py    把关注名单价位同步成 moomoo App 价格提醒(只动 note 以 agent 开头的,用户自己设的不碰;只用行情接口,不开交易接口)
   dashboard.py          仪表盘 out/dashboard.html(Chart.js,可悬停):模拟盘净值 vs SPY、每笔成交偏差、当日持仓、实盘月度、回测按年、教训计数;数据 out/dashboard_data.json

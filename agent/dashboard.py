@@ -235,23 +235,32 @@ def _p(v, nd=2) -> str:
     return "—" if v is None else f"<span class='{'pos' if v >= 0 else 'neg'}'>{v:+.{nd}f}%</span>"
 
 
+def _headline(r: dict) -> tuple[float, str]:
+    """The auction basis is what the books are judged on (S27 / 2026-10-06); the simulator basis only when it is missing."""
+    if r.get("auction_tr") is not None:
+        return r["auction_tr"], f"竞价口径含分红(评估口径);模拟器口径含分红 {_p(r.get('sim_tr'))}"
+    return r["sim_tr"], "模拟器口径含分红(竞价口径暂缺)"
+
+
 def book_cards(base: dict, closed: dict) -> str:
-    """One card per book and one for the total: the return since the close before the first fill on the simulator basis
-    with dividends, and on the same line the auction basis, SPY, QQQ over the same days and the average invested share."""
+    """One card per book and one for the total: the return since the close before the first fill on the auction basis
+    with dividends (the evaluation basis; the simulator basis on the line below), SPY, QQQ over the same days and the
+    average invested share."""
     cards = ""
     for b, x in base.get("books", {}).items():
-        r = x["ret"]
+        v, basis = _headline(x["ret"])
         cards += (f"<div class='card'><div class='k'>模拟盘 · {x['label']} · 自 {x['base_day']} 收盘</div>"
-                  f"<div class='v {'pos' if (r['sim_tr'] or 0) >= 0 else 'neg'}'>{r['sim_tr']:+.2f}%</div>"
-                  f"<div class='s'>模拟器口径含分红;竞价口径含分红 {_p(r['auction_tr'])}</div>"
+                  f"<div class='v {'pos' if (v or 0) >= 0 else 'neg'}'>{v:+.2f}%</div>"
+                  f"<div class='s'>{basis}</div>"
                   f"<div class='s'>同期 SPY {_p(x['bench']['SPY'])} · QQQ {_p(x['bench']['QQQ'])}(adj_close,含分红)</div>"
                   f"<div class='s'>平均仓位 {'—' if x['exposure_avg_pct'] is None else format(x['exposure_avg_pct'], '.0f') + '%'} · "
                   f"首笔成交 {x['first_fill']} · {x['n_sessions']} 个交易日 · 已平 {closed.get(b, 0)} 笔</div></div>")
     c = base.get("combined")
     if c:
+        v, basis = _headline(c["ret"])
         cards += (f"<div class='card'><div class='k'>{len(c['books'])} 本书合计 · 自 {c['base_day']} 收盘</div>"
-                  f"<div class='v {'pos' if c['ret']['sim_tr'] >= 0 else 'neg'}'>{c['ret']['sim_tr']:+.2f}%</div>"
-                  f"<div class='s'>按日收益连乘,模拟器口径含分红;竞价口径含分红 {_p(c['ret']['auction_tr'])}</div>"
+                  f"<div class='v {'pos' if v >= 0 else 'neg'}'>{v:+.2f}%</div>"
+                  f"<div class='s'>按日收益连乘,{basis}</div>"
                   f"<div class='s'>同期 SPY {_p(c['bench_ret']['SPY'])} · QQQ {_p(c['bench_ret']['QQQ'])}</div>"
                   f"<div class='s'>平均仓位 {'—' if c['exposure_avg_pct'] is None else format(c['exposure_avg_pct'], '.0f') + '%'}</div></div>")
     return cards

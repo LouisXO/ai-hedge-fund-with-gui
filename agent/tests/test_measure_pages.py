@@ -24,9 +24,18 @@ def _base():
 def test_cards_name_the_start_the_basis_spy_qqq_and_invested_share():
     base, _ = _base()
     html = dashboard.book_cards(base, {"long": 0})
-    for s in ("自 2026-09-21 收盘", "模拟器口径含分红", "竞价口径含分红", "SPY", "QQQ", "平均仓位", "首笔成交 2026-09-22"):
+    for s in ("自 2026-09-21 收盘", "模拟器口径含分红", "竞价口径含分红(评估口径)", "SPY", "QQQ", "平均仓位", "首笔成交 2026-09-22"):
         assert s in html
     assert "alpha" not in html.lower()
+    r = base["books"]["long"]["ret"]
+    assert f">{r['auction_tr']:+.2f}%<" in html                      # the big number is the auction basis (2026-10-06)
+
+
+def test_cards_fall_back_to_the_simulator_basis_and_say_so():
+    base, _ = _base()
+    base["books"]["long"]["ret"]["auction_tr"] = None
+    html = dashboard.book_cards(base, {"long": 0})
+    assert "竞价口径暂缺" in html and f">{base['books']['long']['ret']['sim_tr']:+.2f}%<" in html
 
 
 def test_paper_block_carries_spy_and_qqq_from_the_first_start():
