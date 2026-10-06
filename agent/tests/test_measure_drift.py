@@ -29,6 +29,17 @@ def test_execution_gap_per_book_keeps_the_sign_auction_basis_gave():
     assert c[0]["mean_pct"] == pytest.approx(0.3)                                     # not (0.2 - 0.4) / 2
 
 
+def test_execution_gap_is_judged_against_the_books_break_even_cost():
+    rows = ([{"book": "insider", "side": "buy", "day": "2026-10-01", "gap_pct": 1.0}] * 10
+            + [{"book": "long", "side": "buy", "day": "2026-10-01", "gap_pct": 0.6}] * 10
+            + [{"book": "core", "side": "buy", "day": "2026-10-01", "gap_pct": 2.5}])
+    c = {x["book"]: x for x in drift.gap_checks(rows)}
+    assert c["insider"]["level"] == "warn" and c["insider"]["breakeven_pct"] == 0.30   # above 0.30: the simulator NAV loses
+    assert "竞价口径" in c["insider"]["detail"]
+    assert c["long"]["level"] == "ok"                                                 # 0.6 is below the long book's 0.95
+    assert c["core"]["level"] == "bad" and c["core"]["breakeven_pct"] is None         # no break-even: ok to 0.6, bad above 2.0
+
+
 def test_insider_orders_vs_rule():
     ok = drift.insider_vs_rule({"A", "B"}, ["A", "B", "C"], 2, "2026-09-30")
     assert ok["level"] == "ok"                                                         # C: no free slot

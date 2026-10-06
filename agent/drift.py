@@ -11,7 +11,10 @@ strategy: (1) an implementation error, (2) execution, (3) the rules not working.
   lists       the v1 list recomputed today for recent days vs the list recorded on the day
               (data revisions: a list that changes after the fact is not point-in-time)
   fills       share of the last 5 sessions' orders that filled, per book (S48)
-  exec gap    mean fill vs opening cross, per book, against the 0.6%/side the simulator basis assumes
+  exec gap    mean fill vs opening cross, per book, against the cost per side at which the book's
+              backtest alpha is zero (2026-10-06): above it the simulator-basis NAV loses by
+              construction. Paper does not cross the opening auction (S36), so this is the paper
+              account's cost, not the strategy's; the books are judged on the auction basis (S27)
   insider     the insider book's orders on the last evening vs the names the rule gives for that
               evening (execute.insider_targets' rule rebuilt from the orders placed before it; S48)
   week        the book's last 5-session return inside the backtest's distribution of 5-session
@@ -48,6 +51,11 @@ AUCTION = "/Users/louis/optradar/out/agent/auction_basis.json"
 PAPER_START = "2026-09-21"           # the first traded list; fills at the 09-22 open
 BOOK_ZH = {"long": "长线", "insider": "内部人", "core": "SPY 核心"}
 FINAL = ["filled", "expired", "canceled", "rejected"]
+# cost per side at which the backtest's alpha2 is zero, 2017-01 → 2026-08, flat cost (2026-10-06 sweep, descriptive):
+# long +8.2% at 0, +2.4% at 0.75, -0.8% at 1.00; insider +20.7% at 0, +3.2% at 0.25, -3.8% at 0.35
+BREAKEVEN_PCT = {"long": 0.95, "insider": 0.30}
+SIM_COST_PCT = 0.6           # what the simulator basis assumed before the sweep; used for a book without a break-even
+GAP_BAD_PCT = 2.0            # far above any 10-fill mean since 2026-09-22 (max ~1.3): order handling, not the simulator
 
 
 def chk(name: str, level: str, detail: str, **kw) -> dict:
@@ -83,9 +91,13 @@ def gap_checks(fill_rows: list[dict]) -> list[dict]:
         g = fr[fr["book"] == book].sort_values("day")
         m, m10 = float(g["gap_pct"].mean()), float(g.tail(10)["gap_pct"].mean())
         sides = ";".join(f"{'买' if s == 'buy' else '卖'} {len(x)} 笔 {x['gap_pct'].mean():+.2f}%" for s, x in g.groupby("side"))
-        out.append(chk(f"执行偏差 · {BOOK_ZH[book]}(成交价 对 开盘竞价)", "ok" if m10 <= 0.6 else "warn" if m10 <= 1.2 else "bad",
-                       f"自 {g['day'].iloc[0]} 起 {len(g)} 笔平均 {m:+.2f}%/边({sides}),最近 10 笔 {m10:+.2f}%/边;模拟器口径假设 0.6%",
-                       book=book, mean_pct=m, last10_pct=m10))
+        be = BREAKEVEN_PCT.get(book)
+        line = (f"回测在每边 {be:.2f}% 时 alpha 归零;模拟盘不撮合开盘竞价,这是模拟盘的成本,评估按竞价口径,真钱只能用开盘竞价单"
+                if be is not None else f"模拟器口径假设 {SIM_COST_PCT}%")
+        out.append(chk(f"执行偏差 · {BOOK_ZH[book]}(成交价 对 开盘竞价)",
+                       "ok" if m10 <= (be if be is not None else SIM_COST_PCT) else "warn" if m10 <= GAP_BAD_PCT else "bad",
+                       f"自 {g['day'].iloc[0]} 起 {len(g)} 笔平均 {m:+.2f}%/边({sides}),最近 10 笔 {m10:+.2f}%/边;{line}",
+                       book=book, mean_pct=m, last10_pct=m10, breakeven_pct=be))
     return out
 
 
