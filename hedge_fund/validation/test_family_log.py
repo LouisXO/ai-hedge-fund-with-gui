@@ -40,6 +40,11 @@ def test_collect_merges_reruns_counts_s30_and_flags_pre_audit(tmp_path):
     assert "修正前数据" in text and "Not computed" in text
 
 
+def test_s37_baseline_is_not_a_variant(tmp_path):
+    _write(tmp_path, "s37_largecap_2026-10-06.json", {"books": {"lc_mom": _book(0.58, 1049), "lc_ew": _book(-1.10, 6440)}})
+    assert [r["variant"] for r in collect(str(tmp_path))] == ["lc_mom"]
+
+
 def test_expected_max_t_matches_the_audit():
     assert round(expected_max_t(5), 2) == 1.19
     assert round(expected_max_t(13), 2) == 1.70

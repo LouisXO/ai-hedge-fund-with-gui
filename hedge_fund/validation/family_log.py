@@ -47,6 +47,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 REPORTS = os.path.join(ROOT, "site-data", "validation")
 BASE_NAV = "s47_base_nav.csv"                           # the long book v1 restated on the corrected data (S47)
 CONTROLS = {"insider_5d", "short_insider_5d"}          # the same v1 insider book re-run as a control in every report
+BASELINES = {"lc_ew"}                                    # S37's no-selection baseline: pre-registered as not a candidate (2026-10-06 review)
 ALIASES = {"long_composite_daily_n30": "base",         # S19's daily composite is S24's base
            "insider_buy_h5": "insider_v1_5d"}           # the v1 line under the event-line interface (S23 control)
 SECTIONS = {"s30_momentum_book_": "full"}              # reports whose books sit under another key than `books`
@@ -97,6 +98,8 @@ def collect(reports: str = REPORTS) -> list[dict]:
             continue
         pre_audit = PRE_AUDIT.get(fname, set())
         for name, m in books.items():
+            if name in BASELINES:
+                continue
             t = m.get("alpha2_t_nw") if isinstance(m, dict) else None
             if t is None or (isinstance(t, float) and math.isnan(t)) or not m.get("n_trades"):
                 continue                                   # factor-only cells never traded: not a tested variant
