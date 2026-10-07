@@ -1,5 +1,6 @@
 """Trades from posts: a level is not a fill, a recap repeating the day's log is one trade, a re-open after a close is new,
 and a rebuild starts from an empty table (made-up posts, a fake LLM, no network)."""
+import datetime as dt
 import json
 
 import duckdb
@@ -39,6 +40,13 @@ def test_a_target_or_stop_is_not_a_fill_price():
     assert bl.only_as_level("Raises Price Target to $900", 900)
     assert not bl.only_as_level("$ABC 123 买入,目标 150", 123)              # stated as a fill: kept
     assert not bl.only_as_level("目标 150,现价 123 买入", 123)               # the target word belongs to 150
+
+
+def test_a_post_is_dated_by_when_it_was_posted_not_when_it_was_saved():
+    assert bl.posted_date("x", "2026-10-07 Balder X posts 帖子(2026-10-06T20:45:00Z):日志") == dt.date(2026, 10, 6)
+    assert bl.posted_date("x", "2026-10-07 Balder X posts 帖子(2026-10-07T02:30:00.000Z):晚上") == dt.date(2026, 10, 6)   # 22:30 ET
+    assert bl.posted_date("x", "2026-10-02 Balder X subs 帖子(2026-09-24T21:00):平仓") == dt.date(2026, 9, 24)
+    assert bl.posted_date("x", "2026-10-01 平仓 $ABC 20.5→19.8") == dt.date(2026, 10, 1)                    # a file dropped by hand
 
 
 def test_a_recap_repeating_the_days_log_is_one_trade_and_can_fill_a_missing_price(tmp_path):

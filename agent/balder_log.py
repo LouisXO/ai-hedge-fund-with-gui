@@ -33,6 +33,7 @@ import hashlib
 import json
 import os
 import re
+from zoneinfo import ZoneInfo
 
 import duckdb
 import pandas as pd
@@ -115,6 +116,12 @@ def extract(text: str, transport=None) -> list[dict]:
 
 
 def posted_date(path: str, text: str) -> dt.date:
+    """The post's own US date. agent/balder_x_save writes the save day first and the post time (UTC) after 帖子;
+    a post read days later must still be scored from the session after it was posted. Else the first date, else the file time."""
+    m = re.search(r"帖子\((20\d{2}-\d{2}-\d{2})T(\d{2}):(\d{2})", text)
+    if m:
+        t = dt.datetime.fromisoformat(f"{m.group(1)}T{m.group(2)}:{m.group(3)}").replace(tzinfo=dt.timezone.utc)
+        return t.astimezone(ZoneInfo("America/New_York")).date()
     m = re.search(r"(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})", text)
     if m:
         try:
