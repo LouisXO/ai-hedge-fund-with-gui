@@ -12,7 +12,18 @@ or paste it into a file there by hand. This job:
   4. scores every open from the next session: 1 / 5 / 20-session return vs SPY, from our panel,
   5. writes out/agent/balder_latest.json for the review page (private site only).
 
-Usage: python -m agent.balder_log [--dry-run]
+What counts as a trade (2026-10-07, after watch lists, targets and recaps were recorded as trades):
+  - only a move the post states: open / new / buy / a monthly pick -> open; close / exit / sell -> close;
+    add; trim. A watch list, a hint ("could take profit"), a target or a target hit, positions still
+    held, and market recaps are not trades;
+  - a price is a fill or an entry; a number that only follows a target / stop / level word
+    (目标, 初步, 止损, 阻力, 支撑, 均线, target, stop ...) is dropped, whatever the LLM said;
+  - the same move on the same ticker posted again within REPEAT_DAYS (a recap repeating the day's
+    log) is one trade; a later post can only fill a missing price. A re-open after a close is new.
+
+Usage: python -m agent.balder_log [--dry-run] [--rebuild]
+  --rebuild   back up the table and the seen file, empty the table and re-extract every saved post
+  --dry-run   work on an in-memory copy: print what would be recorded, write nothing
 """
 from __future__ import annotations
 
@@ -41,18 +52,43 @@ SYSTEM = ("你是一个只做信息提取的程序。输入是一段交易员发
           "把每笔交易输出成 JSON 数组,每项字段:ticker(美股代码,大写,不含 $)、action(open/close/add/trim 之一)、side(long/short)、"
           "book(short 或 long:短线算法用 short,长线趋势仓位用 long)、strategy(原文的策略名,如 超跌反弹/动量捕捉/趋势追随,没有就空字符串)、"
           "price(成交价数字,没有就 null)、qty(数量或仓位比例,没有就 null)、note(一句话摘要,≤40 字)。"
+          "只输出帖子写明的交易动作:开仓、新增、买入、入场、月度选股或明确的买入推荐算 open;平仓、退出、卖出、止盈或止损离场算 close;"
+          "加仓算 add;减仓算 trim。这些不是交易,不要输出:观察名单、关注、看好、候选;提示或建议(如「可以考虑兑现」);"
+          "目标价或目标达成(✅);持仓列表里仍在持有的仓位(标了 🆕、NEW、新增 的才算 open);大盘、板块或个股复盘里的涨跌。"
+          "price 只填成交价或入场价:形如 A→B 的,open 填箭头左边的入场价,close 填箭头右边的价格;"
+          "目标价、初步目标、止损价、阻力位、支撑位、均线、区间都不是成交价,没有成交价就填 null。"
           "没有交易就输出空数组 []。只输出 JSON,不解释。价格只能用原文里出现过的数字。")
+LEVEL_WORDS = ("目标", "初步", "止盈", "止损", "阻力", "支撑", "均线", "区间", "target", "stop")
+REPEAT_DAYS = 3
 
 
-def _load_seen() -> dict:
+def _load_seen(path=SEEN) -> dict:
     try:
-        return json.load(open(SEEN))
+        return json.load(open(path))
     except Exception:
         return {}
 
 
+def _norm(n: str) -> str:
+    return n.rstrip("0").rstrip(".") if "." in n else n
+
+
 def numbers_in(text: str) -> set[str]:
-    return {n.rstrip("0").rstrip(".") if "." in n else n for n in re.findall(r"\d+(?:\.\d+)?", text)}
+    return {_norm(n) for n in re.findall(r"\d+(?:\.\d+)?", text)}
+
+
+def only_as_level(text: str, price) -> bool:
+    """True when every appearance of the price follows a target / stop / level word: a level, not a fill.
+    The words looked at are those since the previous number, at most 12 characters ("目标 150,现价 123": 123 is not a level)."""
+    want = _norm(str(float(price)))
+    nums = list(re.finditer(r"\d+(?:\.\d+)?", text))
+    hits = [i for i, m in enumerate(nums) if _norm(m.group(0)) == want]
+
+    def lead(i: int) -> str:
+        start = nums[i - 1].end() if i else 0
+        return text[max(start, nums[i].start() - 12):nums[i].start()].lower()
+
+    return bool(hits) and all(any(w in lead(i) for w in LEVEL_WORDS) for i in hits)
 
 
 def extract(text: str, transport=None) -> list[dict]:
@@ -70,8 +106,7 @@ def extract(text: str, transport=None) -> list[dict]:
             continue
         p = x.get("price")
         if p is not None:
-            ps = str(float(p)).rstrip("0").rstrip(".")
-            if ps not in allowed:                             # a price the post never mentioned: drop it, keep the trade
+            if _norm(str(float(p))) not in allowed or only_as_level(text, p):   # never mentioned, or only as a target / stop
                 p = None
         clean.append({"ticker": str(x["ticker"]).upper().lstrip("$"), "action": x["action"], "side": x.get("side") or "long",
                       "book": x.get("book") if x.get("book") in ("short", "long") else "short", "strategy": (x.get("strategy") or "")[:40],
@@ -89,14 +124,29 @@ def posted_date(path: str, text: str) -> dt.date:
     return dt.date.fromtimestamp(os.path.getmtime(path))
 
 
-def ingest(con, dry_run: bool) -> int:
-    if not os.path.isdir(DROP):
-        os.makedirs(DROP, exist_ok=True)
+def repeat_of(con, posted: dt.date, ticker: str, action: str, days: int = REPEAT_DAYS):
+    """The earlier row (id, action, posted, price) when this move on this ticker was already recorded within `days`
+    and nothing else happened to the ticker after it; None when the move is new."""
+    rows = con.execute("SELECT id, action, posted, price FROM balder_trades WHERE ticker = ? AND posted BETWEEN ? AND ?",
+                       [ticker, posted - dt.timedelta(days=days), posted]).fetchall()
+    same = [r for r in rows if r[1] == action]
+    if not same:
+        return None
+    last = max(same, key=lambda r: r[2])
+    if any(r[1] != action and r[2] > last[2] for r in rows):        # closed (or otherwise moved) since: a new move
+        return None
+    return last
+
+
+def ingest(con, dry_run: bool = False, rebuild: bool = False, drop: str = DROP, seen_path=SEEN, transport=None) -> int:
+    """Record the trades of every unseen post (every post with rebuild) into `con`; the seen file is saved unless dry_run."""
+    if not os.path.isdir(drop):
+        os.makedirs(drop, exist_ok=True)
         return 0
-    seen = _load_seen()
+    seen = {} if rebuild else _load_seen(seen_path)
     n = 0
-    for f in sorted(os.listdir(DROP)):
-        p = os.path.join(DROP, f)
+    for f in sorted(os.listdir(drop)):
+        p = os.path.join(drop, f)
         if not f.lower().endswith((".txt", ".md")) or f in seen:
             continue
         text = open(p, encoding="utf-8", errors="ignore").read().strip()
@@ -104,22 +154,55 @@ def ingest(con, dry_run: bool) -> int:
             seen[f] = "empty"
             continue
         try:
-            rows = extract(text)
+            rows = extract(text, transport)
         except Exception as exc:
             print(f"{f}: extract failed: {exc}")
             continue
         day = posted_date(p, text)
         for x in rows:
+            prev = repeat_of(con, day, x["ticker"], x["action"])
+            if prev is not None:
+                if prev[3] is None and x["price"] is not None:
+                    con.execute("UPDATE balder_trades SET price = ? WHERE id = ?", [x["price"], prev[0]])
+                    print(f"  {day} repeat {x['action']} {x['ticker']} in {f}: price {x['price']} filled in")
+                else:
+                    print(f"  {day} repeat {x['action']} {x['ticker']} in {f}: already recorded")
+                continue
             rid = hashlib.sha1(f"{f}|{x['ticker']}|{x['action']}|{x['price']}".encode()).hexdigest()[:16]
             print(f"  {day} {x['book']:5s} {x['action']:5s} {x['ticker']:6s} {x['price']} {x['strategy']} — {x['note']}")
-            if not dry_run:
-                con.execute("INSERT OR REPLACE INTO balder_trades VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
-                            [rid, day, x["book"], x["strategy"], x["ticker"], x["action"], x["side"], x["price"], x["qty"], x["note"], f])
+            con.execute("INSERT OR REPLACE INTO balder_trades VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
+                        [rid, day, x["book"], x["strategy"], x["ticker"], x["action"], x["side"], x["price"], x["qty"], x["note"], f])
             n += 1
         seen[f] = day.isoformat()
     if not dry_run:
-        json.dump(seen, open(SEEN, "w"), ensure_ascii=False)
+        json.dump(seen, open(seen_path, "w"), ensure_ascii=False)
     return n
+
+
+def backup(con, seen_path=SEEN, folder=AGENT_DIR) -> str:
+    """The table and the seen file as they were, next to the seen file, before a rebuild empties them."""
+    stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(folder, f"balder_trades_backup_{stamp}.json")
+    con.execute("SELECT * FROM balder_trades").df().to_json(path, orient="records", force_ascii=False, date_format="iso")
+    if os.path.exists(seen_path):
+        with open(os.path.join(folder, f"balder_seen_backup_{stamp}.json"), "w") as fh:
+            fh.write(open(seen_path).read())
+    return path
+
+
+def _scratch_copy():
+    """An in-memory copy of balder_trades for --dry-run: the same logic runs, nothing reaches optradar.db."""
+    con = duckdb.connect()
+    con.execute(DDL)
+    src = ledger.connect(read_only=True)
+    try:
+        con.register("bt", src.execute("SELECT * FROM balder_trades").df())
+        con.execute("INSERT INTO balder_trades SELECT * FROM bt")
+    except duckdb.CatalogException:
+        pass
+    finally:
+        src.close()
+    return con
 
 
 def score(con) -> int:
@@ -183,14 +266,21 @@ def summary(con) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--rebuild", action="store_true")
     args = ap.parse_args()
-    con = ledger.connect(read_only=args.dry_run) if args.dry_run else ledger.connect()
+    if args.dry_run:
+        con = _scratch_copy()
+    else:
+        con = ledger.connect()
+        con.execute(DDL)
     try:
-        if not args.dry_run:
-            con.execute(DDL)
-        n_new = ingest(con, args.dry_run)
+        if args.rebuild:
+            if not args.dry_run:
+                print(f"backup: {backup(con)}")
+            con.execute("DELETE FROM balder_trades")
+        n_new = ingest(con, args.dry_run, rebuild=args.rebuild)
         n_scored = score(con) if not args.dry_run else 0
-        out = summary(con) if not args.dry_run else {}
+        out = summary(con)                                   # dry run: the in-memory copy's totals, nothing written
     finally:
         con.close()
     if not args.dry_run:

@@ -96,6 +96,7 @@ agent/
   market_breadth.py     大盘体检(16:10 后):前 500 大市值加权 vs 等权、广度、拉动/拖累、前 15 大 + TSM/ASML、近期财报(AV 日历,3 天一取)
                         → out/agent/market_breadth.json → 私有站。只看,不进任何一本书(S37)
   balder_log.py         Balder(X 订阅)帖子 → 跟单记分:用户把帖子文本放进 iCloud Drive/Balder,收盘后密封 LLM 提取交易、按次日开盘记 1/5/20 日收益。**不抓 X,不上公开站,不进信号**
+                        只记写明的动作;观察名单、目标价不算;复盘里重复的同一笔只记一次(S51);`--rebuild [--dry-run]` 从存档重建
   watch_reminders.py    把关注名单价位同步成 moomoo App 价格提醒(只动 note 以 agent 开头的,用户自己设的不碰;只用行情接口,不开交易接口)
   dashboard.py          仪表盘 out/dashboard.html(Chart.js,可悬停):模拟盘净值 vs SPY、每笔成交偏差、当日持仓、实盘月度、回测按年、教训计数;数据 out/dashboard_data.json
   review.py             今日复盘(收盘后):模拟盘订单逐笔(成交/偏差/首日)、持仓异动、实盘成交逐笔(区间位置、期权结构、系统怎么看、FIFO 平仓收益)、
