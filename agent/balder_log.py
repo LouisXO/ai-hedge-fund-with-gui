@@ -12,7 +12,7 @@ or paste it into a file there by hand. This job:
   4. scores every open from the next session: 1 / 5 / 20-session return vs SPY, from our panel,
   5. writes out/agent/balder_latest.json for the review page (private site only).
 
-What counts as a trade (2026-10-07, after watch lists, targets and recaps were recorded as trades):
+What counts as a trade (2026-10-06, after targets were recorded as prices and recaps as second trades):
   - only a move the post states: open / new / buy / a monthly pick -> open; close / exit / sell -> close;
     add; trim. A watch list, a hint ("could take profit"), a target or a target hit, positions still
     held, and market recaps are not trades;
