@@ -29,6 +29,7 @@ $PY -W ignore -m agent.execute --sync-only >> "$LOG" 2>&1 || { echo "sync FAILED
 $PY -W ignore -m agent.watch >> "$LOG" 2>&1 || echo "watchlist failed (non-fatal)" >> "$LOG"
 $PY -W ignore -m agent.watch_reminders >> "$LOG" 2>&1 || echo "moomoo reminder sync failed (non-fatal)" >> "$LOG"   # watchlist levels -> moomoo app push
 $PY -W ignore -m agent.balder_log >> "$LOG" 2>&1 || echo "balder log failed (non-fatal)" >> "$LOG"          # posts the user dropped into iCloud/Balder, scored
+$PY -W ignore -m agent.balder_views >> "$LOG" 2>&1 || echo "balder views failed (non-fatal)" >> "$LOG"      # S52: his views on named stocks, scored; never a signal
 $PY -W ignore -m agent.auction_basis >> "$LOG" 2>&1 || echo "auction basis failed (non-fatal)" >> "$LOG"      # fills re-priced at the opening cross; missed-trade shadow
 if [ -f agent/dividends.py ]; then   # S48 package C; the guard lets this script run before that module is merged
   $PY -W ignore -m agent.dividends >> "$LOG" 2>&1 || echo "dividends failed (non-fatal)" >> "$LOG"
