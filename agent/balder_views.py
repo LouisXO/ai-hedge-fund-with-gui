@@ -178,7 +178,8 @@ def summary(con) -> dict:
     if df.empty:
         return out
     df["posted"] = df["posted"].astype(str)
-    out["recent"] = df.head(15).where(pd.notna(df.head(15)), None).to_dict("records")
+    head = df.head(15).astype(object)        # object first: on a float column where(..., None) keeps NaN, which is not JSON
+    out["recent"] = head.where(pd.notna(head), None).to_dict("records")
     for s, g in df.groupby("stance"):
         sign = 1 if s == "bull" else -1
         st = {}

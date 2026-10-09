@@ -55,7 +55,9 @@ def test_scoring_starts_at_the_next_open_and_a_bear_is_right_when_it_trails_spy(
     assert round(got["v1"]["spy5"], 6) == 1.0 and "ret20" not in got["v1"]
     con = _con()
     con.execute("INSERT INTO balder_views VALUES ('v1', '2026-10-01', 'ABC', 'bear', 'short', '', '', 'a.txt', -10, NULL, 1, NULL, '2026-10-08')")
-    s = bv.summary(con)["by_stance"]["bear"]["h5"]
+    out = bv.summary(con)
+    assert out["recent"][0]["ret20"] is None and out["recent"][0]["scored_through"] is not None   # unscored -> null, never NaN
+    s = out["by_stance"]["bear"]["h5"]
     assert s["n"] == 1 and s["right"] == 1.0 and s["mean_abn_signed"] == 11.0
 
 
