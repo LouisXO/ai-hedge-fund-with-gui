@@ -123,7 +123,13 @@ def cover_text(raw: str) -> str:
     end_hdr = raw.find("/ix:header")
     text = _plain(raw[end_hdr:] if end_hdr >= 0 else raw)
     k = re.search(r"well[- ]known\s+seasoned\s+issuer", text, re.I)
-    return text[: k.end() + COVER_TAIL] if k else text[:60_000]
+    if not k:
+        return text[:60_000]
+    # stop at the table of contents: its "Item 12.D American Depositary Shares" and the definitions after it
+    # ("ADS ... each of which represented 360 ordinary shares", MFH's ADR program cancelled in 2023) are not
+    # the cover's statement of what is listed today
+    toc = re.search(r"table\s+of\s+contents", text[k.end():k.end() + COVER_TAIL], re.I)
+    return text[: k.end() + (toc.start() if toc else COVER_TAIL)]
 
 
 def section_12b(cover: str) -> str:
@@ -184,7 +190,11 @@ def parse(raw: str) -> dict:
         return {"status": "no_cover", "ratio": None, "cover_text": cov[:1500]}
     sec = section_12b(cov)
     where = sec or cov[:8000]
-    if re.search(ADS, cov, re.I) is None:
+    # listed as depositary shares: named in the 12(b) table, or the table's shares carry the footnote "not for
+    # trading, but only in connection with the listing of American Depositary Shares" (TSM). An ADS named
+    # anywhere else on the cover (a program terminated years ago, a definition) does not make it one.
+    footnote = re.search(rf"not\s+for\s+trading[^.]{{0,250}}?{ADS}", cov, re.I)
+    if re.search(ADS, where, re.I) is None and footnote is None:
         return {"status": "no_ads", "ratio": 1.0, "cover_text": where[:1500]}
     for scope, text in (("12b", where), ("cover", cov)):
         found = ratios_in(text)
@@ -279,18 +289,18 @@ def targets(store: PanelStore, ciks: list[int] | None = None) -> pd.DataFrame:
     return df[df["cik"].isin(ciks)] if ciks else df
 
 
-def done_keys() -> set[tuple[int, str]]:
+def done_keys(redo: tuple[str, ...] = ()) -> set[tuple[int, str]]:
+    """Filings whose latest record is final: not an error, and not one of the `redo` statuses."""
     if not CACHE.exists():
         return set()
-    out = set()
+    last: dict[tuple[int, str], str] = {}
     for line in CACHE.read_text().splitlines():
         try:
             r = json.loads(line)
         except Exception:
             continue
-        if r.get("status") != "error":
-            out.add((int(r["cik"]), r["accn"]))
-    return out
+        last[(int(r["cik"]), r["accn"])] = r.get("status", "")
+    return {k for k, st in last.items() if st != "error" and st not in redo}
 
 
 def _one_company(cik: int, rows: list, ua: str) -> list[dict]:
@@ -327,7 +337,7 @@ def _one_company(cik: int, rows: list, ua: str) -> list[dict]:
     return out
 
 
-def fetch(limit: int | None = None, ciks: list[int] | None = None, workers: int = 4) -> dict:
+def fetch(limit: int | None = None, ciks: list[int] | None = None, workers: int = 4, redo: tuple[str, ...] = ()) -> dict:
     """Companies in parallel (each worker pauses PAUSE before every request, so `workers` of them stay
     under SEC's 10 requests/second); one writer appends each company's records to CACHE as it completes."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -337,7 +347,7 @@ def fetch(limit: int | None = None, ciks: list[int] | None = None, workers: int 
         todo = targets(store, ciks)
     finally:
         store.close()
-    seen = done_keys()
+    seen = done_keys(redo)
     todo = todo[[(int(c), a) not in seen for c, a in zip(todo["cik"], todo["accn"])]]
     if limit:
         todo = todo.head(limit)
@@ -390,7 +400,9 @@ def table() -> pd.DataFrame:
     return df
 
 
-def commit() -> int:
+def commit(path: str | Path | None = None) -> int:
+    """CACHE + agent/ads_ratio.yaml -> panel.ads_ratio (replaced whole, one transaction). path: another panel
+    (a copy for a restatement); default the live one."""
     df = table()
     if df.empty:
         print("nothing to commit")
@@ -398,7 +410,7 @@ def commit() -> int:
     df = df[df["status"] != "error"]
     cols = ["cik", "accn", "form", "filed", "ratio", "status", "cover_text", "doc", "source", "fetched_at"]
     df = df[cols].assign(filed=pd.to_datetime(df["filed"]).dt.date, fetched_at=pd.to_datetime(df["fetched_at"]))
-    store = PanelStore()
+    store = PanelStore(path) if path else PanelStore()
     try:
         store.con.execute(DDL)
         store.con.register("_ads", df)
@@ -420,11 +432,13 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--cik", type=int, nargs="*")
     ap.add_argument("--status")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--panel", help="commit into this panel.db instead of the live one")
+    ap.add_argument("--redo", nargs="*", default=[], help="fetch again the filings whose latest status is one of these")
     a = ap.parse_args(argv)
     if a.cmd == "fetch":
-        fetch(a.limit, a.cik, a.workers)
+        fetch(a.limit, a.cik, a.workers, tuple(a.redo))
     elif a.cmd == "commit":
-        commit()
+        commit(a.panel)
     else:
         df = table()
         if a.status is not None:

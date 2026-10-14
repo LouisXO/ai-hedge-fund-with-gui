@@ -83,10 +83,11 @@ def load_market(store: PanelStore, start: str, lookback_days: int = 400) -> Mark
     return Market(adj, adj_open, close, adv20, listed, spy, spread, iwm)
 
 
-def fundamentals(store: PanelStore) -> pd.DataFrame | None:
-    """panel.fundamentals_pit, built by agent.books.fundamentals.factor_inputs; None if absent."""
+def fundamentals(store: PanelStore, table: str = "fundamentals_pit") -> pd.DataFrame | None:
+    """panel.fundamentals_pit, built by agent.books.fundamentals.factor_inputs; None if absent. `table`: another
+    build of it with the same columns (a restatement's before/after, S53a)."""
     try:
-        df = store.con.execute("SELECT * FROM fundamentals_pit").df()
+        df = store.con.execute(f"SELECT * FROM {table}").df()
     except Exception:
         return None
     df = segments.split_fundamentals(df, segments.load_splits(store))   # S47b item 2: filed before a reused ticker's listing

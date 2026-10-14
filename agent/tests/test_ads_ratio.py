@@ -69,6 +69,15 @@ def test_footnote_names_an_ads_without_a_ratio():
     assert A.parse_doc(doc)["ratio"] == 5
 
 
+def test_an_ads_named_only_after_the_cover_does_not_count():
+    # direct listing; the table of contents has "Item 12.D American Depositary Shares", the definitions an old program
+    page = cover("<tr><td>Ordinary Shares, par value NIS 0.01</td><td>Nasdaq</td></tr>").replace(
+        "<p>TABLE OF CONTENTS</p>", "<p>TABLE OF CONTENTS</p><p>Item 12.D American Depositary Shares</p>"
+        "<p>ADS refers to our American depositary shares, each of which represented 360 ordinary shares</p>")
+    got = A.parse(page)
+    assert got["status"] == "no_ads" and got["ratio"] == 1
+
+
 def test_ratios_that_disagree_are_left_for_review():
     got = A.parse(cover("<tr><td>American depositary shares, each representing two ordinary shares</td></tr>"
                         "<tr><td>American depositary shares, each representing ten ordinary shares</td></tr>"))
