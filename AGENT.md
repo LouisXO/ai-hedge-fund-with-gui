@@ -51,7 +51,7 @@
 | 周一到周五 16:10 | `com.louis.agent.execute` | `agent/bin/execute.sh`:实时 Form 4(EFTS)→ 13D → Alpaca 新闻 → **`agent.execute --submit`**(仅 `AGENT_EXEC=on`)→ `agent.watch`(晚间申报)→ `agent.market_breadth`(大盘体检)→ 私有站。留在 16:10 是因为 OPG 窗口 19:00 ET 才开,且当天 Form 4 多在 16:00–18:00 ET 提交 |
 | 周一到周五 19:15 | `com.louis.agent.late_insider` | `agent/bin/late_insider.sh`(S47b):EDGAR 22:00 ET 停止受理后再抓一次当天 Form 4,只给内部人书下单;同一信号日的订单号相同,不会重复。**要同时有 AGENT_EXEC=on 和 `~/.hedge-fund/agent/late_insider.ok` 才发单**,否则只打印计划;日志 `out/agent/late_insider.log`。plist 在 `agent/launchd/`,由用户安装 |
 | 周六 09:30 | `com.louis.optradar.weekly` | 周报 |
-| 周日 03:00 | `com.louis.agent.fundamentals` | XBRL 基本面周更 + 七层数据审计(`agent/audit.py`) |
+| 周日 03:00 | `com.louis.agent.fundamentals` | XBRL 基本面周更(重建前先解析新 20-F/40-F 封面的 ADS 比例,S53a)+ 七层数据审计(`agent/audit.py`) |
 
 16:10 PT = 19:10 ET。Alpaca 只在 19:00–09:28 ET 接受 OPG 单,早于此报错 40310000,`agent.execute` 会退回 DAY 单。
 
@@ -68,12 +68,13 @@
 - **每周学习回路**:`agent/attribution.py`(大盘 / 风格 / 行业 / 个股 / 执行五层归因,`out/agent/attribution.jsonl` 每周一行)→ `docs/HYPOTHESES.md`(观察 → 假设 → 排除当周数据的检验)→ 预注册 → 规则包。`agent/drift.py` 每天检查模拟盘是否和规则重放一致、是否在回测区间内。**单周数字不能用来改规则。**
 - **数据修正(S47,2026-09-29 生效)**:基本面、上市名单、日线、内部人候选都已恢复成回测的定义;评估从 `evaluate_from: 2026-09-29` 起算。重述后长线 v1 alpha2 +8.37%/年(t 1.40),内部人 v1 +8.80%/年(t 2.05)。每周基本面刷新现在会真的重取;打开周日任务的刷新要创建 `~/.hedge-fund/agent/refresh_fundamentals.ok`。
 - **数据修正 S47b(2026-09-29 当天生效,评估起点不变)**:重复使用或重新上市的代码拆成伪代码(`SE@2007`,`agent/books/segments.py`;伪代码永远不下单);数据商名单缺的普通股进 `agent/listing_supplement.yaml`(目前只有 NRG);股数为空或被标记的行用 moomoo 行情快照的股数覆盖(申报后 120 天内最早的一次)。重述:长线 v1 alpha2 +8.55%/年(t 1.44),内部人 v1 +9.05%/年(t 2.11)。
+- **数据修正 S53a(2026-10-14 晚切换,10/15 的 16:10 任务起用,评估起点不变)**:20-F/40-F 申报人的股数是普通股、价格是存托凭证(ADS)的价,以前按 1:1 算,市值有的算大(BABA 8 倍)、有的算小(TCOM 2016–2021 年 8 份 ADS = 1 股,回测里制造过假便宜)。现在每条股数事实除以所在申报封面上的 ADS 比例(`agent/sources/ads_ratio.py` 确定性解析,解析不了的进 `agent/ads_ratio.yaml` 人工表),换成上市单位;周日任务自动解析新申报。核对:10 家独立抽查 10/10 一致,和 moomoo 市值差 20% 以内的从 219 家到 337 家。重述长线 v1 alpha2 +6.81%/年(t 1.15),同一份数据修正前 +7.61%(t 1.28);切换当天前 30 名不变。外国公司的 IFRS/非美元财务、年报时效、价格库扩充是 S53 第 1–4 步(影子线,预注册在 AGENT_PLAN)。
 - **模拟盘能回答什么(S45,2026-09-28)**:它分辨不出策略有没有超额(9 个月时 alpha 标准误约 20%/年)。它能测准的是三样:对规则重放的跟踪差、执行偏差、成交率。页面头条不放收益对比的结论;搬不搬真钱不能靠模拟盘的收益数字。
 - **下单保护(S46)**:对账不符的股票买卖都不发单;只在美东 16:05–09:25 之间提交;日线日期必须等于上一个交易日。
 - 回测口径:带进场否决的变体必须用实盘口径(`s44_v2_bundle.entry_zone`,只从前 N 名进场);S33/S40 之前的回测是宽松口径。
 - 竞价口径(S27b 后续):`agent/auction_basis.py` 把每笔模拟成交按当天开盘竞价价重记,`agent_auction_nav` 表;没成交的内部人入场按竞价价做影子记录。**评估点按竞价口径判**,模拟器口径是保守下限。
 - 长线 v1 的真实性质(S24/S29/S30):**基本面过滤后的动量尾部 + 深度价值簇**,两簇各占约 45%/48%。行业中性、rank-normal、纯动量都比它差。只有 momcrash(SPY 低于 2 年高点 20% 时停用动量)有帮助,做成 v2 影子线 `composite_long_v2`,每天并排记录,不交易。
-- 长线回测(2017–2026-08,S47b 重述):alpha2 +8.55%/年(t 1.44),CAGR 20.0%。加入动量、价值、质量、低波 ETF 后还剩 +7.2%/年(t 1.5),动量暴露 +1.08(S45 D3)。这是弱证据,所以模拟盘要攒记录。
+- 长线回测(2017–2026-08):S47b 重述 alpha2 +8.55%/年(t 1.44),CAGR 20.0%;S53a 重述(10/14 的数据)+6.81%/年(t 1.15),CAGR 18.1%,同一份数据修正前 +7.61%。加入动量、价值、质量、低波 ETF 后还剩 +7.2%/年(t 1.5),动量暴露 +1.08(S45 D3)。这是弱证据,所以模拟盘要攒记录。
 - 唯一 Holm 显著的信号是**负面**的:S25 "大涨日 + 新闻"后续跑输。S32 看跌期权流也是负面因子。这两个列入待预注册的负面过滤器。
 - 模拟器成交按开盘后第一个卖一,不是开盘印,小盘股偏贵约 0.6%。`agent_orders.model_px` 记当天开盘价,差值就是要测的东西。**S27 已于 2026-10-06 重跑**:长线实测 0.59%/边 → alpha2 +2.6%(t 0.43);内部人 1.04%/边 → −51.7%(t −12)。盈亏平衡约为长线 0.95%/边、内部人 0.30%/边(描述性扫描):**内部人书只有以开盘竞价成交才可能赚钱,模拟器口径必亏**;页面头条和偏离监控都按竞价口径。
 - 模拟盘保真缺口:whole shares 让 $2k 槽位在高价股上欠配;EDGAR 每日索引 16:40 ET 后才出,所以实时线用 EFTS。
@@ -108,7 +109,8 @@ agent/
   books/                engine、factors、fundamentals、data、long_v2、live、momentum_book、industry、segments(重复代码拆分)
   listing_supplement.yaml  数据商名单缺的普通股(每行写来源和核对日期)
   events/               事件线框架:insider、insider_v2、sch13d、pead、move_news
-  sources/              alpaca_bars/news/options/auctions、sec_xbrl/sic/13d/daily_form4/8k_buyback、finra_short、retail_heat、moomoo_shares(股数核对,只读)
+  sources/              alpaca_bars/news/options/auctions、sec_xbrl/sic/13d/daily_form4/8k_buyback、finra_short、retail_heat、moomoo_shares(股数核对,只读)、ads_ratio(20-F/40-F 封面的 ADS 比例,S53a)
+  ads_ratio.yaml        ADS 比例人工核对表(每行写申报链接和原文引用;按申报或按申报日期区间,后者用于交 10-K 的 ADS 公司)
   s2x_*.py / s3x_*.py   预注册实验脚本(S21 13D、S24 长线变体、S26 期权门、S27 执行成本、S30 动量书、S31 入场时机、S32 期权流、S33 负面否决、S34 回购线)
   config.yaml           预注册的评估点(evaluate_at)
   tests/                pytest 40 个;`tests/selftest_agent.sh` 隔离全链路冒烟(复制账本、dry run、早报),不碰真实账本和 out/
