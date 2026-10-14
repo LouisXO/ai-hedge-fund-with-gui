@@ -446,7 +446,7 @@ def commit(path: str | Path | None = None) -> int:
             return 0
         df = df[df["status"] != "error"]
         cols = ["cik", "accn", "form", "filed", "ratio", "status", "cover_text", "doc", "source", "fetched_at"]
-        df = df[cols].assign(filed=pd.to_datetime(df["filed"]).dt.date, fetched_at=pd.to_datetime(df["fetched_at"]))
+        df = df[cols].assign(filed=pd.to_datetime(df["filed"]).dt.date, fetched_at=pd.to_datetime(df["fetched_at"], format="ISO8601"))
         store.con.execute(DDL)
         store.con.register("_ads", df)
         store.con.execute("BEGIN")
