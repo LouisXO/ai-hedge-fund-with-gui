@@ -64,11 +64,14 @@ def _z_by_group(out: pd.DataFrame, groups: pd.Series, min_n: int = 15) -> pd.Dat
 
 def factor_scores(market: Market, fund: pd.DataFrame, day: pd.Timestamp, universe: pd.Index,
                   groups: pd.Series | None = None, issuance: bool = False, drop_momentum: bool = False,
-                  norm: str = "winsor_z", shares_override: pd.Series | None = None) -> pd.DataFrame:
+                  norm: str = "winsor_z", shares_override: pd.Series | None = None,
+                  latest: pd.DataFrame | None = None) -> pd.DataFrame:
     """v1 when called with defaults. S24 options: `groups` = sector-neutral z-scores; `issuance` adds
     net share issuance (lower is better) to the quality family; `drop_momentum` = momentum-crash
-    filter (composite is the mean of the other three families that day)."""
-    f = latest_before(fund, day).reindex(universe)
+    filter (composite is the mean of the other three families that day). `latest` (S53 shadow line): the
+    day's row per ticker already chosen (another staleness rule, money converted to USD) instead of
+    latest_before(fund, day)."""
+    f = (latest if latest is not None else latest_before(fund, day)).reindex(universe)
     raw_px = market.close.loc[day].reindex(universe)
     shares = f["shares"]
     if shares_override is not None:                      # names whose XBRL share count is missing/per-class (V, BRK.B)

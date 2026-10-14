@@ -348,6 +348,14 @@ def fetch(limit: int | None = None, ciks: list[int] | None = None, workers: int 
         todo = targets(store, ciks)
     finally:
         store.close()
+    return fetch_rows(todo, workers, redo, limit)
+
+
+def fetch_rows(todo: pd.DataFrame, workers: int = 4, redo: tuple[str, ...] = (), limit: int | None = None) -> dict:
+    """fetch() for a given list of filings (cik, accn, form, filed): S53's fpi.db issuers, whose filings are
+    not in panel.db. Filings already in CACHE (and not in `redo`) are skipped."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    ua = user_agent()
     seen = done_keys(redo)
     todo = todo[[(int(c), a) not in seen for c, a in zip(todo["cik"], todo["accn"])]]
     if limit:
