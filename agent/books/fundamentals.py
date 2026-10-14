@@ -24,6 +24,14 @@ review list (review_path), to be settled by hand in shares_override.
 Nothing is carried into a filing from a period that ended more than 400
 days before it.
 
+Listed units (S53a, 2026-10-14): a 20-F/40-F filer's counts are ordinary shares, the price is per
+listed unit, most often an American depositary share. Every share fact of a 20-F/40-F filing is
+divided by that filing's ADS ratio (panel.ads_ratio, from its cover page: agent.sources.ads_ratio),
+so the counts compared and kept are listed units: BABA's 18.6B ordinary shares are 2.32B ADSs, and
+TCOM's 74M ordinary shares of 2021 (8 ADSs to a share) are 593M ADSs, in line with the 641M of its
+next filing. A filing of a company with a depositary share whose own ratio is unknown gives no count
+(flag ads_unknown). Companies not in panel.ads_ratio are as before.
+
 Tag fallbacks: revenue and cost tags changed with ASC 606 (2018), chosen per
 period; net income is NetIncomeLoss while it is fresh, else the next tag's
 TTM; shares from dei when us-gaap is missing. Equity is the parent's:
@@ -86,7 +94,11 @@ ANNUAL_FORMS = ("20-F", "40-F")
 DAY = pd.Timedelta(days=1)
 REVIEW_WINDOW_DAYS = 200         # = factors.latest_before: older rows are not scored, so not worth a review
 SHARE_SOURCES = ["shares_dei", "shares_bs", "shares_w"]
-REVIEW_ONLY = [c for s in SHARE_SOURCES for c in (s, f"{s}_asof")] + ["shares_w_form"]
+REVIEW_ONLY = [c for s in SHARE_SOURCES for c in (s, f"{s}_asof")] + ["shares_w_form", "shares_w_unit"]
+SHARE_TAGS = ("EntityCommonStockSharesOutstanding", "CommonStockSharesOutstanding",
+              "WeightedAverageNumberOfDilutedSharesOutstanding", "WeightedAverageNumberOfSharesOutstandingBasic")
+# panel.ads_ratio statuses that mean the cover names a depositary share (no_ads: it does not, ratio 1)
+ADS_STATUSES = ("parsed_12b", "parsed_cover", "parsed_doc", "ambiguous", "ads_no_ratio", "manual")
 HELPERS = ["equity_total", "nci", "nci_redeemable"]         # inputs of equity, not columns of the table
 
 # TODO(S47, not done): a split between the filing date and the scoring day. factors.factor_scores takes
@@ -260,12 +272,49 @@ def weighted_shares(facts: pd.DataFrame) -> pd.DataFrame:
     and a 20-F's count was divided by 4 (MOMO, TAL, BEKE, XPEV ... at exactly 0.25x)."""
     f = _periods(facts, SHARES_FLOW_TAGS)
     f = f[f["val"] > MIN_SHARES]
+    cols = ["cik", "period_end", "filed", "shares_w", "shares_w_form", "shares_w_unit"]
     if f.empty:
-        return pd.DataFrame(columns=["cik", "period_end", "filed", "shares_w", "shares_w_form"])
+        return pd.DataFrame(columns=cols)
     # per period end: the earliest filing, and in it the shortest period (a quarter's average is nearer
     # to the count today than the year's)
     f = f.sort_values(["filed", "days"], kind="stable").drop_duplicates(["cik", "period_end"], keep="first")
-    return f[["cik", "period_end", "filed", "val", "form"]].rename(columns={"val": "shares_w", "form": "shares_w_form"})
+    # S53a: 1.0 when already in listed units (a float: _carry blanks stale values with NaN)
+    unit = f["per_unit"].astype(float) if "per_unit" in f else pd.Series(0.0, index=f.index)
+    return (f.assign(per_unit=unit)[["cik", "period_end", "filed", "val", "form", "per_unit"]]
+            .rename(columns={"val": "shares_w", "form": "shares_w_form", "per_unit": "shares_w_unit"}))
+
+
+def per_listed_unit(store: PanelStore, facts: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """S53a: share facts in listed units, and the (cik, filed) of 20-F/40-F filings left without a count.
+
+    facts needs `accn` (it may be null on rows that are not share facts). A share fact whose filing has a
+    ratio in panel.ads_ratio is divided by it and marked per_unit: the 20-F/40-F covers, and the 10-K/10-Q
+    filings of ADS issuers that agent/ads_ratio.yaml lists by period (S53a 补充 2). A share fact of a
+    20-F/40-F whose filing has none, of a company whose cover names a depositary share on any filing
+    (ADS_STATUSES), is dropped: its count is ordinary shares against an ADS price, the error this fixes, and
+    the filing is returned so that its row is flagged ads_unknown. Everything else is left as it is. No
+    panel.ads_ratio table: nothing changes."""
+    none = pd.DataFrame(columns=["cik", "filed"])
+    facts = facts.assign(per_unit=False)
+    try:
+        ratios = store.con.execute("SELECT cik, accn, ratio, status FROM ads_ratio").df()
+    except duckdb.CatalogException:
+        return facts, none
+    if ratios.empty or "accn" not in facts:
+        return facts, none
+    ratios = ratios.astype({"cik": "int64"})
+    known = ratios[ratios["ratio"].notna() & (ratios["ratio"] > 0)].drop_duplicates(["cik", "accn"])
+    ads_ciks = set(ratios.loc[ratios["status"].isin(ADS_STATUSES), "cik"])
+    share = facts["tag"].isin(SHARE_TAGS) & facts["accn"].notna()
+    sub = facts.loc[share, ["cik", "accn", "form"]].astype({"cik": "int64"})
+    r = sub.merge(known[["cik", "accn", "ratio"]], on=["cik", "accn"], how="left")["ratio"].to_numpy(float)
+    idx = sub.index
+    has = ~np.isnan(r)
+    facts.loc[idx[has], "val"] = facts.loc[idx[has], "val"].to_numpy() / r[has]
+    facts.loc[idx[has], "per_unit"] = True
+    unknown = idx[~has & sub["cik"].isin(ads_ciks).to_numpy() & sub["form"].isin(ANNUAL_FORMS).to_numpy()]
+    lost = facts.loc[unknown, ["cik", "filed"]].drop_duplicates().astype({"cik": "int64"})
+    return facts.drop(index=unknown), lost.reset_index(drop=True)
 
 
 def _carry(grid: pd.DataFrame, item: pd.DataFrame, col: str, extra: tuple = ()) -> pd.DataFrame:
@@ -297,13 +346,16 @@ def _usable_shares(out: pd.DataFrame) -> pd.DataFrame:
     A count that agrees with another within SHARES_MISMATCH is usable; an instant count (cover page,
     else balance sheet, the newer of the two) is preferred to the weighted average. Flags:
       mismatch     two or three counts of the period and no two agree: missing, to the review list
-      ads          only a weighted count, from a 20-F/40-F: missing, to the review list
+      ads          only a weighted count, from a 20-F/40-F whose ADS ratio is not known (not converted to
+                   listed units by per_listed_unit): missing, to the review list
       stale        every count is older than MAX_FACT_AGE_DAYS: missing, to the review list
       unconfirmed  a single count of the period, and an older one disagrees with it (MCHB, FUBO): used,
                    but listed for review
-    Known limitation (S47 补充 7): a 20-F/40-F filer with an instant count keeps it. That is ordinary
-    shares against a price per ADS, the ratio taken as 1, so its market cap can be overstated (TSM x5,
-    BABA x8); cheapness is understated rather than invented. The ratio is not in XBRL."""
+    (build adds ads_unknown: a filing of a depositary-share company whose own ratio is unknown.)
+    S47 补充 7 kept a 20-F/40-F filer's instant count with the ADS ratio taken as 1 and called the error
+    one-sided ("cheapness is understated rather than invented"). It is not: where an ADS is a fraction of
+    a share the market cap is understated (TCOM 2016-2021, 8 ADSs to a share, ranked 7th on value in
+    2020-04). S53a converts the counts to listed units first; a company not in panel.ads_ratio is as before."""
     vals = out[SHARE_SOURCES]
     asof = pd.DataFrame({s: out[f"{s}_asof"] for s in SHARE_SOURCES}).where(vals.notna())
     newest = asof.max(axis=1)
@@ -336,8 +388,10 @@ def _usable_shares(out: pd.DataFrame) -> pd.DataFrame:
     flag[alone & shares.notna() & contradicted] = "unconfirmed"
     had_one = out[[f"{s}_asof" for s in SHARE_SOURCES]].notna().any(axis=1)
     flag[(n == 0) & had_one] = "stale"
-    # price is per ADS, the count is ordinary shares, and the ratio between them is not in XBRL
-    flag[use_w & out["shares_w_form"].isin(ANNUAL_FORMS)] = "ads"
+    # price is per ADS, the count is ordinary shares, and the ratio between them is not in XBRL; S53a: unless
+    # the count was converted to listed units with the filing's cover-page ratio
+    converted = out["shares_w_unit"].astype(float).gt(0) if "shares_w_unit" in out else False
+    flag[use_w & out["shares_w_form"].isin(ANNUAL_FORMS) & ~converted] = "ads"
     # GMRS: 22.1M on the balance sheet against 62.7M weighted, the same quarter, nothing else to decide by
     flag[(n >= 2) & shares.isna()] = "mismatch"
     unusable = flag.isin(["ads", "mismatch"])
@@ -393,12 +447,16 @@ def build(store: PanelStore) -> pd.DataFrame:
     # A period that ends after its own filing is a typing error (a 2033 cover date in a 2023 10-Q); carried
     # as "the latest" it would block every real value after it. Dates outside 1990..filed also cannot be
     # held as datetime64[ns] (year 3024 or 0202 would stop the whole build).
-    facts = store.con.execute("""SELECT cik, tag, period_start, period_end, is_instant, val, form, filed
+    # accn only where S53a needs it (share facts): a column of 7M strings otherwise
+    tags = ", ".join(f"'{t}'" for t in SHARE_TAGS)
+    facts = store.con.execute(f"""SELECT cik, tag, period_start, period_end, is_instant, val, form, filed,
+                                         CASE WHEN tag IN ({tags}) THEN accn END AS accn
                                  FROM xbrl_facts WHERE unit IN ('USD','shares')
                                    AND period_start >= DATE '1990-01-01' AND period_end BETWEEN DATE '1990-01-01' AND filed
-                                 ORDER BY cik, tag, period_start, period_end, filed, accn""").df()
+                                 ORDER BY cik, tag, period_start, period_end, filed, xbrl_facts.accn""").df()
     for c in ("period_start", "period_end", "filed"):
         facts[c] = pd.to_datetime(facts[c]).astype("datetime64[ns]")
+    facts, no_ratio = per_listed_unit(store, facts)          # S53a: 20-F/40-F share counts in listed units
     # cik -> ticker is point-in-time: 388 tickers have belonged to more than one company (SPACs,
     # renames, recycled symbols), so a filing is mapped to the ticker its CIK carried in that quarter
     # (issuer_seen), falling back to the CIK's latest ticker. Found by the 2026-09-22 audit.
@@ -436,7 +494,7 @@ def build(store: PanelStore) -> pd.DataFrame:
     cols = [grid[["cik", "period_end", "filed"]]]
     for col, df in items.items():
         df = df.astype({"cik": "int64"}) if not df.empty else df
-        cols.append(_carry(grid, df, col, ("shares_w_form",) if col == "shares_w" else ()))
+        cols.append(_carry(grid, df, col, ("shares_w_form", "shares_w_unit") if col == "shares_w" else ()))
     out = pd.concat(cols, axis=1)
     for name in BY_TAG:                          # the first tag with a fresh TTM (_carry has dropped stale ones)
         alts = [f"{name}_ttm{i}" for i in range(len(FLOW_TAGS[name]))]
@@ -444,6 +502,11 @@ def build(store: PanelStore) -> pd.DataFrame:
         out = out.drop(columns=alts + [f"{a}_asof" for a in alts])
     out["equity"] = _parent_equity(out)
     out = _usable_shares(out)
+    if len(no_ratio):                            # S53a: a depositary-share filing whose own ratio is unknown
+        lost = out.merge(no_ratio.assign(_lost=1.0), on=["cik", "filed"], how="left")["_lost"].eq(1.0).to_numpy()
+        out.loc[lost, "shares"] = np.nan
+        out.loc[lost, "shares_asof"] = pd.NaT
+        out.loc[lost, "shares_flag"] = "ads_unknown"
     out = out.drop(columns=HELPERS + [c for c in out.columns if c.endswith("_asof") and c not in REVIEW_ONLY + ["shares_asof"]])
     out["qn"] = _qn(out["filed"].dt.year.astype(str) + "q" + out["filed"].dt.quarter.astype(str))
     out = out.merge(tick_pit[["cik", "qn", "ticker"]], on=["cik", "qn"], how="left").merge(tick, on="cik", how="inner")

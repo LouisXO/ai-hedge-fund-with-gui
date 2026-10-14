@@ -1,0 +1,1380 @@
+# S53a hand-checked ADS ratios (docs/AGENT_PLAN.md S53a 补充 2). Win over the cover parse (agent.sources.ads_ratio).
+# ratio = ordinary shares per listed unit. Filing rows: {cik, accn, ratio, listed_as: ads|direct}; period rows: every
+# filing of the company filed from..to (to empty = until a later row), forms listed. Each row: SEC source and the sentence.
+# Checked 2026-10-14 by independent reading of the filings (workflow s53a-ads-ratio-checks), 118 + 7 filings, 2 companies.
+- cik: 1286973
+  accn: 0001213900-23-024751
+  ratio: 1.0
+  listed_as: direct
+  ticker: USAS
+  filed: '2023-03-30'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1286973/000121390023024751/f40f2022_americasgold.htm
+  evidence: 'Cover, Section 12(b): "Title of each class Trading Symbol(s) Name of each exchange on which registered Common Shares, no par value USAS NYSE American LLC"; also "The Company''s common shares
+    are listed on the NYSE America…'
+  checked: '2026-10-14'
+- cik: 1494558
+  accn: 0001104659-24-051943
+  ratio: 20.0
+  listed_as: ads
+  ticker: AMBO
+  filed: '2024-04-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1494558/000110465924051943/ambo-20231231x20f.htm
+  evidence: 'Cover: "American depositary shares (one American depositary share representing twenty Class A Ordinary Shares, par value $0.003 per share) ** AMBO NYSE American LLC ... **Effective on February
+    20, 2024, the ratio of ADSs…'
+  checked: '2026-10-14'
+- cik: 1494558
+  accn: 0001013762-25-004136
+  ratio: 20.0
+  listed_as: ads
+  ticker: AMBO
+  filed: '2025-03-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1494558/000101376225004136/ea0235072-20f_ambow.htm
+  evidence: 'Cover: "American depositary shares (one American depositary share representing twenty Class A Ordinary Shares, par value $0.003 per share)"; "Offer and Listing Details Our ADSs (each representing
+    twenty Class A Ordinary …'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001144204-14-022737
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2014-04-15'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000114420414022737/v370783_20f.htm
+  evidence: '""ADSs" refers to our American depositary shares, each of which represents two ordinary shares;" and "we also changed our ADS ratio effective August 10, 2009 from one ADS representing one ordinary
+    share to one ADS repres…'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001144204-15-022980
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2015-04-15'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000114420415022980/v404440_20f.htm
+  evidence: '""ADSs" refers to our American depositary shares, each of which represents two ordinary shares;" and "we also changed our ADS ratio effective August 10, 2009 from one ADS representing one ordinary
+    share to one ADS repres…'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001144204-16-093972
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2016-04-13'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000114420416093972/v434436_20f.htm
+  evidence: '""ADSs" refers to our American depositary shares, each of which represents two ordinary shares;" and "(one ADS represents two ordinary shares)".'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001144204-17-020070
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2017-04-12'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000114420417020070/v462091_20f.htm
+  evidence: '""ADSs" refers to our American depositary shares, each of which represents two ordinary shares;" and "(one ADS represents two ordinary shares)".'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001144204-18-017279
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2018-03-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000114420418017279/tv488580_20f.htm
+  evidence: '""ADSs" refers to our American depositary shares, each of which represents two ordinary shares;" and "(one ADS represents two ordinary shares)".'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001144204-19-016665
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2019-03-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000114420419016665/tv515799_20f.htm
+  evidence: '""ADSs" refers to our American depositary shares, each of which represents two ordinary shares;" and "(one ADS represents two ordinary shares)".'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001104659-20-037959
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2020-03-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000110465920037959/tm206809-1_20f.htm
+  evidence: '""ADSs" refers to our American depositary shares, each of which represents two ordinary shares;" and "(one ADS represents two ordinary shares)".'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001104659-21-044259
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2021-03-31'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000110465921044259/tm214047d1_20f.htm
+  evidence: '""ADSs" refers to our American depositary shares, each of which represents two ordinary shares;" and "(one ADS represents two ordinary shares)".'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001410578-22-000463
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2022-03-23'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000141057822000463/tmb-20211231x20f.htm
+  evidence: '"Unless otherwise indicated, in this annual report, "ADSs" refers to our American depositary shares, each of which represents two ordinary shares;"'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001410578-23-000618
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2023-04-06'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000141057823000618/tmb-20221231x20f.htm
+  evidence: '"Unless otherwise indicated, in this annual report, "ADSs" refers to our American depositary shares, each of which represents two ordinary shares;"'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001104659-24-042156
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2024-04-02'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000110465924042156/himx-20231231x20f.htm
+  evidence: '"Unless otherwise indicated, in this annual report, "ADSs" refers to our American depositary shares, each of which represents two ordinary shares;"'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001410578-25-000623
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2025-04-02'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000141057825000623/himx-20241231x20f.htm
+  evidence: '"Unless otherwise indicated, in this annual report, "ADSs" refers to our American depositary shares, each of which represents two ordinary shares;"'
+  checked: '2026-10-14'
+- cik: 1342338
+  accn: 0001104659-26-035507
+  ratio: 2.0
+  listed_as: ads
+  ticker: HIMX
+  filed: '2026-03-27'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1342338/000110465926035507/himx-20251231x20f.htm
+  evidence: '"Unless otherwise indicated, in this annual report, "ADSs" refers to our American depositary shares, each of which represents two ordinary shares;"'
+  checked: '2026-10-14'
+- cik: 1720446
+  accn: 0001410578-25-000903
+  ratio: 16.0
+  listed_as: ads
+  ticker: ZEPP
+  filed: '2025-04-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1720446/000141057825000903/zepp-20241231x20f.htm
+  evidence: 'Cover: "American depositary shares (each representing 16 Class A ordinary shares, par value US$0.0001 per share)* ... *Effective on September 16, 2024, the ratio of ADSs to our Class A ordinary
+    shares was changed from on…'
+  checked: '2026-10-14'
+- cik: 1720446
+  accn: 0001104659-26-048127
+  ratio: 16.0
+  listed_as: ads
+  ticker: ZEPP
+  filed: '2026-04-24'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1720446/000110465926048127/zepp-20251231x20f.htm
+  evidence: '""ADSs" refer to our American depositary shares, each of which represents 16 Class A ordinary shares;" and "As of the date of this annual report, our ADSs trade under the symbol "ZEPP" and
+    one ADS represents 16 Class A o…'
+  checked: '2026-10-14'
+- cik: 1697818
+  accn: 0001193125-18-124857
+  ratio: 0.5
+  listed_as: ads
+  ticker: AMBR
+  filed: '2018-04-20'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1697818/000119312518124857/d532669d20f.htm
+  evidence: 'Cover: "American Depositary Shares, two representing one Class A ordinary share"; "Two ADSs represent one Class A ordinary share;"; "our initial public offering of 3,750,000 ADSs representing
+    1,875,000 Class A ordinary s…'
+  checked: '2026-10-14'
+- cik: 1697818
+  accn: 0001104659-19-023699
+  ratio: 0.5
+  listed_as: ads
+  ticker: AMBR
+  filed: '2019-04-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1697818/000110465919023699/a19-3271_120f.htm
+  evidence: 'Cover: "American Depositary Shares, two representing one Class A ordinary share"; "Two ADSs represent one Class A ordinary share;"; "Each ADS represents 0.5 common share."'
+  checked: '2026-10-14'
+- cik: 1697818
+  accn: 0001104659-23-059102
+  ratio: 5.0
+  listed_as: ads
+  ticker: AMBR
+  filed: '2023-05-11'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1697818/000110465923059102/iclk-20221231x20f.htm
+  evidence: 'Cover: "American Depositary Shares, one representing five Class A ordinary shares"; "Two ADSs represent one Class A ordinary share before November 14, 2022, and one ADS represent five Class
+    A ordinary shares effective fr…'
+  checked: '2026-10-14'
+- cik: 1697818
+  accn: 0001410578-24-001029
+  ratio: 5.0
+  listed_as: ads
+  ticker: AMBR
+  filed: '2024-06-20'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1697818/000141057824001029/iclk-20231231x20f.htm
+  evidence: 'Cover: "American Depositary Shares, one representing five Class A ordinary shares"; "Markets Our ADSs, one ADS representing five Class A ordinary shares, have been listed on the Nasdaq Global
+    Market since December 21, 20…'
+  checked: '2026-10-14'
+- cik: 1697818
+  accn: 0001410578-25-000996
+  ratio: 5.0
+  listed_as: ads
+  ticker: AMBR
+  filed: '2025-04-29'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1697818/000141057825000996/ambr-20241231x20f.htm
+  evidence: 'Cover: "American Depositary Shares, one representing five Class A ordinary shares ... AMBR Nasdaq Global Market"; "Markets Our ADSs, one ADS representing five Class A ordinary shares, have
+    been listed on the Nasdaq Globa…'
+  checked: '2026-10-14'
+- cik: 1697818
+  accn: 0001104659-26-060362
+  ratio: 5.0
+  listed_as: ads
+  ticker: AMBR
+  filed: '2026-05-13'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1697818/000110465926060362/ambr-20251231x20f.htm
+  evidence: 'Cover: "American Depositary Shares, one representing five Class A ordinary shares ... AMBR Nasdaq Global Market"; "we may repurchase up to US$50 million of our ADSs, each representing five
+    Class A ordinary shares during …'
+  checked: '2026-10-14'
+- cik: 1709819
+  accn: 0001564590-18-016280
+  ratio: 0.5
+  listed_as: ads
+  ticker: FEDU
+  filed: '2018-06-27'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1709819/000156459018016280/fedu-20f_20180228.htm
+  evidence: 'Cover: "American Depositary Shares, each two representing one ordinary share"; "Each two ADS represent one ordinary share."; IPO "9,608,738 ADSs, representing 4,804,369 ordinary shares"'
+  checked: '2026-10-14'
+- cik: 1709819
+  accn: 0001564590-19-023444
+  ratio: 0.5
+  listed_as: ads
+  ticker: FEDU
+  filed: '2019-06-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1709819/000156459019023444/fedu-20f_20190228.htm
+  evidence: 'Cover: "American Depositary Shares, each two representing one ordinary share ... FEDU New York Stock Exchange"; "Each two ADS represent one ordinary share."'
+  checked: '2026-10-14'
+- cik: 1709819
+  accn: 0001564590-20-030428
+  ratio: 0.5
+  listed_as: ads
+  ticker: FEDU
+  filed: '2020-06-24'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1709819/000156459020030428/fedu-20f_20200229.htm
+  evidence: 'Cover: "American Depositary Shares, each two representing one ordinary share ... FEDU New York Stock Exchange"; "Each two ADS represent one ordinary share."'
+  checked: '2026-10-14'
+- cik: 1709819
+  accn: 0001564590-21-035731
+  ratio: 0.5
+  listed_as: ads
+  ticker: FEDU
+  filed: '2021-07-02'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1709819/000156459021035731/fedu-20f_20210228.htm
+  evidence: 'Cover: "American Depositary Shares, each two representing one ordinary share ... FEDU New York Stock Exchange"; "Each two ADS represent one ordinary share."'
+  checked: '2026-10-14'
+- cik: 1709819
+  accn: 0000950170-22-012388
+  ratio: 10.0
+  listed_as: ads
+  ticker: FEDU
+  filed: '2022-06-30'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1709819/000095017022012388/fedu-20220228.htm
+  evidence: '"SUBSEQUENT EVENT On June 21, 2022, the Group changed the ratio of its American depositary shares ("ADS") representing its ordinary shares from two ADSs representing one ordinary share to one
+    ADS representing ten ordinar…'
+  checked: '2026-10-14'
+- cik: 1709819
+  accn: 0000950170-23-030412
+  ratio: 10.0
+  listed_as: ads
+  ticker: FEDU
+  filed: '2023-06-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1709819/000095017023030412/fedu-20230228.htm
+  evidence: 'Cover: "American Depositary Shares, each one representing ten ordinary shares ... FEDU New York Stock Exchange"; "Each ADS represents ten ordinary share as of February 28, 2023."'
+  checked: '2026-10-14'
+- cik: 1709819
+  accn: 0000950170-24-078480
+  ratio: 10.0
+  listed_as: ads
+  ticker: FEDU
+  filed: '2024-06-27'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1709819/000095017024078480/fedu-20240229.htm
+  evidence: 'Cover: "American Depositary Shares, each one representing ten ordinary shares"; "Our American depositary shares, each of which represents ten ordinary shares, are listed on the New York Stock
+    Exchange."'
+  checked: '2026-10-14'
+- cik: 1709819
+  accn: 0000950170-25-090163
+  ratio: 10.0
+  listed_as: ads
+  ticker: FEDU
+  filed: '2025-06-26'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1709819/000095017025090163/fedu-20250228.htm
+  evidence: 'Cover: "American Depositary Shares, each one representing ten ordinary shares"; "Each ADS represents ten ordinary share as of February 28, 2025."'
+  checked: '2026-10-14'
+- cik: 1709819
+  accn: 0001193125-26-273350
+  ratio: 10.0
+  listed_as: ads
+  ticker: FEDU
+  filed: '2026-06-17'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1709819/000119312526273350/fedu-20260228.htm
+  evidence: 'Cover: "American Depositary Shares, each one representing ten ordinary shares"; "Each ADS represents ten ordinary share as of February 28, 2026."'
+  checked: '2026-10-14'
+- cik: 1738699
+  accn: 0001104659-26-053033
+  ratio: 0.5
+  listed_as: ads
+  ticker: WKEY
+  filed: '2026-04-30'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1738699/000110465926053033/tmb-20251231x20f.htm
+  evidence: 'Cover: "American Depositary Shares, each representing half a Class B Share, par value CHF 0.10 per share ... WKEY The Nasdaq Stock Market LLC"; "As a result of the reverse stock split of the
+    Class B Shares and a subseque…'
+  checked: '2026-10-14'
+- cik: 1812477
+  accn: 0001213900-22-015279
+  ratio: 1.0
+  listed_as: direct
+  ticker: KEEL
+  filed: '2022-03-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1812477/000121390022015279/f40f2021_bitfarmsltd.htm
+  evidence: 'Cover, Section 12(b): "Title of each class Trading Symbol(s) Name of each exchange on which registered Common Shares BITF Nasdaq Stock Market LLC". The document never mentions a depositary
+    or ADS.'
+  checked: '2026-10-14'
+- cik: 1812477
+  accn: 0001213900-23-021559
+  ratio: 1.0
+  listed_as: direct
+  ticker: KEEL
+  filed: '2023-03-21'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1812477/000121390023021559/f40f2022_bitfarmsltd.htm
+  evidence: 'Cover, Section 12(b): "Title of each class Trading Symbol(s) Name of each exchange on which registered Common Shares BITF Nasdaq Stock Market LLC". No depositary or ADS mentions.'
+  checked: '2026-10-14'
+- cik: 1812477
+  accn: 0001213900-24-020602
+  ratio: 1.0
+  listed_as: direct
+  ticker: KEEL
+  filed: '2024-03-07'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1812477/000121390024020602/ea0200005-40f_bitfarms.htm
+  evidence: 'Cover, Section 12(b): "Title of each class Trading Symbol(s) Name of each exchange on which registered Common Shares BITF Nasdaq Stock Market LLC". No depositary or ADS mentions.'
+  checked: '2026-10-14'
+- cik: 1812477
+  accn: 0001213900-25-026575
+  ratio: 1.0
+  listed_as: direct
+  ticker: KEEL
+  filed: '2025-04-01'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1812477/000121390025026575/ea0234268-40f_bitfarms.htm
+  evidence: 'Cover, Section 12(b): "Title of each class Trading Symbol(s) Name of each exchange on which registered Common Shares BITF Nasdaq Stock Market LLC". No depositary or ADS mentions.'
+  checked: '2026-10-14'
+- cik: 1815021
+  accn: 0001193125-23-192729
+  ratio: 4.5
+  listed_as: ads
+  ticker: BQ
+  filed: '2023-07-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1815021/000119312523192729/d290954d20f.htm
+  evidence: 'Cover: "American depositary shares, each ADS represents four and one half (4.5) Class A ordinary shares, par value US$0.001 per share BQ The New York Stock Exchange"; "we have changed the ratio
+    of our ADSs to Class A ord…'
+  checked: '2026-10-14'
+- cik: 1854368
+  accn: 0001213900-22-015327
+  ratio: 1.0
+  listed_as: direct
+  ticker: DGXX
+  filed: '2022-03-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1854368/000121390022015327/f40f2021_digihosttech.htm
+  evidence: 'Cover, Section 12(b): "Title of each class Trading Symbol(s) Name of each exchange on which registered Subordinate Voting Shares DGHI Nasdaq Stock Market LLC (Nasdaq Capital Market)". The document
+    never mentions a deposi…'
+  checked: '2026-10-14'
+- cik: 1873875
+  accn: 0001213900-22-066882
+  ratio: 25.0
+  listed_as: ads
+  ticker: IXHL
+  filed: '2022-10-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1873875/000121390022066882/f20f2022_incannex.htm
+  evidence: '"We have listed our ordinary shares as represented by ADSs, each ADS representing 25 of our ordinary shares, on the Nasdaq Stock Market LLC under the symbol "IXHL""; "As of September 30, 2022,
+    there were 681,302 ADSs out…'
+  checked: '2026-10-14'
+- cik: 1873875
+  accn: 0001213900-23-081650
+  ratio: 25.0
+  listed_as: ads
+  ticker: IXHL
+  filed: '2023-10-31'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1873875/000121390023081650/f20f2023_incannex.htm
+  evidence: '"We have listed our ordinary shares as represented by ADSs, each ADS representing 25 of our ordinary shares, on the Nasdaq Stock Market LLC under the symbol "IXHL""; "As of September 30, 2023,
+    there were 1,024,005ADSs ou…'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001047469-14-001301
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2014-02-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000104746914001301/a2218391z20-f.htm
+  evidence: '"Bank of New York Mellon, our ADR depositary, informed us, that as of December 31, 2013, 25,705,490 ordinary ADSs, each representing one half of an ordinary share, were held of record by 3,713
+    U.S." / "Each ADS represent…'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001047469-15-001176
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2015-02-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000104746915001176/a2223100z20-f.htm
+  evidence: '"Bank of New York Mellon, our ADR depositary, informed us, that as of December 31, 2014, 20,502,564 ordinary ADSs, each representing one half of an ordinary share, were held of record by 3,503
+    U.S." / "Each ADS represent…'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001047469-16-010364
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2016-02-24'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000104746916010364/a2227417z20-f.htm
+  evidence: '"Bank of New York Mellon, our ADR depositary, informed us, that as of December 31, 2015, 19,175,742 ordinary ADSs, each representing one half of an ordinary share, were held of record by 3,343
+    U.S." / "Each ADS represent…'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001047469-17-000816
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2017-02-22'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000104746917000816/a2230893z20-f.htm
+  evidence: '"Bank of New York Mellon, our ADR depositary, informed us, that as of December 31, 2016, 24,696,456 ADSs, each representing one half of a share, were held of record by 3,169 U.S."'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001047469-18-001100
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2018-02-27'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000104746918001100/a2234582z20-f.htm
+  evidence: '"Each ADS represents an ownership interest in one-half of a share." / "Bank of New York Mellon, our ADR depositary, informed us, that as of December 31, 2017, 23,531,946 ADSs, each representing
+    one half of a share, were …'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001047469-19-000562
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2019-02-20'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000104746919000562/a2237687z20-f.htm
+  evidence: '"Each ADS represents an ownership interest in one-half of a share." / "Bank of New York Mellon, our ADR depositary, informed us, that as of December 31, 2018, 21,185,060 ADSs, each representing
+    one half of a share, were …'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001047469-20-000960
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2020-02-20'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000104746920000960/a2240706z20-f.htm
+  evidence: '"Each ADS represents an ownership interest in one-half of a share." / "Effective December 3, 2012, we effected a two-for-one split of our outstanding ADSs, which changed the ratio our ADSs
+    to shares from one ADSs represe…'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001047469-21-000424
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2021-02-23'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000104746921000424/a2242850z20-f.htm
+  evidence: '"Effective December 3, 2012, we effected a two-for-one split of our outstanding ADSs, which changed the ratio our ADSs to shares from one ADSs representing one share to two ADSs representing
+    one share."'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001104659-22-025549
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2022-02-22'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000110465922025549/fms-20211231x20f.htm
+  evidence: '"The number of shares (including American Depositary Receipts (ADRs)) acquired by the members of the Management Board in the course of the aforementioned personal investments are shown in the
+    following table, with two AD…'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001104659-23-024168
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2023-02-22'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000110465923024168/fms-20221231x20f.htm
+  evidence: '"The number of shares (including American Depositary Shares (ADSs)) acquired by the current or former members of the Management Board in the course of the aforementioned personal investments
+    are shown in the following ta…'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001104659-24-025293
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2024-02-20'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000110465924025293/fms-20231231x20f.htm
+  evidence: '"Where ADSs are held, two ADSs each represent one share." / "ADSs representing shares of FME AG were accepted for listing and trading on the NYSE upon effectiveness of the Conversion, and trade
+    under the symbol FMS."'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001104659-25-016784
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2025-02-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000110465925016784/fms-20241231x20f.htm
+  evidence: '"Where ADSs are held, two ADSs represent one share." / "Two ADRs represent one share."'
+  checked: '2026-10-14'
+- cik: 1333141
+  accn: 0001104659-26-019005
+  ratio: 0.5
+  listed_as: ads
+  ticker: FMS
+  filed: '2026-02-24'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1333141/000110465926019005/fms-20251231x20f.htm
+  evidence: '"Where ADSs are held, two ADSs represent one share." / "Two ADSs represent one share."'
+  checked: '2026-10-14'
+- cik: 1417892
+  accn: 0001144204-18-023439
+  ratio: 10.0
+  listed_as: ads
+  ticker: SOL
+  filed: '2018-04-30'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1417892/000114420418023439/tv491440_20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each representing ... 10 shares, no par value per share" / "As a result, effective from February 10, 2017, the number of our shares represented by
+    each ADS has been changed from …'
+  checked: '2026-10-14'
+- cik: 1417892
+  accn: 0001144204-19-021681
+  ratio: 10.0
+  listed_as: ads
+  ticker: SOL
+  filed: '2019-04-29'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1417892/000114420419021681/tv518702_20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each representing ... 10 shares, no par value per share" / "As a result, effective from February 10, 2017, the number of our shares represented by
+    each ADS has been changed from …'
+  checked: '2026-10-14'
+- cik: 1417892
+  accn: 0001104659-20-052378
+  ratio: 10.0
+  listed_as: ads
+  ticker: SOL
+  filed: '2020-04-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1417892/000110465920052378/tm206495-1_20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each representing ... 10 shares, no par value per share" / "As a result, effective from February 10, 2017, the number of our shares represented by
+    each ADS has been changed from …'
+  checked: '2026-10-14'
+- cik: 1499620
+  accn: 0001144204-18-035695
+  ratio: 0.3333333333
+  listed_as: ads
+  ticker: TAL
+  filed: '2018-06-26'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1499620/000114420418035695/tv488621_20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each three representing one Class A common share* ... * Effective on August 16, 2017, the ratio of ADSs to Class A common shares was changed from one
+    ADS representing two Class A…'
+  checked: '2026-10-14'
+- cik: 1499620
+  accn: 0001144204-19-026826
+  ratio: 0.3333333333
+  listed_as: ads
+  ticker: TAL
+  filed: '2019-05-16'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1499620/000114420419026826/tv518838_20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each three representing one Class A common share* ... * Effective on August 16, 2017, the ratio of ADSs to Class A common shares was changed from one
+    ADS representing two Class A…'
+  checked: '2026-10-14'
+- cik: 1499620
+  accn: 0001104659-20-078996
+  ratio: 0.3333333333
+  listed_as: ads
+  ticker: TAL
+  filed: '2020-06-30'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1499620/000110465920078996/tal-20200229x20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each three representing one Class A common share* ... * Effective on August 16, 2017, the ratio of ADSs to Class A common shares was changed from one
+    ADS representing two Class A…'
+  checked: '2026-10-14'
+- cik: 1499620
+  accn: 0001104659-21-063077
+  ratio: 0.3333333333
+  listed_as: ads
+  ticker: TAL
+  filed: '2021-05-07'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1499620/000110465921063077/tal-20210228x20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each three representing one Class A common share* ... * Effective on August 16, 2017, the ratio of ADSs to Class A common shares was changed from one
+    ADS representing two Class A…'
+  checked: '2026-10-14'
+- cik: 1499620
+  accn: 0001410578-22-001873
+  ratio: 0.3333333333
+  listed_as: ads
+  ticker: TAL
+  filed: '2022-06-14'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1499620/000141057822001873/tal-20220228x20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each three representing one Class A common share* ... * Effective on August 16, 2017, the ratio of ADSs to Class A common shares was changed from one
+    ADS representing two Class A…'
+  checked: '2026-10-14'
+- cik: 1499620
+  accn: 0001410578-23-001399
+  ratio: 0.3333333333
+  listed_as: ads
+  ticker: TAL
+  filed: '2023-05-31'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1499620/000141057823001399/tal-20230228x20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each three representing one Class A common share* ... * Effective on August 16, 2017, the ratio of ADSs to Class A common shares was changed from one
+    ADS representing two Class A…'
+  checked: '2026-10-14'
+- cik: 1499620
+  accn: 0001104659-24-067123
+  ratio: 0.3333333333
+  listed_as: ads
+  ticker: TAL
+  filed: '2024-05-31'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1499620/000110465924067123/tal-20240229x20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each three representing one Class A common share* ... * Effective on August 16, 2017, the ratio of ADSs to Class A common shares was changed from one
+    ADS representing two Class A…'
+  checked: '2026-10-14'
+- cik: 1499620
+  accn: 0001410578-25-001415
+  ratio: 0.3333333333
+  listed_as: ads
+  ticker: TAL
+  filed: '2025-06-16'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1499620/000141057825001415/tal-20250228x20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each three representing one Class A common share* ... * Effective on August 16, 2017, the ratio of ADSs to Class A common shares was changed from one
+    ADS representing two Class A…'
+  checked: '2026-10-14'
+- cik: 1499620
+  accn: 0001104659-26-073410
+  ratio: 0.3333333333
+  listed_as: ads
+  ticker: TAL
+  filed: '2026-06-12'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1499620/000110465926073410/tal-20260228x20f.htm
+  evidence: 'Cover 12(b): "American Depositary Shares, each three representing one Class A common share* ... * Effective on August 16, 2017, the ratio of ADSs to Class A common shares was changed from one
+    ADS representing two Class A…'
+  checked: '2026-10-14'
+- cik: 1691221
+  accn: 0001213900-22-016879
+  ratio: 5.0
+  listed_as: ads
+  ticker: FRSX
+  filed: '2022-03-31'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1691221/000121390022016879/f20f2021_foresight.htm
+  evidence: '"Our Ordinary Shares are currently traded on the TASE, and American Depositary Shares, or ADSs, each representing five of our Ordinary Shares, currently trade on the Nasdaq Capital Market,
+    both under the symbol \"FRSX\".…'
+  checked: '2026-10-14'
+- cik: 1725033
+  accn: 0001104659-21-066950
+  ratio: 6.0
+  listed_as: ads
+  ticker: XYF
+  filed: '2021-05-14'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1725033/000110465921066950/a21-4788_120f.htm
+  evidence: 'Cover 12(b): "American depositary shares, each ADS represents six Class A ordinary shares ... * Effective from November 19, 2020, the ratio of ADSs representing the Class A ordinary shares
+    changed from one (1) ADS repres…'
+  checked: '2026-10-14'
+- cik: 1725033
+  accn: 0001104659-22-051593
+  ratio: 6.0
+  listed_as: ads
+  ticker: XYF
+  filed: '2022-04-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1725033/000110465922051593/xyf-20211231x20f.htm
+  evidence: 'Cover 12(b): "American depositary shares, each ADS represents six Class A ordinary shares ... * Effective from November 19, 2020, the ratio of ADSs representing the Class A ordinary shares
+    changed from one (1) ADS repres…'
+  checked: '2026-10-14'
+- cik: 1725033
+  accn: 0001104659-23-051321
+  ratio: 6.0
+  listed_as: ads
+  ticker: XYF
+  filed: '2023-04-27'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1725033/000110465923051321/xyf-20221231x20f.htm
+  evidence: 'Cover 12(b): "American depositary shares, each ADS represents six Class A ordinary shares ... * Effective from November 19, 2020, the ratio of ADSs representing the Class A ordinary shares
+    changed from one (1) ADS repres…'
+  checked: '2026-10-14'
+- cik: 1725033
+  accn: 0001104659-24-053982
+  ratio: 6.0
+  listed_as: ads
+  ticker: XYF
+  filed: '2024-04-29'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1725033/000110465924053982/xyf-20231231x20f.htm
+  evidence: 'Cover 12(b): "American depositary shares, each ADS represents six Class A ordinary shares ... * Effective from November 19, 2020, the ratio of ADSs representing the Class A ordinary shares
+    changed from one (1) ADS repres…'
+  checked: '2026-10-14'
+- cik: 1725033
+  accn: 0001410578-25-000892
+  ratio: 6.0
+  listed_as: ads
+  ticker: XYF
+  filed: '2025-04-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1725033/000141057825000892/xyf-20241231x20f.htm
+  evidence: 'Cover 12(b): "American depositary shares, each ADS represents six Class A ordinary shares ... * Effective from November 19, 2020, the ratio of ADSs representing the Class A ordinary shares
+    changed from one (1) ADS repres…'
+  checked: '2026-10-14'
+- cik: 1725033
+  accn: 0001104659-26-052016
+  ratio: 6.0
+  listed_as: ads
+  ticker: XYF
+  filed: '2026-04-30'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1725033/000110465926052016/xyf-20251231x20f.htm
+  evidence: 'Cover 12(b): "American depositary shares, each ADS represents six Class A ordinary shares ... * Effective from November 19, 2020, the ratio of ADSs representing the Class A ordinary shares
+    changed from one (1) ADS repres…'
+  checked: '2026-10-14'
+- cik: 1769256
+  accn: 0001213900-25-005499
+  ratio: 12000000.0
+  listed_as: ads
+  ticker: XHG
+  filed: '2025-01-22'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1769256/000121390025005499/ea0226892-20f_xchan.htm
+  evidence: 'Cover 12(b): "American depositary shares (one American depositary share representing twelve million (12,000,000) Class A ordinary shares, par value US$0.0000001 per share) XHG NASDAQ Capital
+    Market ... * As of the date o…'
+  checked: '2026-10-14'
+- cik: 1792267
+  accn: 0001193125-25-101753
+  ratio: 10.0
+  listed_as: ads
+  ticker: BNR
+  filed: '2025-04-29'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1792267/000119312525101753/d937933d20f.htm
+  evidence: 'Cover 12(b): "American depositary shares, each representing ten Class A ordinary shares ... * Effective on May 15, 2024, the ratio of ADSs to Class A ordinary shares was changed from one ADS
+    representing one Class A ordi…'
+  checked: '2026-10-14'
+- cik: 1818838
+  accn: 0001410578-25-000419
+  ratio: 1.25
+  listed_as: ads
+  ticker: ADAG
+  filed: '2025-03-24'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1818838/000141057825000419/adag-20241231x20f.htm
+  evidence: '"\"ADSs\" refers to the American depositary shares, each representing one and one quarter (1.25) of our ordinary shares;" / "Each ADS represents one and one quarter ordinary shares, par value
+    US$0.0001 per share."'
+  checked: '2026-10-14'
+- cik: 1818838
+  accn: 0001104659-26-038612
+  ratio: 1.25
+  listed_as: ads
+  ticker: ADAG
+  filed: '2026-04-01'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1818838/000110465926038612/adag-20251231x20f.htm
+  evidence: '"\"ADSs\" refers to the American depositary shares, each representing one and one quarter (1.25) of our ordinary shares;" / "Each ADS represents one and one quarter ordinary shares, par value
+    US$0.0001 per share."'
+  checked: '2026-10-14'
+- cik: 1847075
+  accn: 0001213900-22-030453
+  ratio: 1.0
+  listed_as: direct
+  ticker: SAIH
+  filed: '2022-05-31'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1847075/000121390022030453/f20f2022_saitechglobal.htm
+  evidence: 'Cover 12(b): "Ordinary Shares, par value $0.0001 per share SAI The Nasdaq Stock Market LLC" / "On May 2, 2022, the Company''s Class A Ordinary Shares and SAI Warrants commenced trading on the
+    Nasdaq Capital Market under t…'
+  checked: '2026-10-14'
+- cik: 1847075
+  accn: 0001213900-23-031047
+  ratio: 1.0
+  listed_as: direct
+  ticker: SAIH
+  filed: '2023-04-19'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1847075/000121390023031047/f20f2022_saitech.htm
+  evidence: 'Cover 12(b): "Ordinary Shares, par value $0.0001 per share SAI The Nasdaq Stock Market LLC" / "Markets Our Class A Ordinary Shares and IPO Warrants are listed on the Nasdaq Capital Market under
+    the symbols \"SAI\" and \"…'
+  checked: '2026-10-14'
+- cik: 2030277
+  accn: 0001829126-26-003281
+  ratio: 1.0
+  listed_as: ads
+  ticker: LFS
+  filed: '2026-04-08'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/2030277/000182912626003281/leifras_20f.htm
+  evidence: '"Each ADS represents one Ordinary Share (or a right to receive one Ordinary Share) deposited with Mizuho Bank, as custodian for the depositary in Japan." / Cover 12(b): "American depositary
+    shares, each representing one …'
+  checked: '2026-10-14'
+- cik: 895051
+  accn: 0001558370-23-006754
+  ratio: 1.0
+  listed_as: direct
+  ticker: CASI
+  filed: '2023-04-26'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1962738/000155837023006757/casi-20221231x20f.htm
+  evidence: 'Same-day FY2022 20-F of the successor issuer (CASI Pharmaceuticals, Inc., Cayman, CIK 1962738), Section 12(b) table: "Ordinary shares, par value US$0.0001 per share CASI The Nasdaq Capital
+    Market"; Item 12: "D. American …'
+  checked: '2026-10-14'
+- cik: 1413855
+  accn: 0001213900-26-048631
+  ratio: 1.0
+  listed_as: direct
+  ticker: AIFU
+  filed: '2026-04-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1413855/000121390026048631/ea0286621-20f_aifu.htm
+  evidence: '"Markets Our Class A ordinary shares have been listed on the Nasdaq Global Select Market under the symbol "AIFU" since May 21, 2025 following the termination of our ADR Facility." Also: "on
+    May 20, 2025 we implemented a …'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-14-353973
+  ratio: 1.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2014-09-26'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312514353973/d747504d20f.htm
+  evidence: 'Cover: "American depositary shares, each representing one common share* New York Stock Exchange ... * Effective August 18, 2011, the ratio of ADSs to our common shares was changed from one
+    ADS representing four common sh…'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-15-329099
+  ratio: 1.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2015-09-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312515329099/d43716d20f.htm
+  evidence: 'Cover: "American depositary shares, each representing one common share* New York Stock Exchange ... * Effective August 18, 2011, the ratio of ADSs to our common shares was changed from one
+    ADS representing four common sh…'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-16-721548
+  ratio: 1.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2016-09-27'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312516721548/d198239d20f.htm
+  evidence: 'Cover: "American depositary shares, each representing one common share" with footnote "Effective on August 18, 2011, the ratio of ADSs to our common shares was changed from one ADS representing
+    four common shares to one …'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-17-295945
+  ratio: 1.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2017-09-27'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312517295945/d427302d20f.htm
+  evidence: 'Cover: "American depositary shares, each representing one common share" with footnote "Effective on August 18, 2011, the ratio of ADSs to our common shares was changed from one ADS representing
+    four common shares to one …'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-18-285651
+  ratio: 1.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2018-09-27'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312518285651/d580715d20f.htm
+  evidence: 'Cover: "American depositary shares, each representing one common share" with footnote "Effective on August 18, 2011, the ratio of ADSs to our common shares was changed from one ADS representing
+    four common shares to one …'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-19-256047
+  ratio: 1.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2019-09-26'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312519256047/d791681d20f.htm
+  evidence: 'Cover: "American depositary shares, each representing one common share" with footnote "Effective on August 18, 2011, the ratio of ADSs to our common shares was changed from one ADS representing
+    four common shares to one …'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-20-247160
+  ratio: 1.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2020-09-16'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312520247160/d159290d20f.htm
+  evidence: 'Cover: "American depositary shares, each representing one common share" with footnote "Effective on August 18, 2011, the ratio of ADSs to our common shares was changed from one ADS representing
+    four common shares to one …'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-21-282201
+  ratio: 1.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2021-09-24'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312521282201/d159008d20f.htm
+  evidence: 'Cover: "American depositary shares, each representing one common share" with footnote "Effective on August 18, 2011, the ratio of ADSs to our common shares was changed from one ADS representing
+    four common shares to one …'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-22-253809
+  ratio: 10.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2022-09-29'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312522253809/d387163d20f.htm
+  evidence: '"Effective on April 8, 2022, the ratio of ADSs to our common shares was further changed from one ADS representing one common share to one ADS representing ten common shares." Selected data
+    note: "Each ADS represents ten …'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-23-240864
+  ratio: 10.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2023-09-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312523240864/d519952d20f.htm
+  evidence: '"Effective on April 8, 2022, the ratio of ADSs to our common shares was further changed from one ADS representing one common share to one ADS representing ten common shares." Selected data
+    note: "Each ADS represents ten …'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-24-225183
+  ratio: 10.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2024-09-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312524225183/d835957d20f.htm
+  evidence: '"Effective on April 8, 2022, the ratio of ADSs to our common shares was further changed from one ADS representing one common share to one ADS representing ten common shares." Selected data
+    note: "Each ADS represents ten …'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-25-216394
+  ratio: 10.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2025-09-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312525216394/d138902d20f.htm
+  evidence: '"Effective on April 8, 2022, the ratio of ADSs to our common shares was changed from one ADS representing one common share to one ADS representing ten common shares." Selected data note: "Each
+    ADS represents ten common s…'
+  checked: '2026-10-14'
+- cik: 1372920
+  accn: 0001193125-26-397192
+  ratio: 10.0
+  listed_as: ads
+  ticker: EDU
+  filed: '2026-09-22'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1372920/000119312526397192/d157159d20f.htm
+  evidence: '"Effective on April 8, 2022, the ratio of ADSs to our common shares was changed from one ADS representing one common share to one ADS representing ten common shares." Selected data note: "Each
+    ADS represents ten common s…'
+  checked: '2026-10-14'
+- cik: 1500881
+  accn: 0001213900-23-033939
+  ratio: 1.0
+  listed_as: direct
+  ticker: EU
+  filed: '2023-04-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1500881/000121390023033939/ea177383-40f_encore.htm
+  evidence: '40-F cover, Section 12(b): "Title of each class Trading Symbol(s) Name of each exchange on which registered Common Shares EU The NYSE American LLC"'
+  checked: '2026-10-14'
+- cik: 1500881
+  accn: 0001213900-24-027149
+  ratio: 1.0
+  listed_as: direct
+  ticker: EU
+  filed: '2024-03-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1500881/000121390024027149/ea0202333-40f_encore.htm
+  evidence: '40-F cover, Section 12(b): "Title of each class Trading Symbol(s) Name of each exchange on which registered Common Shares EU The Nasdaq Stock Market LLC"'
+  checked: '2026-10-14'
+- cik: 1708441
+  accn: 0001104659-23-052982
+  ratio: 20.0
+  listed_as: ads
+  ticker: MYND
+  filed: '2023-04-28'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1708441/000110465923052982/gehi-20221231x20f.htm
+  evidence: 'Cover: "American depositary shares , each representing 20 Class A ordinary shares ... Effective on October 14, 2022, the ratio of ADSs to our common shares was changed from one ADS representing
+    one Class A ordinary share…'
+  checked: '2026-10-14'
+- cik: 1712178
+  accn: 0001193125-22-150252
+  ratio: 2.0
+  listed_as: ads
+  ticker: NAAS
+  filed: '2022-05-13'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1712178/000119312522150252/d260679d20f.htm
+  evidence: '"Our ADSs have been listed on the NASDAQ Global Market since October 20, 2017 and traded under the symbol "REDU." Each ADS represents two ordinary shares." Also cover: "American Depositary
+    Shares, each representing two o…'
+  checked: '2026-10-14'
+- cik: 1723935
+  accn: 0001564590-22-016148
+  ratio: 0.5
+  listed_as: ads
+  ticker: STG
+  filed: '2022-04-27'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1723935/000156459022016148/stg-20f_20211231.htm
+  evidence: '"ADSs" refers to the American depositary shares, each two ADSs representing one of our Class A ordinary shares; and "Effective from August 31, 2021, the ratio of ADSs representing the Class
+    A ordinary shares changed from…'
+  checked: '2026-10-14'
+- cik: 1723935
+  accn: 0000950170-23-014218
+  ratio: 0.5
+  listed_as: ads
+  ticker: STG
+  filed: '2023-04-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1723935/000095017023014218/stg-20221231.htm
+  evidence: '"ADSs" refers to the American depositary shares, each two ADSs representing one of our Class A ordinary shares; and "Effective from August 31, 2021, the ratio of ADSs representing the Class
+    A ordinary shares changed from…'
+  checked: '2026-10-14'
+- cik: 1723935
+  accn: 0000950170-24-047906
+  ratio: 0.5
+  listed_as: ads
+  ticker: STG
+  filed: '2024-04-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1723935/000095017024047906/stg-20231231.htm
+  evidence: '"ADSs" refers to the American depositary shares, each two ADSs representing one of our Class A ordinary shares; and "Effective from August 31, 2021, the ratio of ADSs representing the Class
+    A ordinary shares changed from…'
+  checked: '2026-10-14'
+- cik: 1723935
+  accn: 0000950170-25-058319
+  ratio: 0.5
+  listed_as: ads
+  ticker: STG
+  filed: '2025-04-25'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1723935/000095017025058319/stg-20241231.htm
+  evidence: '"ADSs" refers to the American depositary shares, each two ADSs representing one of our Class A ordinary shares; and "Effective from August 31, 2021, the ratio of ADSs representing the Class
+    A ordinary shares changed from…'
+  checked: '2026-10-14'
+- cik: 1723935
+  accn: 0001193125-26-175368
+  ratio: 0.5
+  listed_as: ads
+  ticker: STG
+  filed: '2026-04-24'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1723935/000119312526175368/stg-20251231.htm
+  evidence: '"ADSs" refers to the American depositary shares, each two ADSs representing one of our Class A ordinary shares; and "Effective from August 31, 2021, the ratio of ADSs representing the Class
+    A ordinary shares changed from…'
+  checked: '2026-10-14'
+- cik: 1737339
+  accn: 0001564590-19-010719
+  ratio: 0.6666666667
+  listed_as: ads
+  ticker: JG
+  filed: '2019-04-03'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1737339/000156459019010719/jg-20f_20181231.htm
+  evidence: '"ADSs" are to our American depositary shares, every three of which represent two Class A common shares; cover: "American depositary shares, every three of which represent two Class A common
+    shares"'
+  checked: '2026-10-14'
+- cik: 1737339
+  accn: 0001193125-20-126226
+  ratio: 0.6666666667
+  listed_as: ads
+  ticker: JG
+  filed: '2020-04-29'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1737339/000119312520126226/d872825d20f.htm
+  evidence: '"ADSs" are to our American depositary shares, every three of which represent two Class A common shares; cover: "American depositary shares, every three of which represent two Class A common
+    shares"'
+  checked: '2026-10-14'
+- cik: 1737339
+  accn: 0001193125-21-112508
+  ratio: 0.6666666667
+  listed_as: ads
+  ticker: JG
+  filed: '2021-04-12'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1737339/000119312521112508/d708585d20f.htm
+  evidence: '"ADSs" are to our American depositary shares, every three of which represent two Class A common shares; cover: "American depositary shares, every three of which represent two Class A common
+    shares"'
+  checked: '2026-10-14'
+- cik: 1737339
+  accn: 0001193125-22-104903
+  ratio: 0.6666666667
+  listed_as: ads
+  ticker: JG
+  filed: '2022-04-14'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1737339/000119312522104903/d217874d20f.htm
+  evidence: '"ADSs" are to our American depositary shares, every three of which represent two Class A common shares; cover: "American depositary shares, every three of which represent two Class A common
+    shares"'
+  checked: '2026-10-14'
+- cik: 1737339
+  accn: 0001193125-23-104207
+  ratio: 0.6666666667
+  listed_as: ads
+  ticker: JG
+  filed: '2023-04-18'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1737339/000119312523104207/d463134d20f.htm
+  evidence: '"ADSs" are to our American depositary shares, every three of which represent two Class A common shares; cover: "American depositary shares, every three of which represent two Class A common
+    shares"'
+  checked: '2026-10-14'
+- cik: 1737339
+  accn: 0001104659-24-046491
+  ratio: 13.3333333333
+  listed_as: ads
+  ticker: JG
+  filed: '2024-04-12'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1737339/000110465924046491/jg-20231231x20f.htm
+  evidence: '"ADSs" are to our American depositary shares, every 3 of which represent 40 Class A common shares. Also: "On December 11, 2023, we effected an ADS ratio change to adjust our common share to
+    ADS ratio from 3 ADSs represen…'
+  checked: '2026-10-14'
+- cik: 1737339
+  accn: 0001410578-25-000628
+  ratio: 13.3333333333
+  listed_as: ads
+  ticker: JG
+  filed: '2025-04-03'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1737339/000141057825000628/jg-20241231x20f.htm
+  evidence: '"ADSs" are to our American depositary shares, every 3 of which represent 40 Class A common shares. Also: "On December 11, 2023, we effected an ADS ratio change to adjust our common share to
+    ADS ratio from 3 ADSs represen…'
+  checked: '2026-10-14'
+- cik: 1737339
+  accn: 0001104659-26-035657
+  ratio: 13.3333333333
+  listed_as: ads
+  ticker: JG
+  filed: '2026-03-27'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1737339/000110465926035657/jg-20251231x20f.htm
+  evidence: '"ADSs" are to our American depositary shares, every 3 of which represent 40 Class A common shares. Also: "On December 11, 2023, we effected an ADS ratio change to adjust our common share to
+    ADS ratio from 3 ADSs represen…'
+  checked: '2026-10-14'
+- cik: 1770088
+  accn: 0001213900-25-033934
+  ratio: 1.0
+  listed_as: direct
+  ticker: WIMI
+  filed: '2025-04-22'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1770088/000121390025033934/ea0237332-20f_wimiho.htm
+  evidence: '"Beginning on April 3, 2025, the WIMI''s Class B ordinary shares commenced trading on NASDAQ under "WIMI" while WIMI''s ADSs was no longer exist as a result of the ADR Termination on April
+    2, 2025." Also: "Our American dep…'
+  checked: '2026-10-14'
+- cik: 1770088
+  accn: 0001213900-26-047255
+  ratio: 1.0
+  listed_as: direct
+  ticker: WIMI
+  filed: '2026-04-24'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1770088/000121390026047255/ea0285862-20f_wimi.htm
+  evidence: '"Beginning on April 3, 2025, the WIMI''s Class B ordinary shares commenced trading on NASDAQ under "WIMI" while WIMI''s ADSs were no longer in existence as a result of the ADR Termination on
+    April 2, 2025."'
+  checked: '2026-10-14'
+- cik: 1806524
+  accn: 0001213900-24-037823
+  ratio: 50.0
+  listed_as: ads
+  ticker: LGHL
+  filed: '2024-04-30'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1806524/000121390024037823/ea0204648-20f_lion.htm
+  evidence: 'Cover footnote: "Effective from July 13, 2023, the ratio of ADSs representing the Class A ordinary shares changed from one (1) ADS representing one (1) Class A ordinary shares to one (1) ADS
+    representing fifty (50) Class…'
+  checked: '2026-10-14'
+- cik: 1806524
+  accn: 0001213900-25-037603
+  ratio: 2500.0
+  listed_as: ads
+  ticker: LGHL
+  filed: '2025-04-30'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1806524/000121390025037603/ea0239535-20f_lion.htm
+  evidence: 'Cover footnote: "Effective from March 26, 2025, the ratio of ADSs representing the Class A ordinary shares changed from one (1) ADS representing one (1) Class A ordinary shares to one (1) ADS
+    representing two thousand an…'
+  checked: '2026-10-14'
+- cik: 1806524
+  accn: 0001213900-26-050410
+  ratio: 32500.0
+  listed_as: ads
+  ticker: LGHL
+  filed: '2026-04-30'
+  why: 'parse: ambiguous/no ratio'
+  source: https://www.sec.gov/Archives/edgar/data/1806524/000121390026050410/ea0288087-20f_lion.htm
+  evidence: 'Cover footnote: "Effective from November 26, 2025, the ratio of ADSs representing the Class A ordinary shares changed from one (1) ADS representing one (1) Class A ordinary shares to one (1)
+    ADS representing thirty two t…'
+  checked: '2026-10-14'
+- cik: 1494558
+  accn: 0001144204-17-016256
+  ratio: 2.0
+  listed_as: ads
+  ticker: AMBO
+  filed: ''
+  why: 'ratio change check: the parse was wrong'
+  source: https://www.sec.gov/Archives/edgar/data/1494558/000114420417016256/v460975_20f.htm
+  evidence: 'The 2017 cover''s 12(b) table reads "None" because the ADSs were OTC-quoted, so the parser saw no ADS and set ratio 1. The ADS program still existed. 2017 20-F (filed 2017-03-23): ""ADSs" refers
+    to our American depositary…'
+  checked: '2026-10-14'
+- cik: 1494558
+  accn: 0001144204-19-018423
+  ratio: 2.0
+  listed_as: ads
+  ticker: AMBO
+  filed: ''
+  why: 'ratio change check: the parse was wrong'
+  source: https://www.sec.gov/Archives/edgar/data/1494558/000114420419018423/tv516481_20f.htm
+  evidence: 'The 2019 cover''s 12(b) table names only "Class A Ordinary Shares", so the parser set ratio 1, but the ADS was the unit listed on NYSE American. 2019 20-F (filed 2019-04-05): "In June 2018,
+    we completed our public offerin…'
+  checked: '2026-10-14'
+- cik: 1499543
+  accn: 0001104659-24-050790
+  ratio: 5.0
+  listed_as: ads
+  ticker: NOAH
+  filed: ''
+  why: 'ratio change check: the parse was wrong'
+  source: https://www.sec.gov/Archives/edgar/data/1499543/000110465924050790/noah-20231231x20f.htm
+  evidence: The 2024 cover is stale. It still says "American depositary shares, two of which represent one ordinary share, par value US$0.00005 per share", while it reports "328,034,660 ordinary shares
+    issued, par value US$0.00005",…
+  checked: '2026-10-14'
+- cik: 1597095
+  accn: 0001104659-15-028402
+  ratio: 3.0
+  listed_as: ads
+  ticker: TOUR
+  filed: ''
+  why: 'ratio change check: the parse was wrong'
+  source: https://www.sec.gov/Archives/edgar/data/1597095/000110465915028402/a15-6056_120f.htm
+  evidence: 'The 2015 cover has a drafting error: "American depositary shares (three American depositary shares representing one Class A ordinary share, par value US$0.0001 per share)". The body of the
+    same 2015 20-F says: "Our ADSs,…'
+  checked: '2026-10-14'
+- cik: 1614744
+  accn: 0001213900-19-004878
+  ratio: 1.0
+  listed_as: ads
+  ticker: PPBT
+  filed: ''
+  why: 'ratio change check: the parse was wrong'
+  source: https://www.sec.gov/Archives/edgar/data/1614744/000121390019004878/f20f2018_kitovpharmaltd.htm
+  evidence: The 2019 cover is stale. It says "American Depositary Shares, each representing 20 Ordinary Shares", yet reports "16,009,264 Ordinary Shares ... (*after giving effect to a reverse share split
+    of our ordinary shares, at a…
+  checked: '2026-10-14'
+- cik: 1799567
+  accn: 0001193125-22-095099
+  ratio: 0.05
+  listed_as: ads
+  ticker: DDI
+  filed: ''
+  why: 'ratio change check: the parse was wrong'
+  source: https://www.sec.gov/Archives/edgar/data/1799567/000119312522095099/d284427d20f.htm
+  evidence: 'In the 2022-04-04 cover the 12(b) table reads ''None'' and the ADS is placed under 12(g), so the parser read ratio 1: ''Securities registered or to be registered pursuant to Section 12(b) of
+    the Act: None Securities registe…'
+  checked: '2026-10-14'
+- cik: 1815021
+  accn: 0001213900-25-065802
+  ratio: 160.0
+  listed_as: ads
+  ticker: BQ
+  filed: ''
+  why: 'ratio change check: the parse was wrong'
+  source: https://www.sec.gov/Archives/edgar/data/1815021/000121390025065802/ea0248521-20f_boqii.htm
+  evidence: 'Prev cover (2024-10-29): ''American depositary shares, each ADS represents fifteen (15) Class A ordinary shares''. That was effective Aug 21, 2023 and is right for that date. The ADS then went
+    to 150 shares: ''In January 20…'
+  checked: '2026-10-14'
+- cik: 1704292
+  ticker: ZLAB
+  from: '2021-03-01'
+  to: '2022-03-01'
+  ratio: 1.0
+  forms: 10-K,10-Q,10-K/A
+  source: https://www.sec.gov/Archives/edgar/data/1704292/000119312522061312/d261426d10k.htm
+  evidence: '12(b) table, 10-K/10-Q covers 2021-03-01 .. 2022-03-01: "American Depositary Shares, each representing 1 Ordinary Share"'
+  checked: '2026-10-14'
+- cik: 1704292
+  ticker: ZLAB
+  from: '2022-05-10'
+  to: null
+  ratio: 10.0
+  forms: 10-K,10-Q,10-K/A
+  source: https://www.sec.gov/Archives/edgar/data/1704292/000162828026053793/zlab-20260630.htm
+  evidence: '12(b) table on every 10-Q/10-K filed 2022-05-10 .. 2026-08-06: "American Depositary Shares, each representing 10 Ordinary Shares"; 10:1 subdivision and ratio change effective 2022-03-30'
+  checked: '2026-10-14'
+- cik: 1479615
+  ticker: SLN
+  from: '2025-02-27'
+  to: null
+  ratio: 3.0
+  forms: 10-K,10-Q,10-K/A
+  source: https://www.sec.gov/Archives/edgar/data/1479615/000119312526341248/sln-20260630.htm
+  evidence: '12(b) table: "American Depositary Shares, each representing three ordinary shares"; the covers of the 10-Qs of 2025-05-08 and 2025-08-07 say "one" by mistake, their notes say "each ADS represents
+    three ordinary shares"'
+  checked: '2026-10-14'

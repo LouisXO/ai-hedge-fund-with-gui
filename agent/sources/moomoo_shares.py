@@ -47,7 +47,7 @@ BATCH = 200                       # get_market_snapshot takes at most 400 codes;
 MAX_REQ, WINDOW_S = 60, 30.0      # moomoo's snapshot limit: 60 requests per 30 seconds
 MCAP_TOL = 0.01                   # issued_shares x last_price vs total_market_val
 ADV_MIN = 5e6                     # the review list is fetched for liquid names only (the long book's floor)
-REVIEW_FLAGS = ("unconfirmed", "mismatch", "ads", "stale")
+REVIEW_FLAGS = ("unconfirmed", "mismatch", "ads", "stale", "ads_unknown")   # ads_unknown: S53a
 TOP_KEEP = 60                     # the long book keeps a name while it ranks inside this
 DDL = ("CREATE TABLE IF NOT EXISTS shares_override(ticker VARCHAR PRIMARY KEY, shares DOUBLE, "
        "source VARCHAR, as_of DATE, xbrl_shares DOUBLE)")
