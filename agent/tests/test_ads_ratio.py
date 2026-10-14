@@ -165,3 +165,32 @@ def test_no_ratio_table_leaves_the_build_as_it_was(store):
     rows = [instant(1, DEI, "2026-03-31", 1.86e9, "20-F", "2026-04-28")]
     load(store, rows, [("ADR", 1, "2026q2", 5)])
     assert row(F.build(store), "ADR", "2026-04-28")["shares"] == 1.86e9
+
+
+def test_a_period_row_converts_an_ads_issuers_10k_and_10q(store, tmp_path, monkeypatch):
+    # an ADS issuer that files 10-K/10-Q (1 ADS = 10 shares): the cover parse never sees it, the hand table does
+    rows = [instant(1, DEI, "2026-07-31", 1.12e9, "10-Q", "2026-08-06"),
+            instant(1, DEI, "2021-02-28", 9.0e7, "10-K", "2021-03-01")]
+    load(store, rows, [("ADS10K", 1, "2021q1", 5), ("ADS10K", 1, "2026q3", 5)])
+    yml = tmp_path / "ads_ratio.yaml"
+    yml.write_text("- {cik: 1, from: 2022-05-10, to: 2026-08-06, ratio: 10, forms: '10-K,10-Q', source: x, checked: 2026-10-14}\n")
+    monkeypatch.setattr(A, "MANUAL", yml)
+    monkeypatch.setattr(A, "CACHE", tmp_path / "cache.jsonl")
+    (tmp_path / "cache.jsonl").write_text('{"cik": 9, "accn": "9-x", "form": "20-F", "filed": "2026-01-01", "status": "no_ads", '
+                                          '"ratio": 1.0, "cover_text": "", "doc": "", "fetched_at": "2026-10-14"}\n')
+    store.con.execute(A.DDL)
+    t = A.table(store)
+    t = t[t["cik"] == 1].assign(filed=lambda d: pd.to_datetime(d["filed"]).dt.date, fetched_at=pd.Timestamp("2026-10-14"))
+    store.insert("ads_ratio", t[["cik", "accn", "form", "filed", "ratio", "status", "cover_text", "doc", "source", "fetched_at"]])
+    df = F.build(store)
+    assert row(df, "ADS10K", "2026-08-06")["shares"] == pytest.approx(1.12e8)
+    assert row(df, "ADS10K", "2021-03-01")["shares"] == 9.0e7              # before the period: as reported
+
+
+def test_a_hand_checked_direct_listing_is_not_an_ads_company(store):
+    rows = [instant(1, DEI, "2025-03-31", 5.0e8, "40-F", "2025-04-20"),
+            instant(1, DEI, "2026-03-31", 5.0e8, "40-F", "2026-04-20")]
+    load(store, rows, [("CAN", 1, "2025q2", 5), ("CAN", 1, "2026q2", 5)])
+    ratios(store, [(1, "2025-04-20", 1.0, "manual_direct")])          # the other filing has no row at all
+    df = F.build(store)
+    assert row(df, "CAN", "2026-04-20")["shares"] == 5.0e8            # not dropped as ads_unknown

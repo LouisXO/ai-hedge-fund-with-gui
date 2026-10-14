@@ -36,6 +36,7 @@ import urllib.request
 from fractions import Fraction
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from agent.sources.sec_form4 import user_agent
@@ -370,48 +371,82 @@ def fetch(limit: int | None = None, ciks: list[int] | None = None, workers: int 
 
 
 # ---------------------------------------------------------------- the table
-def manual() -> pd.DataFrame:
-    """agent/ads_ratio.yaml: hand-checked rows {cik, accn, ratio, source, checked}; they win over the parse."""
-    cols = ["cik", "accn", "ratio", "source", "checked"]
+def manual() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """agent/ads_ratio.yaml, hand-checked rows that win over the parse. Two kinds:
+      a filing:  {cik, accn, ratio, listed_as: ads|direct, source, evidence, checked}
+      a period:  {cik, from, to, ratio, forms, source, evidence, checked}: every filing of the company filed
+                 from..to (inclusive; `forms` "10-K,10-Q" limits it), any form. For ADS issuers that file
+                 10-K/10-Q (ZLAB, SLN; S53a 补充 2), which the cover parse of 20-F/40-F filings never reaches."""
+    fcols = ["cik", "accn", "ratio", "listed_as", "source", "checked"]
+    pcols = ["cik", "from", "to", "ratio", "forms", "source", "checked"]
     if not MANUAL.exists():
-        return pd.DataFrame(columns=cols)
+        return pd.DataFrame(columns=fcols), pd.DataFrame(columns=pcols)
     import yaml
     rows = yaml.safe_load(MANUAL.read_text()) or []
-    return pd.DataFrame(rows, columns=cols)
+    filings = pd.DataFrame([r for r in rows if r.get("accn")], columns=fcols)
+    periods = pd.DataFrame([r for r in rows if not r.get("accn")], columns=pcols)
+    return filings, periods
 
 
-def table() -> pd.DataFrame:
-    """CACHE (latest record per filing) with agent/ads_ratio.yaml applied."""
+def _period_rows(store: PanelStore, periods: pd.DataFrame) -> pd.DataFrame:
+    """One ads_ratio row per filing (in xbrl_facts) that a period row covers."""
+    out = []
+    for p in periods.to_dict("records"):
+        forms = [f.strip() for f in str(p["forms"]).split(",")] if isinstance(p["forms"], str) and p["forms"].strip() else None
+        q = "SELECT accn, any_value(form) AS form, min(filed) AS filed FROM xbrl_facts WHERE cik = ? AND filed >= ?"
+        args = [int(p["cik"]), str(p["from"])]
+        if p["to"] is not None and not (isinstance(p["to"], float) and np.isnan(p["to"])):
+            q += " AND filed <= ?"
+            args.append(str(p["to"]))
+        acc = store.con.execute(q + " GROUP BY accn", args).df()
+        if forms:
+            acc = acc[acc["form"].isin(forms)]
+        for a in acc.itertuples(index=False):
+            out.append({"cik": int(p["cik"]), "accn": a.accn, "form": a.form, "filed": str(pd.Timestamp(a.filed).date()),
+                        "ratio": float(p["ratio"]), "status": "manual", "cover_text": "", "doc": "", "source": p["source"],
+                        "fetched_at": str(p["checked"])})
+    return pd.DataFrame(out)
+
+
+def table(store: PanelStore | None = None) -> pd.DataFrame:
+    """CACHE (latest record per filing) with agent/ads_ratio.yaml applied: filing rows replace the parse
+    (status manual for an ADS, manual_direct for shares listed directly: ratio 1, not a depositary-share
+    company); period rows (needs `store`, for the filings they cover) replace or add rows."""
     recs = [json.loads(x) for x in CACHE.read_text().splitlines()] if CACHE.exists() else []
     df = pd.DataFrame(recs)
     if df.empty:
         return df
     df = df.drop_duplicates(["cik", "accn"], keep="last").assign(source="cover_parse")
-    man = manual()
+    man, periods = manual()
     if len(man):
         man = man.assign(cik=man["cik"].astype(int))
-        df = df.merge(man[["cik", "accn", "ratio", "source"]].rename(columns={"ratio": "m_ratio", "source": "m_src"}),
-                      on=["cik", "accn"], how="left")
+        df = df.merge(man[["cik", "accn", "ratio", "source", "listed_as"]].rename(
+            columns={"ratio": "m_ratio", "source": "m_src", "listed_as": "m_as"}), on=["cik", "accn"], how="left")
         hit = df["m_ratio"].notna()
         df.loc[hit, "ratio"] = df.loc[hit, "m_ratio"]
-        df.loc[hit, "status"] = "manual"
+        df.loc[hit, "status"] = np.where(df.loc[hit, "m_as"].eq("direct"), "manual_direct", "manual")
         df.loc[hit, "source"] = df.loc[hit, "m_src"]
-        df = df.drop(columns=["m_ratio", "m_src"])
+        df = df.drop(columns=["m_ratio", "m_src", "m_as"])
+    if len(periods) and store is not None:
+        extra = _period_rows(store, periods)
+        if len(extra):
+            df = pd.concat([df[~df.set_index(["cik", "accn"]).index.isin(extra.set_index(["cik", "accn"]).index)], extra],
+                           ignore_index=True)
     return df
 
 
 def commit(path: str | Path | None = None) -> int:
     """CACHE + agent/ads_ratio.yaml -> panel.ads_ratio (replaced whole, one transaction). path: another panel
     (a copy for a restatement); default the live one."""
-    df = table()
-    if df.empty:
-        print("nothing to commit")
-        return 0
-    df = df[df["status"] != "error"]
-    cols = ["cik", "accn", "form", "filed", "ratio", "status", "cover_text", "doc", "source", "fetched_at"]
-    df = df[cols].assign(filed=pd.to_datetime(df["filed"]).dt.date, fetched_at=pd.to_datetime(df["fetched_at"]))
     store = PanelStore(path) if path else PanelStore()
     try:
+        df = table(store)
+        if df.empty:
+            print("nothing to commit")
+            return 0
+        df = df[df["status"] != "error"]
+        cols = ["cik", "accn", "form", "filed", "ratio", "status", "cover_text", "doc", "source", "fetched_at"]
+        df = df[cols].assign(filed=pd.to_datetime(df["filed"]).dt.date, fetched_at=pd.to_datetime(df["fetched_at"]))
         store.con.execute(DDL)
         store.con.register("_ads", df)
         store.con.execute("BEGIN")

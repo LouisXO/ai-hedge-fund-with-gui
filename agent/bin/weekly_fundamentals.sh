@@ -17,6 +17,11 @@ if [ -f "$HOME/.hedge-fund/agent/refresh_fundamentals.ok" ]; then
 else
   echo "xbrl refresh not run: waiting for the owner's go-ahead (refresh_fundamentals.ok missing)" >> "$LOG"
 fi
+# S53a: ADS ratios from the covers of 20-F/40-F filings not read yet (new ones since last week; ~1 s each), then
+# panel.ads_ratio with agent/ads_ratio.yaml applied. Non-fatal: a new 20-F of a depositary-share company without a
+# ratio gives that row no share count (flag ads_unknown; the daily moomoo count covers it) until the next run.
+$PY -W ignore -m agent.sources.ads_ratio fetch --workers 4 >> "$LOG" 2>&1 || echo "ads_ratio fetch failed (non-fatal)" >> "$LOG"
+$PY -W ignore -m agent.sources.ads_ratio commit >> "$LOG" 2>&1 || echo "ads_ratio commit failed (non-fatal: the old table stays)" >> "$LOG"
 [ "$FAIL" = "0" ] && $PY -W ignore -c "
 from hedge_fund.features.panel import PanelStore
 from agent.books.fundamentals import factor_inputs

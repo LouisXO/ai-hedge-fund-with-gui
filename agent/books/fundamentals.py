@@ -285,14 +285,15 @@ def weighted_shares(facts: pd.DataFrame) -> pd.DataFrame:
 
 
 def per_listed_unit(store: PanelStore, facts: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """S53a: share facts of 20-F/40-F filings in listed units, and the (cik, filed) of filings left without a count.
+    """S53a: share facts in listed units, and the (cik, filed) of 20-F/40-F filings left without a count.
 
-    facts needs `accn` (it may be null on rows that are not share facts of a 20-F/40-F). A share fact of a
-    20-F/40-F whose filing has a ratio in panel.ads_ratio is divided by it and marked per_unit. One whose
-    filing has none, of a company whose cover names a depositary share on any filing (ADS_STATUSES), is
-    dropped: its count is ordinary shares against an ADS price, the error this fixes, and the filing is
-    returned so that its row is flagged ads_unknown. Companies with no ads_ratio row, and every 10-K/10-Q
-    fact, are left as they are. No panel.ads_ratio table: nothing changes."""
+    facts needs `accn` (it may be null on rows that are not share facts). A share fact whose filing has a
+    ratio in panel.ads_ratio is divided by it and marked per_unit: the 20-F/40-F covers, and the 10-K/10-Q
+    filings of ADS issuers that agent/ads_ratio.yaml lists by period (S53a 补充 2). A share fact of a
+    20-F/40-F whose filing has none, of a company whose cover names a depositary share on any filing
+    (ADS_STATUSES), is dropped: its count is ordinary shares against an ADS price, the error this fixes, and
+    the filing is returned so that its row is flagged ads_unknown. Everything else is left as it is. No
+    panel.ads_ratio table: nothing changes."""
     none = pd.DataFrame(columns=["cik", "filed"])
     facts = facts.assign(per_unit=False)
     try:
@@ -304,14 +305,14 @@ def per_listed_unit(store: PanelStore, facts: pd.DataFrame) -> tuple[pd.DataFram
     ratios = ratios.astype({"cik": "int64"})
     known = ratios[ratios["ratio"].notna() & (ratios["ratio"] > 0)].drop_duplicates(["cik", "accn"])
     ads_ciks = set(ratios.loc[ratios["status"].isin(ADS_STATUSES), "cik"])
-    share = facts["tag"].isin(SHARE_TAGS) & facts["form"].isin(ANNUAL_FORMS)
-    sub = facts.loc[share, ["cik", "accn"]].astype({"cik": "int64"})
-    r = sub.merge(known[["cik", "accn", "ratio"]], on=["cik", "accn"], how="left")["ratio"].to_numpy()
+    share = facts["tag"].isin(SHARE_TAGS) & facts["accn"].notna()
+    sub = facts.loc[share, ["cik", "accn", "form"]].astype({"cik": "int64"})
+    r = sub.merge(known[["cik", "accn", "ratio"]], on=["cik", "accn"], how="left")["ratio"].to_numpy(float)
     idx = sub.index
     has = ~np.isnan(r)
     facts.loc[idx[has], "val"] = facts.loc[idx[has], "val"].to_numpy() / r[has]
     facts.loc[idx[has], "per_unit"] = True
-    unknown = idx[~has & sub["cik"].isin(ads_ciks).to_numpy()]
+    unknown = idx[~has & sub["cik"].isin(ads_ciks).to_numpy() & sub["form"].isin(ANNUAL_FORMS).to_numpy()]
     lost = facts.loc[unknown, ["cik", "filed"]].drop_duplicates().astype({"cik": "int64"})
     return facts.drop(index=unknown), lost.reset_index(drop=True)
 
@@ -446,11 +447,10 @@ def build(store: PanelStore) -> pd.DataFrame:
     # A period that ends after its own filing is a typing error (a 2033 cover date in a 2023 10-Q); carried
     # as "the latest" it would block every real value after it. Dates outside 1990..filed also cannot be
     # held as datetime64[ns] (year 3024 or 0202 would stop the whole build).
-    # accn only where S53a needs it (share facts of 20-F/40-F filings): a column of 7M strings otherwise
+    # accn only where S53a needs it (share facts): a column of 7M strings otherwise
     tags = ", ".join(f"'{t}'" for t in SHARE_TAGS)
-    forms = ", ".join(f"'{f}'" for f in ANNUAL_FORMS)
     facts = store.con.execute(f"""SELECT cik, tag, period_start, period_end, is_instant, val, form, filed,
-                                         CASE WHEN form IN ({forms}) AND tag IN ({tags}) THEN accn END AS accn
+                                         CASE WHEN tag IN ({tags}) THEN accn END AS accn
                                  FROM xbrl_facts WHERE unit IN ('USD','shares')
                                    AND period_start >= DATE '1990-01-01' AND period_end BETWEEN DATE '1990-01-01' AND filed
                                  ORDER BY cik, tag, period_start, period_end, filed, xbrl_facts.accn""").df()
