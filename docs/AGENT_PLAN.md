@@ -971,6 +971,18 @@ S8 用标普测不出来,原因是股票池不对。S10 拿到 Alpaca 免费全�
 - **评估起点**:用 10/14 的 K 线重算名单,前 30 名和当天记录 **30/30 相同**,前 60 名 58/60(FBRT、FTNT 进,AMCX、OVV 出)。按预注册规则(前 30 名变动不超过 2 只),`evaluate_from` 不变;10/15 生效日的名单由偏离监控照常核对。
 - 测试:全部 458 个通过(新增 `agent/tests/test_ads_ratio.py`)。
 
+### S53 补充(2026-10-14 16:40 PT,第 1–4 步开工前,先于任何数据加载和回测)— 实现细则
+
+用户 10/14 说"继续"。只读摸底:NYSE/Nasdaq 上市、CIK 不在 Form 4 发行人名单里的 530 家中,**296 家交 20-F 或 40-F**(193 家 20-F,135 家 40-F),多为大公司(GSK、联合利华、诺和诺德、SAP、ASML、壳牌、RBC、TD 等);其余是交 10-K 的新控股公司、SPAC 和基金,不在范围内。抽查 companyfacts:SAP、诺和诺德、TSM 用 ifrs-full(欧元、丹麦克朗、新台币),ASML 用 us-gaap 但单位是欧元;RBC、壳牌、诺和诺德用 6-K 交季度 XBRL;TSM 的 IFRS 财务只到 2025-04 那份 20-F。
+1. **数据隔离**:第 1–4 步的数据全部放在单独的 `~/.hedge-fund/agent/fpi.db`(发行人名单、新增代码的日线、全部单位和 ifrs-full 的财报事实、汇率、影子线用的基本面表),**不写 panel.db**。原因:新代码的日线如果进 panel 的 bars 表,长线 v1 的动量、低波 z 分会跟着变,等于改了在跑的书。
+2. **发行人**:SEC `company_tickers_exchange.json`(2026-10-14 快照)里 NYSE/Nasdaq 挂牌、提交记录里有 20-F 或 40-F 的公司,加上 panel 里已有的 20-F/40-F 申报人。代码用今天的代码套全部历史(Alpaca 按现代码存改名前的日线)。**这是今天还在挂牌的名单,回测对新增的 296 家有幸存者偏差**(2017–2026 年间退市的外国公司不在里面);所以回测四条标准过了只是必要条件,结论以影子线之后的记录为准。
+3. **财报事实**:us-gaap、ifrs-full、dei;单位全收;申报类型收 10-K、10-Q、20-F、40-F(含 /A)和 6-K。IFRS 科目对应:营收 Revenue;毛利 GrossProfit(没有就营收 − CostOfSales);营业利润 ProfitLossFromOperatingActivities;经营现金流 CashFlowsFromUsedInOperatingActivities;归母净利 ProfitLossAttributableToOwnersOfParent(没有就 ProfitLoss);总资产 Assets;归母权益 EquityAttributableToOwnersOfParent(没有就 Equity − NoncontrollingInterests);加权股数 WeightedAverageShares / AdjustedWeightedAverageShares。同一期同一科目既有本币又有美元(便利折算)时只用本币。ADS 比例照 S53a(新发行人的 20-F 封面同样解析)。
+4. **汇率**:每种货币对美元的日收盘,来源 yfinance(Alpha Vantage 免费额度每天 25 次已被盈利预测占用,预注册里写的 AV 改为抽查:3 种货币各 3 个日期,差超过 0.5% 就停下核对)。打分日用前一交易日的汇率,把营收、毛利、营业利润、经营现金流、净利、资产、权益换成美元;质量族的比率本来与币种无关,汇率只影响价值族和"资产 > $1,000 万"的门槛。
+5. **时效**:最近两年里没有 10-Q、也没有 6-K 季度 XBRL 的公司算"只交年报",时效 480 天;其余 200 天(同 v1)。
+6. **影子线打分**:池子 = panel 日线 ∪ fpi 日线中流动性达标的名字;z 分在扩大后的池子里算;其余规则和 v1 完全相同(四族等权、进前 30、掉出前 60 才出、入场区间)。
+7. **回测**:2017-01 → 2026-08,和 S53a 重述后的 v1 在同一份数据快照上比,用预注册的 (a)–(d) 四条;"外国公司"指 20-F/40-F 申报人。另报告新增 296 家贡献的收益,便于判断幸存者偏差的量级。
+8. **每日记录**:回测之后再决定是否接入每天的影子记录(需要 fpi.db 每天更新日线);这个决定和理由写进结果。
+
 ## 10. 待办(滚动;每个 session 结束时更新)
 
 更新:2026-10-06
