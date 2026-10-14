@@ -78,6 +78,13 @@ def test_an_ads_named_only_after_the_cover_does_not_count():
     assert got["status"] == "no_ads" and got["ratio"] == 1
 
 
+def test_footnote_with_a_period_before_the_ads():
+    got = A.parse(cover("<tr><td>Common Shares, par value NT$10.00 each*</td><td>The New York Stock Exchange, Inc.</td></tr>",
+                        "* Not for trading, but only in connection with the listing on the New York Stock Exchange, Inc. "
+                        "of American Depositary Shares (\"ADS\") representing such Common Shares."))
+    assert got["status"] == "ads_no_ratio"                       # an ADS company, not a direct listing
+
+
 def test_ratios_that_disagree_are_left_for_review():
     got = A.parse(cover("<tr><td>American depositary shares, each representing two ordinary shares</td></tr>"
                         "<tr><td>American depositary shares, each representing ten ordinary shares</td></tr>"))
