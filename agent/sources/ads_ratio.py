@@ -194,7 +194,9 @@ def parse(raw: str) -> dict:
     # listed as depositary shares: named in the 12(b) table, or the table's shares carry the footnote "not for
     # trading, but only in connection with the listing of American Depositary Shares" (TSM). An ADS named
     # anywhere else on the cover (a program terminated years ago, a definition) does not make it one.
-    footnote = re.search(rf"not\s+for\s+trading[^.]{{0,250}}?{ADS}", cov, re.I)
+    # periods allowed in between: "listing on the New York Stock Exchange, Inc. of American Depositary Shares" (TSM;
+    # the first version stopped at "Inc." and read TSM and its kind as listing their shares directly)
+    footnote = re.search(rf"not\s+for\s+trading.{{0,250}}?{ADS}", cov, re.I | re.S)
     if re.search(ADS, where, re.I) is None and footnote is None:
         return {"status": "no_ads", "ratio": 1.0, "cover_text": where[:1500]}
     for scope, text in (("12b", where), ("cover", cov)):
