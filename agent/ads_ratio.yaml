@@ -1378,3 +1378,23 @@
   evidence: '12(b) table: "American Depositary Shares, each representing three ordinary shares"; the covers of the 10-Qs of 2025-05-08 and 2025-08-07 say "one" by mistake, their notes say "each ADS represents
     three ordinary shares"'
   checked: '2026-10-14'
+- cik: 1046179
+  accn: 0001193125-24-099840
+  ratio: 5.0
+  listed_as: ads
+  ticker: TSM
+  filed: '2024-04-18'
+  why: 'S53a 补充 3: cover footnote names the ADS, no ratio in this document'
+  source: https://www.sec.gov/Archives/edgar/data/1046179/000162828026025362/
+  evidence: 'Ratio 5 in the 20-Fs on both sides: 2023-04-20 "one ADS represents five common shares", 2026-04-16 "each ADS represents five (5) common shares"; no ratio change between them'
+  checked: '2026-10-14'
+- cik: 1046179
+  accn: 0001193125-25-083423
+  ratio: 5.0
+  listed_as: ads
+  ticker: TSM
+  filed: '2025-04-17'
+  why: 'S53a 补充 3: cover footnote names the ADS, no ratio in this document'
+  source: https://www.sec.gov/Archives/edgar/data/1046179/000162828026025362/
+  evidence: 'Ratio 5 in the 20-Fs on both sides: 2023-04-20 "one ADS represents five common shares", 2026-04-16 "each ADS represents five (5) common shares"; no ratio change between them'
+  checked: '2026-10-14'
