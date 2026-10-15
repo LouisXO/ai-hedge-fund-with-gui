@@ -78,9 +78,13 @@ def derive_ratios(store) -> int:
     other = store.con.execute(f"""SELECT cik, accn, any_value(form) AS form, min(filed) AS filed FROM xbrl_facts
         WHERE form NOT IN ('20-F','40-F','20-F/A','40-F/A') AND cik IN ({', '.join(str(c) for c in ads)})
         GROUP BY cik, accn""").df()
-    known = r[r["ratio"].notna()][["cik", "filed", "ratio"]].assign(filed=lambda d: pd.to_datetime(d["filed"])).sort_values("filed")
+    # the latest 20-F/40-F on or before, known ratio or not: a 6-K after an ADS cover without a ratio has no
+    # ratio either (SMFG: its 6-K counts were ordinary shares x ADS price, 5x too small a market cap)
+    annual = r[r["form"].isin(["20-F", "40-F", "20-F/A", "40-F/A"]) & r["cik"].isin(ads)][["cik", "filed", "ratio"]]
+    known = annual.assign(filed=lambda d: pd.to_datetime(d["filed"])).sort_values("filed")
     other = other.assign(filed=pd.to_datetime(other["filed"])).astype({"cik": "int64"}).sort_values("filed")
-    hit = pd.merge_asof(other, known.astype({"cik": "int64"}), on="filed", by="cik", direction="backward").dropna(subset=["ratio"])
+    hit = pd.merge_asof(other, known.astype({"cik": "int64"}), on="filed", by="cik", direction="backward")
+    hit = hit[hit["filed"] >= hit.groupby("cik")["filed"].transform("min")]           # every 6-K/10-Q of an ADS company
     hit = hit[~hit.set_index(["cik", "accn"]).index.isin(r.set_index(["cik", "accn"]).index)]
     rows = hit.assign(status="derived", cover_text="", doc="", source="latest 20-F/40-F ratio",
                       fetched_at=pd.Timestamp.now(), filed=hit["filed"].dt.date)
@@ -122,7 +126,15 @@ def build_fpi(store) -> pd.DataFrame:
     rc = (acc.merge(cur, on=["cik", "accn"]).groupby(["cik", "filed"])["currency"]
           .agg(lambda s: s.value_counts().index[0]).reset_index().astype({"cik": "int64"}))
     out = out.merge(rc, on=["cik", "filed"], how="left")
-    out["currency"] = out["currency"].fillna("USD")
+    # a filing with no money facts (only a share count: AMX 2026-04-28) carries the previous row's money, so
+    # also its currency; was: USD, which read Mexican pesos as dollars
+    out = out.sort_values(["cik", "filed"], kind="stable")
+    out["currency"] = out.groupby("cik")["currency"].ffill().fillna("USD")
+    # a count 100x below the company's other rows is a unit error (RY 2019 in thousands, UGP 2018)
+    med = out.groupby("ticker")["shares"].transform("median")
+    unit = out["shares"] < med / 100
+    out.loc[unit, "shares"] = np.nan
+    out.loc[unit, "shares_flag"] = "unit"
     out["annual_only"] = annual_only(facts.assign(cik=facts["cik"].astype("int64")), out)
     del fc
     print(f"derived ratios {n}; rows {len(out)}, names {out['ticker'].nunique()}, currencies {out['currency'].value_counts().head(8).to_dict()}")

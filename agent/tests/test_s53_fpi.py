@@ -103,3 +103,24 @@ def test_day_rows_converts_money_at_the_previous_days_rate_and_applies_staleness
     assert f.loc["OLD", "assets"] == pytest.approx(100.0)            # annual-only: 408 days old still stands
     assert "STALE" not in f.index                                    # 408 days, not annual-only
     assert "NOFX" not in f.index                                     # no rate for the currency: dropped
+
+
+def test_a_6k_after_an_ads_cover_without_a_ratio_has_no_count(fpi):
+    rows = year(1, "a1", "2026-03-01", "2025-12-31", "JPY", 1.0e12, 1.0e11, 5.0e12, 2.0e12)
+    rows += [fact(1, "dei", "EntityCommonStockSharesOutstanding", "shares", "2026-02-28", "2026-02-28", 1.4e9, "20-F",
+                  "2026-03-01", "a1", True),
+             fact(1, "ifrs-full", "WeightedAverageShares", "shares", "2026-01-01", "2026-03-31", 1.4e9, "6-K", "2026-05-01", "k1"),
+             fact(1, "ifrs-full", "Assets", "JPY", "2026-03-31", "2026-03-31", 5.1e12, "6-K", "2026-05-01", "k1", True)]
+    load(fpi, rows, [(1, "SMX")], ratios=[(1, "a1", "2026-03-01", None, "ads_no_ratio")])
+    out = FF.build_fpi(fpi)
+    r = out[(out["ticker"] == "SMX") & (out["filed"] == pd.Timestamp("2026-05-01"))].iloc[0]
+    assert pd.isna(r["shares"]) and r["shares_flag"] == "ads_unknown"
+
+
+def test_a_filing_with_only_a_share_count_keeps_the_previous_currency(fpi):
+    rows = year(1, "a1", "2025-04-28", "2024-12-31", "MXN", 9.0e11, 4.0e10, 2.0e12, 4.0e11)
+    rows += [fact(1, "dei", "EntityCommonStockSharesOutstanding", "shares", "2026-03-31", "2026-03-31", 6.0e10, "20-F",
+                  "2026-04-28", "a2", True)]
+    load(fpi, rows, [(1, "MXA")])
+    out = FF.build_fpi(fpi)
+    assert out[(out["ticker"] == "MXA") & (out["filed"] == pd.Timestamp("2026-04-28"))].iloc[0]["currency"] == "MXN"

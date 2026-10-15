@@ -312,7 +312,12 @@ def per_listed_unit(store: PanelStore, facts: pd.DataFrame) -> tuple[pd.DataFram
     has = ~np.isnan(r)
     facts.loc[idx[has], "val"] = facts.loc[idx[has], "val"].to_numpy() / r[has]
     facts.loc[idx[has], "per_unit"] = True
-    unknown = idx[~has & sub["cik"].isin(ads_ciks).to_numpy() & sub["form"].isin(ANNUAL_FORMS).to_numpy()]
+    # a filing listed with no ratio (S53: a 6-K/10-Q after an ADS cover without one, status 'derived') counts as
+    # unknown too, whatever its form; for panel.db, which has no such rows, this is the 20-F/40-F rule as before
+    listed_null = (ratios[ratios["ratio"].isna() & ratios["status"].isin((*ADS_STATUSES, "derived"))]
+                   .drop_duplicates(["cik", "accn"])[["cik", "accn"]].assign(_null=True))
+    null = sub.merge(listed_null, on=["cik", "accn"], how="left")["_null"].eq(True).to_numpy()
+    unknown = idx[~has & ((sub["cik"].isin(ads_ciks).to_numpy() & sub["form"].isin(ANNUAL_FORMS).to_numpy()) | null)]
     lost = facts.loc[unknown, ["cik", "filed"]].drop_duplicates().astype({"cik": "int64"})
     return facts.drop(index=unknown), lost.reset_index(drop=True)
 
