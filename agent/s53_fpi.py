@@ -142,6 +142,15 @@ def backtest(start: str, end: str) -> dict:
     t["net"] = t["ret_pct"] - t["cost_pct"]
     contrib = {"foreign": float(t.loc[t["ticker"].map(lambda x: tick_cik.get(x, -1) in foreign), "net"].sum() / TOP_N),
                "new_issuers": float(t.loc[t["ticker"].isin(new), "net"].sum() / TOP_N), "all": float(t["net"].sum() / TOP_N)}
+    # counterfactual lists (review 2026-10-14): the shadow line without the new issuers, and without any foreign name
+    is_f = {t: tick_cik.get(t, -1) in foreign for d in lfp for t in lfp[d]}
+    drop_new = {d: [t for t in l if t not in set(new)] for d, l in lfp.items()}
+    drop_all = {d: [t for t in l if not is_f.get(t, False)] for d, l in lfp.items()}
+    cf = {}
+    for k, lists in (("without_new_issuers", drop_new), ("without_foreign", drop_all)):
+        rr = simulate(u, lists, start, end, TOP_N, None, 0.5, cash_in_spy=True, sizes=entry_zone(lists, TOP_N))
+        cf[k] = {"alpha2_ann_pct": rr.metrics["alpha2_ann_pct"], "alpha2_t_nw": rr.metrics["alpha2_t_nw"],
+                 "max_drawdown_pct": rr.metrics["max_drawdown_pct"]}
     m1, mf = r1.metrics, rf.metrics
     checks = {
         "a_alpha": mf["alpha2_ann_pct"] >= m1["alpha2_ann_pct"] - 1.0,
@@ -153,6 +162,7 @@ def backtest(start: str, end: str) -> dict:
     out = {"start": start, "end": end, "v1": {k: m1.get(k) for k in KEYS}, "fpi": {k: mf.get(k) for k in KEYS},
            "turnover_annual": turn, "families": fam, "foreign_share": share, "contribution_pct_points": contrib,
            "new_issuers": len(new), "new_in_top30_mean": float(z["new_in_top30"].mean()), "checks": checks,
+           "counterfactuals": cf,
            "pass": all(checks.values()), "elapsed_s": round(time.time() - t0)}
     return out, rf, r1, z
 
@@ -182,10 +192,13 @@ def report(out: dict, rf, z: pd.DataFrame) -> str:
           f"- (d) foreign share of the top 30 {out['foreign_share']['top30']:.1%} vs of the scored universe "
           f"{out['foreign_share']['scored']:.1%} (<= 2x): {yes(c['d_top30_share'])}",
           "", f"**All four: {'pass' if out['pass'] else 'fail'}.**", "",
-          f"Return contributed (sum of trade returns / {TOP_N} slots, percentage points over the window): foreign issuers "
-          f"{out['contribution_pct_points']['foreign']:+.1f}, of which the {out['new_issuers']} new issuers "
-          f"{out['contribution_pct_points']['new_issuers']:+.1f}, all trades {out['contribution_pct_points']['all']:+.1f}. "
-          f"New issuers in the top 30 per month end: {out['new_in_top30_mean']:.2f}.", "",
+          "Counterfactuals (same scored lists, names removed, same engine): "
+          + "; ".join(f"{k.replace('_', ' ')} alpha2 {v['alpha2_ann_pct']:+.2f}% (t {v['alpha2_t_nw']:.2f}), MaxDD {v['max_drawdown_pct']:.0f}%"
+                      for k, v in out["counterfactuals"].items()) + ".",
+          f"Raw trade returns (not relative to SPY, and not net of what the slot would have earned otherwise; sum / {TOP_N} slots, "
+          f"percentage points): foreign issuers {out['contribution_pct_points']['foreign']:+.1f}, of which the "
+          f"{out['new_issuers']} new issuers {out['contribution_pct_points']['new_issuers']:+.1f}, all trades "
+          f"{out['contribution_pct_points']['all']:+.1f}. New issuers in the top 30 per month end: {out['new_in_top30_mean']:.2f}.", "",
           "By year (total return)", "", "| | " + " | ".join(str(y) for y in fp["by_year"]) + " |", "|---|" + "---|" * len(fp["by_year"])]
     for lab, m in (("v1", v1), ("fpi", fp)):
         L.append(f"| {lab} | " + " | ".join(f"{m['by_year'].get(y, float('nan')) * 100:+.0f}%" for y in fp["by_year"]) + " |")

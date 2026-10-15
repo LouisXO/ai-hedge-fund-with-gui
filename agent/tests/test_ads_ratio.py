@@ -26,6 +26,7 @@ from agent.tests.test_fundamentals_s47 import BS, DEI, WD, flow, instant, load, 
     ("Each American Depositary Share representing ten shares", 10),
     ("Each ADS represents the right to receive five common shares", 5),
     ("American Depositary Shares, each representing one-ninth of one share of Common Stock", 1 / 9),
+    ("the American Depositary Shares, each American Depositary Share representing 1/5 of one share of the registrant's common stock", 0.2),
     ("American Depositary Shares , each representing five-ninths of one share of Common Stock", 5 / 9),
 ])
 def test_ratio_phrases(text, ratio):

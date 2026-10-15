@@ -156,7 +156,8 @@ PATTERNS = [
     (re.compile(rf"{ADS}\s*(?:\([^)]{{0,20}}\))?\s*,?\s+({NUM})\s+of\s+which\s+(?:representing|represents|represent)\s+({FRAC}|{NUM})\s+{SHARE}", re.I),
      lambda m: (lambda a, b: b / a if a and b is not None else None)(number(m.group(1)), number(m.group(2)))),
     # "each representing 0.1 of a common share"
-    (re.compile(rf"\beach(?:\s+{ADS})?\s*,?\s+(?:representing|represents|represent)\s+(\d*\.\d+|{FRAC})\s+of\s+(?:a|an|one)\s+{SHARE}", re.I),
+    # "each American Depositary Share representing 1/5 of one share" (SMFG)
+    (re.compile(rf"\beach(?:\s+{ADS})?\s*,?\s+(?:representing|represents|represent)\s+(\d*\.\d+|\d+\s*/\s*\d+|{FRAC})\s+of\s+(?:a|an|one)\s+{SHARE}", re.I),
      lambda m: number(m.group(1))),
     # "every N ADSs represent M shares"
     (re.compile(rf"every\s+({NUM})\s+{ADS}\s*,?\s+(?:representing|represents|represent)\s+({FRAC}|{NUM})\s+{SHARE}", re.I),
