@@ -25,10 +25,17 @@ from agent.tests.test_fundamentals_s47 import BS, DEI, WD, flow, instant, load, 
     ("Ten ADSs represent one ordinary share", 0.1),
     ("Each American Depositary Share representing ten shares", 10),
     ("Each ADS represents the right to receive five common shares", 5),
+    ("American Depositary Shares, each representing one-ninth of one share of Common Stock", 1 / 9),
+    ("the American Depositary Shares, each American Depositary Share representing 1/5 of one share of the registrant's common stock", 0.2),
+    ("American Depositary Shares , each representing five-ninths of one share of Common Stock", 5 / 9),
 ])
 def test_ratio_phrases(text, ratio):
     got = A.ratios_in(text)
     assert got and got[0][0] == pytest.approx(ratio, rel=1e-4)
+
+
+def test_a_year_is_not_a_count_of_adss():
+    assert A.ratios_in("As of December 31, 2019, ADSs representing 8,022,140 shares were outstanding") == []
 
 
 @pytest.mark.parametrize("words, value", [("twenty-five", 25), ("one hundred", 100), ("eight (8)", 8), ("1,000", 1000),

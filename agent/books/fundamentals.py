@@ -312,7 +312,12 @@ def per_listed_unit(store: PanelStore, facts: pd.DataFrame) -> tuple[pd.DataFram
     has = ~np.isnan(r)
     facts.loc[idx[has], "val"] = facts.loc[idx[has], "val"].to_numpy() / r[has]
     facts.loc[idx[has], "per_unit"] = True
-    unknown = idx[~has & sub["cik"].isin(ads_ciks).to_numpy() & sub["form"].isin(ANNUAL_FORMS).to_numpy()]
+    # a filing listed with no ratio (S53: a 6-K/10-Q after an ADS cover without one, status 'derived') counts as
+    # unknown too, whatever its form; for panel.db, which has no such rows, this is the 20-F/40-F rule as before
+    listed_null = (ratios[ratios["ratio"].isna() & ratios["status"].isin((*ADS_STATUSES, "derived"))]
+                   .drop_duplicates(["cik", "accn"])[["cik", "accn"]].assign(_null=True))
+    null = sub.merge(listed_null, on=["cik", "accn"], how="left")["_null"].eq(True).to_numpy()
+    unknown = idx[~has & ((sub["cik"].isin(ads_ciks).to_numpy() & sub["form"].isin(ANNUAL_FORMS).to_numpy()) | null)]
     lost = facts.loc[unknown, ["cik", "filed"]].drop_duplicates().astype({"cik": "int64"})
     return facts.drop(index=unknown), lost.reset_index(drop=True)
 
@@ -441,28 +446,36 @@ def _qn(quarter: pd.Series) -> pd.Series:
     return quarter.str[:4].astype(int) * 4 + quarter.str[-1].astype(int)
 
 
-def build(store: PanelStore) -> pd.DataFrame:
-    """One row per (cik, filed): TTM flows + latest instants known at that filing."""
+def build(store: PanelStore, facts: pd.DataFrame | None = None, tick_pit: pd.DataFrame | None = None) -> pd.DataFrame:
+    """One row per (cik, filed): TTM flows + latest instants known at that filing.
+
+    `facts` / `tick_pit` (S53 shadow line, agent.books.fundamentals_fpi): facts already loaded (columns as the
+    query below, money in the filing's own currency) and the CIK -> ticker map (cik, quarter, ticker,
+    n_filings), instead of panel.xbrl_facts and issuer_seen. The defaults are the long book's build."""
     # ordered, and every sort below is stable: two facts that tie are always resolved the same way.
     # A period that ends after its own filing is a typing error (a 2033 cover date in a 2023 10-Q); carried
     # as "the latest" it would block every real value after it. Dates outside 1990..filed also cannot be
     # held as datetime64[ns] (year 3024 or 0202 would stop the whole build).
     # accn only where S53a needs it (share facts): a column of 7M strings otherwise
     tags = ", ".join(f"'{t}'" for t in SHARE_TAGS)
-    facts = store.con.execute(f"""SELECT cik, tag, period_start, period_end, is_instant, val, form, filed,
-                                         CASE WHEN tag IN ({tags}) THEN accn END AS accn
-                                 FROM xbrl_facts WHERE unit IN ('USD','shares')
-                                   AND period_start >= DATE '1990-01-01' AND period_end BETWEEN DATE '1990-01-01' AND filed
-                                 ORDER BY cik, tag, period_start, period_end, filed, xbrl_facts.accn""").df()
+    if facts is None:
+        facts = store.con.execute(f"""SELECT cik, tag, period_start, period_end, is_instant, val, form, filed,
+                                             CASE WHEN tag IN ({tags}) THEN accn END AS accn
+                                     FROM xbrl_facts WHERE unit IN ('USD','shares')
+                                       AND period_start >= DATE '1990-01-01' AND period_end BETWEEN DATE '1990-01-01' AND filed
+                                     ORDER BY cik, tag, period_start, period_end, filed, xbrl_facts.accn""").df()
+    else:
+        facts = facts.copy()
     for c in ("period_start", "period_end", "filed"):
         facts[c] = pd.to_datetime(facts[c]).astype("datetime64[ns]")
     facts, no_ratio = per_listed_unit(store, facts)          # S53a: 20-F/40-F share counts in listed units
     # cik -> ticker is point-in-time: 388 tickers have belonged to more than one company (SPACs,
     # renames, recycled symbols), so a filing is mapped to the ticker its CIK carried in that quarter
     # (issuer_seen), falling back to the CIK's latest ticker. Found by the 2026-09-22 audit.
-    tick_pit = store.con.execute("""SELECT CAST(cik AS INT) AS cik, quarter, ticker, n_filings FROM issuer_seen
-                                    WHERE ticker IN (SELECT DISTINCT ticker FROM bars)
-                                    ORDER BY ticker, quarter, cik""").df()
+    if tick_pit is None:
+        tick_pit = store.con.execute("""SELECT CAST(cik AS INT) AS cik, quarter, ticker, n_filings FROM issuer_seen
+                                        WHERE ticker IN (SELECT DISTINCT ticker FROM bars)
+                                        ORDER BY ticker, quarter, cik""").df()
     tick_pit = tick_pit.astype({"cik": "int64"}).assign(qn=lambda d: _qn(d["quarter"]))
     owners = _symbol_owners(tick_pit)
     # the CIK's latest symbol: the one with the most filings in its latest quarter, the shorter on a tie.

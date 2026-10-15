@@ -63,8 +63,10 @@ _UNITS = {"zero": 0, "one": 1, "a": 1, "an": 1, "two": 2, "three": 3, "four": 4,
 _TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
 _SCALES = {"hundred": 100, "thousand": 1000, "million": 1_000_000}
 _DENOM = {"half": 2, "halves": 2, "third": 3, "thirds": 3, "quarter": 4, "quarters": 4, "fourth": 4, "fourths": 4,
-          "fifth": 5, "fifths": 5, "sixth": 6, "sixths": 6, "eighth": 8, "eighths": 8, "tenth": 10, "tenths": 10,
-          "twentieth": 20, "twentieths": 20, "fortieth": 40, "fiftieth": 50, "hundredth": 100, "hundredths": 100}
+          "fifth": 5, "fifths": 5, "sixth": 6, "sixths": 6, "seventh": 7, "sevenths": 7, "eighth": 8, "eighths": 8,
+          "ninth": 9, "ninths": 9, "tenth": 10, "tenths": 10, "twelfth": 12, "twelfths": 12, "twentieth": 20,
+          "twentieths": 20, "fortieth": 40, "fiftieth": 50, "hundredth": 100, "hundredths": 100,
+          "thousandth": 1000, "thousandths": 1000}            # SKM: "one-ninth of one share", "five-ninths of one share"
 _WORD = "|".join(sorted([*_UNITS, *_TENS, *_SCALES], key=len, reverse=True))
 # a cardinal: digits (1,000 / 0.5 / 1/2) or number words (twenty-five, one hundred), optionally "(8)"
 NUM = (rf"(?:\d[\d,]*(?:\.\d+)?(?:\s*/\s*\d+)?|(?:(?:{_WORD})(?:[\s-]+(?:and[\s-]+)?(?:{_WORD}))*))"
@@ -154,7 +156,8 @@ PATTERNS = [
     (re.compile(rf"{ADS}\s*(?:\([^)]{{0,20}}\))?\s*,?\s+({NUM})\s+of\s+which\s+(?:representing|represents|represent)\s+({FRAC}|{NUM})\s+{SHARE}", re.I),
      lambda m: (lambda a, b: b / a if a and b is not None else None)(number(m.group(1)), number(m.group(2)))),
     # "each representing 0.1 of a common share"
-    (re.compile(rf"\beach(?:\s+{ADS})?\s*,?\s+(?:representing|represents|represent)\s+(\d*\.\d+|{FRAC})\s+of\s+(?:a|an|one)\s+{SHARE}", re.I),
+    # "each American Depositary Share representing 1/5 of one share" (SMFG)
+    (re.compile(rf"\beach(?:\s+{ADS})?\s*,?\s+(?:representing|represents|represent)\s+(\d*\.\d+|\d+\s*/\s*\d+|{FRAC})\s+of\s+(?:a|an|one)\s+{SHARE}", re.I),
      lambda m: number(m.group(1))),
     # "every N ADSs represent M shares"
     (re.compile(rf"every\s+({NUM})\s+{ADS}\s*,?\s+(?:representing|represents|represent)\s+({FRAC}|{NUM})\s+{SHARE}", re.I),
@@ -168,11 +171,17 @@ PATTERNS = [
 ]
 
 
+YEAR_COUNT = re.compile(r"^\s*(?:19|20)\d\d\b(?!,\d)")
+
+
 def ratios_in(text: str) -> list[tuple[float, str]]:
-    """Every ADS ratio stated in text, with the matched phrase."""
+    """Every ADS ratio stated in text, with the matched phrase. A count that is a year ("as of December 31,
+    2019, ADSs representing 8,022,140 shares": SKM's 2019-2025 20-Fs read as 3,973 shares per ADS) is not one."""
     out = []
     for rx, f in PATTERNS:
         for m in rx.finditer(text):
+            if m.lastindex and m.lastindex >= 2 and YEAR_COUNT.match(m.group(1)):
+                continue
             try:
                 v = f(m)
             except Exception:
@@ -350,6 +359,14 @@ def fetch(limit: int | None = None, ciks: list[int] | None = None, workers: int 
         todo = targets(store, ciks)
     finally:
         store.close()
+    return fetch_rows(todo, workers, redo, limit)
+
+
+def fetch_rows(todo: pd.DataFrame, workers: int = 4, redo: tuple[str, ...] = (), limit: int | None = None) -> dict:
+    """fetch() for a given list of filings (cik, accn, form, filed): S53's fpi.db issuers, whose filings are
+    not in panel.db. Filings already in CACHE (and not in `redo`) are skipped."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    ua = user_agent()
     seen = done_keys(redo)
     todo = todo[[(int(c), a) not in seen for c, a in zip(todo["cik"], todo["accn"])]]
     if limit:
