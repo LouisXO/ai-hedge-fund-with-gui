@@ -143,6 +143,10 @@ def long_book_picks(day: pd.Timestamp, optradar_db: str) -> list[dict]:
     if not long_live.should_score(day, last_recorded):
         return []
     with PanelStore(read_only=True) as store:
+        thin = long_live.thin_bar_day(store, day)          # 10-16: the list ranked only the 502 names with a bar
+        if thin:
+            print(f"agent: long book list not recorded: {thin} (incomplete bar update; the day has no list until a repair writes one)")
+            return []
         market = load_market(store, (day - pd.Timedelta(days=420)).date().isoformat())
         rows = long_live.targets(store, market, day)
         try:                                                   # v2 shadow line (S24): same list unless SPY is in a crash regime

@@ -17,6 +17,9 @@ health's own report lines and yfinance's delisted-ticker noise in the same logs 
 order the broker may not have (not_sent, submit_unknown, not attempted) is bad like a rejected one; a cash
 check that was not run (ok None: orders in flight or no broker cash) warns.
 
+2026-10-19: the long book's recorded lists of the last two weeks must come from the 16:10 job (check_list_writers):
+10-16's were written by the next brief on a panel with a tenth of the day's bars, and no check looked at who wrote them.
+
 Usage: python -m agent.health [--no-notify] [--no-llm-probe]
 """
 from __future__ import annotations
@@ -84,6 +87,12 @@ FETCH_CHECKS = [  # fetch_runs.source, name, scheduled start, minutes before a m
     ("form4_daily", "Form 4 每日索引(06:00)", (6, 0), 60, "warn"),
 ]
 RANK = {"ok": 0, "warn": 1, "bad": 2}
+LIST_SIGNALS = ("composite_long", "composite_long_v2", "largecap_qlv")   # agent/books/live.py; agent.execute long_targets writes them
+LIST_WINDOW = 10            # sessions: a list from elsewhere shows for two weeks, long enough to look at and repair
+REPAIR_PREFIX = "repair-"   # run_id of a list rewritten after the fact on purpose
+LIST_RUNS_CHECKED = {       # run_id of a list from elsewhere, compared with a recompute: a warning, not bad
+    "2026-10-08-75f33e": "10-19 核对过,和重算一致",
+}
 
 DATA = [  # name, db, sql for the latest date, max age in sessions before warn / bad
     ("价格日线 bars", f"{A}/panel.db", "SELECT max(trade_date) FROM bars", 1, 3),
@@ -370,6 +379,67 @@ def check_fetch_runs(now: dt.datetime, db: str = f"{A}/panel.db") -> list[dict]:
     return out
 
 
+def check_list_writers(now: dt.datetime, db: str = "/Users/louis/optradar/optradar.db") -> dict:
+    """The long book's lists of the last LIST_WINDOW sessions in agent_picks were written by the 16:10 job (run_id 'exec').
+
+    The drift replay, the evaluation and the attribution replay these lists, and only the 16:10 job checks the day's bars
+    before it scores (agent/execute.py bars_coverage). 10-16's lists came from the 10-19 brief instead, scored on the bars
+    of 502 names, and nothing showed it. Any other writer is bad; a run_id starting 'repair-' is a list rewritten after
+    the fact on purpose: a warning that names it, since it is not what the system saw that day. A writer in
+    LIST_RUNS_CHECKED (its list matched a recompute) and a session with no list warn. The v2 cluster lists
+    (run_id 'shadow_v2', agent.shadow_v2 at 13:25 or the 16:10 job) are not read."""
+    r = {"name": "长线名单来源", "label": "list_writers", "level": "ok", "detail": ""}
+    start = last_session(now.date(), now)
+    for _ in range(LIST_WINDOW - 1):
+        start = prev_weekday(start)
+    try:
+        con = duckdb.connect(db, read_only=True)
+        try:
+            rows = con.execute(f"""SELECT DISTINCT as_of, run_id, signal_name FROM agent_picks
+                                   WHERE signal_name IN ({', '.join('?' * len(LIST_SIGNALS))}) AND as_of >= ?
+                                   ORDER BY as_of DESC, signal_name""", [*LIST_SIGNALS, start]).fetchall()
+        finally:
+            con.close()
+    except Exception as exc:
+        lock = "lock" in str(exc).lower()
+        r.update(level="warn", detail="optradar.db 正在写入,稍后再查" if lock else str(exc)[:70])
+        return r
+    if not rows:
+        r.update(level="warn", detail=f"最近 {LIST_WINDOW} 个交易日没有长线名单")
+        return r
+    by_run: dict[tuple, list[str]] = {}
+    for as_of, run_id, sig in rows:
+        if run_id != "exec":
+            by_run.setdefault((as_of, run_id), []).append(sig)
+    bad, notes = [], []
+    for (d, rid), s in by_run.items():
+        rid = str(rid or "")
+        if rid.startswith(REPAIR_PREFIX):
+            notes.append(f"{d} {'、'.join(s)} 是事后修复({rid}),不是当天的数据")
+        elif rid in LIST_RUNS_CHECKED:
+            notes.append(f"{d} {'、'.join(s)} 由 {rid} 写入,{LIST_RUNS_CHECKED[rid]}")
+        else:
+            bad.append(f"{d} {'、'.join(s)} 由 {rid or '未知任务'} 写入")
+    # a day the brief's bars guard skipped (agent.books.live.thin_bar_day) or the 16:10 job missed has no list at all;
+    # the latest session is check_exec's. Holidays count as weekdays: a warning on one is harmless.
+    have = {x[0] for x in rows if x[2] == LIST_SIGNALS[0]}
+    missing, d = [], prev_weekday(last_session(now.date(), now))
+    while d >= start:
+        if d not in have:
+            missing.append(str(d))
+        d = prev_weekday(d)
+    if missing:
+        notes.append("没有长线名单:" + "、".join(sorted(missing)) + "(16:10 任务没写;早报遇到日线不全也不写)")
+    if bad:
+        r.update(level="bad", detail="不是 16:10 下单任务写的名单:" + ";".join(bad) + "。偏离检查、评估和归因都按名单重放,先核对当天日线"
+                                     + (";" + ";".join(notes) if notes else ""))
+    elif notes:
+        r.update(level="warn", detail=";".join(notes))
+    else:
+        r["detail"] = f"最近 {LIST_WINDOW} 个交易日的 {len({x[0] for x in rows})} 天名单都由 16:10 下单任务写入"
+    return r
+
+
 def check_jobs(now: dt.datetime) -> list[dict]:
     try:
         listing = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=15).stdout
@@ -536,7 +606,8 @@ def main() -> int:
     ap.add_argument("--no-llm-probe", action="store_true")
     args = ap.parse_args()
     now = dt.datetime.now()
-    rep = {"generated_at": now.isoformat(timespec="seconds"), "jobs": check_jobs(now) + [check_exec(now)] + check_fetch_runs(now),
+    rep = {"generated_at": now.isoformat(timespec="seconds"),
+           "jobs": check_jobs(now) + [check_exec(now)] + check_fetch_runs(now) + [check_list_writers(now)],
            "data": check_data(now.date(), now),
            "system": check_system(not args.no_llm_probe)}
     try:                                                  # agent.drift: paper book vs its rules and the backtest's range

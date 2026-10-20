@@ -28,11 +28,39 @@ from hedge_fund.features.panel import PanelStore
 SIGNAL = "composite_long"
 SIGNAL_V2 = "composite_long_v2"      # v1 + momentum-crash filter (S24), shadow only — pre-registered 2026-09-22
 KEEP_MULT = 2
+BARS_REF_SESSIONS = 5                # a day's bar count is compared with the median of this many sessions before it
+BARS_MIN_SHARE = 0.90
 
 
 def should_score(last_bar: pd.Timestamp, last_recorded: pd.Timestamp | None) -> bool:
     """Once per completed bar: skip if this bar's list is already recorded (reruns are idempotent)."""
     return last_recorded is None or last_recorded.normalize() != last_bar.normalize()
+
+
+def thin_bar_day(store: PanelStore, day: pd.Timestamp) -> str | None:
+    """Why `day` must not get a recorded list, or None when its bars look complete.
+
+    2026-10-19: the 16:10 job of 10-16 had failed before its bar update, so the morning brief found no
+    10-16 list and scored the day on the panel as it was — 10-16 bars for 502 names, the S&P 500 its
+    yfinance top-up covers, against about 5,300 on a normal day. The recorded top 60 was the top 60 of
+    those 502, and the drift replay, evaluation and attribution all read it. A day is complete when its
+    names with a bar are at least 90% of the median of the previous five sessions in the panel (a half
+    day has the same names). The median shrugs off one or two short sessions before `day`; with fewer
+    than five it uses what there is, with none there is nothing to compare and the day passes. The 16:10
+    job has its own, stricter guard against the session before (agent/execute.py bars_coverage)."""
+    rows = store.con.execute("""SELECT trade_date, count(DISTINCT ticker) FROM bars
+                                WHERE trade_date BETWEEN ? AND ? GROUP BY trade_date ORDER BY trade_date DESC""",
+                             [(day - pd.Timedelta(days=30)).date(), day.date()]).fetchall()
+    d = day.normalize()
+    n = next((int(c) for t, c in rows if pd.Timestamp(t) == d), 0)
+    prev = [int(c) for t, c in rows if pd.Timestamp(t) < d][:BARS_REF_SESSIONS]
+    if not prev:
+        return None
+    ref = float(np.median(prev))
+    if n >= BARS_MIN_SHARE * ref:
+        return None
+    return (f"{day.date()} has bars for {n:,} names, under {BARS_MIN_SHARE:.0%} of the median {ref:,.0f} "
+            f"of the {len(prev)} sessions before it")
 
 
 def day_scores(store: PanelStore, market: Market, day: pd.Timestamp, drop_momentum: bool = False) -> pd.DataFrame:

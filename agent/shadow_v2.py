@@ -6,7 +6,8 @@ Nothing here trades. Every run rebuilds the whole record from the lists in agent
 is no shadow ledger that could drift from the rules.
 
   record   writes the cluster lists for a bar (called by agent.execute next to the v1 list;
-           `python -m agent.shadow_v2` also records the latest bar if it is missing)
+           `python -m agent.shadow_v2` also records the latest bar if it is missing and its bars are complete,
+           agent.books.live.thin_bar_day)
   replay   engine.simulate on the recorded lists from START, the long book's allocation (agent_books), fills at the open,
            zero cost (the auction basis the evaluation uses), idle cash stays cash
 Output: out/agent/shadow_v2.json (NAV per line, difference to the control, holdings, what
@@ -28,7 +29,7 @@ from agent import ledger
 from agent.books import long_v2_bundle as v2
 from agent.books.data import Market, fundamentals, load_market
 from agent.books.industry import industry_by_ticker
-from agent.books.live import SIGNAL
+from agent.books.live import SIGNAL, thin_bar_day
 from agent.s44_v2_bundle import run_lines
 from hedge_fund.features.panel import PanelStore
 from hedge_fund.validation.stats import newey_west_t
@@ -113,13 +114,16 @@ def main() -> int:
         market = load_market(store, START)
         groups = industry_by_ticker(store)
         day = market.adj.index[-1]
+        thin = thin_bar_day(store, day)            # a partial bar update must not leave a cluster list (agent.daily, 10-16)
         con = duckdb.connect(DB)
         try:
-            n = record(con, store, market, day)
+            n = 0 if thin else record(con, store, market, day)
             lists, cl = recorded_lists(con)
             capital = long_capital(con)
         finally:
             con.close()
+    if thin and day not in cl:                     # said only when the day is in fact missing its lists
+        print(f"shadow v2: cluster lists not recorded: {thin}")
     if n:
         print(f"recorded {n} cluster picks for {day.date()}")
     if not lists:

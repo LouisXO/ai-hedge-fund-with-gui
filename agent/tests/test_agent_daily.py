@@ -80,3 +80,26 @@ def test_brief_one_line_mentions_shadow_and_gate():
     d = {"mode": "shadow", "gate": {"passed": 236, "of": 503}, "picks": [{}] * 30, "validated_signals": []}
     line = brief.one_line(d, {"by_side": [], "horizon": "ret10"})
     assert "shadow" in line and "236/503" in line and "30" in line
+
+
+def test_long_book_list_is_not_recorded_on_a_thin_bar_day(tmp_path, monkeypatch, capsys):
+    """10-19: the brief scored 10-16 on the bars of 502 names and recorded that list. Now a short day gets no list
+    (the brief still renders without it), and the same call scores the day once its bars are in."""
+    from agent import daily
+    from agent.books import live
+    from agent.tests.test_live_long import bars_panel
+    from hedge_fund.features.panel import PanelStore
+    db = str(tmp_path / "t.db")
+    c = ledger.connect(db)
+    ledger.ensure_schema(c)
+    c.close()
+    days = pd.bdate_range(end="2026-10-16", periods=6)
+    panel = bars_panel(tmp_path, {**{d: 100 for d in days[:-1]}, days[-1]: 10})
+    monkeypatch.setattr(daily, "PanelStore", lambda read_only=False: PanelStore(panel, read_only=read_only))
+    monkeypatch.setattr(daily, "load_market", lambda store, start: None)
+    monkeypatch.setattr(live, "targets", lambda store, market, day, v2=False: [{"ticker": "AAA", "signal_name": live.SIGNAL_V2 if v2 else live.SIGNAL}])
+    assert daily.long_book_picks(days[-1], db) == []
+    assert ("agent: long book list not recorded: 2026-10-16 has bars for 10 names, under 90% of the median 100 "
+            "of the 5 sessions before it") in capsys.readouterr().out
+    bars_panel(tmp_path, {days[-1]: 100})                                  # the update caught up
+    assert [r["signal_name"] for r in daily.long_book_picks(days[-1], db)] == [live.SIGNAL, live.SIGNAL_V2]

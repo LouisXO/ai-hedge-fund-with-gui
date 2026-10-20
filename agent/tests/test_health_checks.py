@@ -221,3 +221,69 @@ def test_fetch_runs(tmp_path):
     add_run(db, "form4_realtime", dt.datetime(2026, 9, 29, 16, 30), "partial", reason="2 of 50 filings not fetched")
     rt = health.check_fetch_runs(TUE_EVE, db)[0]
     assert rt["level"] == "warn" and "2 of 50" in rt["detail"]
+
+
+# ---- who wrote the long book's lists ----
+
+def add_lists(db, as_of, run_id, signals, n=3):
+    from agent import ledger
+    c = ledger.connect(db)
+    try:
+        ledger.ensure_schema(c)
+        c.execute("DELETE FROM agent_picks WHERE as_of = ? AND signal_name IN (SELECT unnest(?))", [as_of, list(signals)])
+        ledger.write_picks(c, [{"as_of": as_of, "ticker": f"T{i}", "signal_name": s, "side": "L", "rank": i + 1, "run_id": run_id}
+                               for s in signals for i in range(n)])
+    finally:
+        c.close()
+
+
+def drop_lists(db, as_of):
+    from agent import ledger
+    c = ledger.connect(db)
+    try:
+        c.execute("DELETE FROM agent_picks WHERE as_of = ?", [as_of])
+    finally:
+        c.close()
+
+
+def weekdays(a, b):
+    return [a + dt.timedelta(days=i) for i in range((b - a).days + 1) if (a + dt.timedelta(days=i)).weekday() < 5]
+
+
+def test_list_writers(tmp_path):
+    db = str(tmp_path / "optradar.db")
+    v1, v2, lc, clm, clv = "composite_long", "composite_long_v2", "largecap_qlv", "long_v2_clM", "long_v2_clV"
+    for d in weekdays(dt.date(2026, 10, 1), dt.date(2026, 10, 15)):
+        add_lists(db, d, "exec", [v1, v2, lc])
+    r = health.check_list_writers(dt.datetime(2026, 10, 15, 17, 0), db)
+    assert (r["level"], r["detail"]) == ("ok", "最近 10 个交易日的 10 天名单都由 16:10 下单任务写入")
+    add_lists(db, dt.date(2026, 10, 5), "2026-10-05-bd50ba", [v1, v2])          # older than 10 sessions on 10-19: not read
+    add_lists(db, dt.date(2026, 10, 7), "2026-10-08-75f33e", [v1, v2])          # in LIST_RUNS_CHECKED: a warning
+    add_lists(db, dt.date(2026, 10, 16), "2026-10-19-c47b53", [v1, v2])
+    for sig in (clm, clv):
+        add_lists(db, dt.date(2026, 10, 16), "shadow_v2", [sig])                  # the v2 cluster lists are not read
+    add_lists(db, dt.date(2026, 10, 19), "exec", [v1, v2, lc])
+    r = health.check_list_writers(dt.datetime(2026, 10, 19, 17, 0), db)
+    assert (r["level"], r["detail"]) == ("bad",
+        "不是 16:10 下单任务写的名单:2026-10-16 composite_long、composite_long_v2 由 2026-10-19-c47b53 写入。"
+        "偏离检查、评估和归因都按名单重放,先核对当天日线;"
+        "2026-10-07 composite_long、composite_long_v2 由 2026-10-08-75f33e 写入,10-19 核对过,和重算一致")
+    assert "2026-10-05" not in r["detail"] and "clM" not in r["detail"]
+    drop_lists(db, dt.date(2026, 10, 12))                                          # a day the bars guard skipped
+    r = health.check_list_writers(dt.datetime(2026, 10, 19, 17, 0), db)
+    assert r["level"] == "bad" and r["detail"].endswith(";没有长线名单:2026-10-12(16:10 任务没写;早报遇到日线不全也不写)")
+    r = health.check_list_writers(dt.datetime(2026, 10, 20, 15, 0), db)          # 10-20's list is not due yet: not missing
+    assert "2026-10-20" not in r["detail"]
+    for d in weekdays(dt.date(2026, 10, 20), dt.date(2026, 10, 30)):
+        add_lists(db, d, "exec", [v1, v2, lc])
+    r = health.check_list_writers(dt.datetime(2026, 10, 21, 17, 0), db)          # 10-07 has left the window
+    assert r["level"] == "bad" and "2026-10-07" not in r["detail"] and "2026-10-16" in r["detail"]
+    add_lists(db, dt.date(2026, 10, 16), "repair-2026-10-19", [v1, v2, lc])       # rewritten after the fact
+    r = health.check_list_writers(dt.datetime(2026, 10, 21, 17, 0), db)
+    assert (r["level"], r["detail"]) == ("warn", "2026-10-16 composite_long、composite_long_v2、largecap_qlv 是事后修复"
+                                                 "(repair-2026-10-19),不是当天的数据;"
+                                                 "没有长线名单:2026-10-12(16:10 任务没写;早报遇到日线不全也不写)")
+    r = health.check_list_writers(dt.datetime(2026, 10, 30, 17, 0), db)          # 10-12 and 10-16 left it too
+    assert (r["level"], r["detail"]) == ("ok", "最近 10 个交易日的 10 天名单都由 16:10 下单任务写入")
+    r = health.check_list_writers(dt.datetime(2026, 12, 1, 17, 0), db)
+    assert (r["level"], r["detail"]) == ("warn", "最近 10 个交易日没有长线名单")
