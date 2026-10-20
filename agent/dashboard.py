@@ -335,7 +335,7 @@ def render(d: dict) -> str:
             + "<h2>模拟盘</h2>"
             + progress_html(d.get("progress"))
             + f"<div class='chart tall'><p class='t'>三本书净值 vs SPY、QQQ</p><p class='st'>每本书从首笔成交前一个收盘起 = 100(长线、内部人、核心仓各自的起点见上面的卡片);"
-              f"SPY、QQQ 自 {d['paper_since'] or '—'} 收盘起 = 100,用 adj_close(含分红)。书的线是模拟器口径含分红(模拟盘不发分红,按持仓补记,不进现金);"
+              f"SPY、QQQ 自 {d['paper_since'] or '—'} 收盘起 = 100,用 adj_close(含分红)。书的线是模拟器口径含分红(模拟盘净值减去券商实付进现金的分红,加上按除息日持仓应得的分红,每笔分红只算一次);"
               "虚线合计按日收益连乘,另一条是竞价口径(每笔成交按当天开盘竞价价重记、扣监管费、含分红)。评估点按竞价口径判,之前只看不判。</p><div class='cv'><canvas id='c_nav'></canvas></div>"
             + _table(["日", "长线", "内部人", "核心仓", "合计", "合计(竞价)", "SPY", "QQQ"],
                      [list(r) for r in zip(pn["days"], pn["long"], pn["insider"], pn["core"], pn["total"], pn["total_auction"], pn["spy"], pn["qqq"])]) + "</div>"

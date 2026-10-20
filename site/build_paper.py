@@ -369,8 +369,8 @@ def page(d: dict, private: bool = False) -> str:
 <div class='cards'>{''.join(cards)}</div>
 
 <h2>{T('净值 vs SPY、QQQ', 'NAV vs SPY and QQQ')}</h2>
-<div class='chart tall'><p class='t'>{T('三本书净值', 'Book NAV')}</p><p class='st'>{T(f"每本书从首笔成交前一个收盘起 = 100;SPY、QQQ 自 {d['since']} 收盘起 = 100,用复权价(含分红)。书的线是模拟器口径加上持仓应得的分红(模拟账户不发分红);合计按日收益连乘;竞价口径 = 每笔成交按当天开盘竞价价重记、扣监管费。",
-    f"Each book = 100 at the close before its first fill; SPY and QQQ = 100 at the {d['since']} close, on adjusted prices (dividends included). Book lines are the simulator NAV plus the dividends the positions were entitled to (the paper account pays none); the total chains daily returns; the auction basis re-prices every fill at that day's opening cross, net of regulatory fees.")}</p>
+<div class='chart tall'><p class='t'>{T('三本书净值', 'Book NAV')}</p><p class='st'>{T(f"每本书从首笔成交前一个收盘起 = 100;SPY、QQQ 自 {d['since']} 收盘起 = 100,用复权价(含分红)。书的线是模拟器口径含分红:券商实付进现金的分红先移出,再按除息日持仓应得的分红计入,每笔只算一次;合计按日收益连乘;竞价口径 = 每笔成交按当天开盘竞价价重记、扣监管费。",
+    f"Each book = 100 at the close before its first fill; SPY and QQQ = 100 at the {d['since']} close, on adjusted prices (dividends included). Book lines are the simulator NAV with dividends: the dividend cash the broker paid is taken out and the dividends the positions were entitled to are counted on their ex-dates, each once; the total chains daily returns; the auction basis re-prices every fill at that day's opening cross, net of regulatory fees.")}</p>
 <div class='cv'><canvas id='c_nav'></canvas></div></div>
 
 <h2>{T('三本书的规则', 'The three books')}</h2>

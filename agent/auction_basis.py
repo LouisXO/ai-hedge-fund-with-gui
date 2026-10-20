@@ -14,20 +14,29 @@ by roughly 4–5% a year. Two corrections, both from the free Alpaca auctions da
      entered at the next session's opening cross and exited at the cross five sessions later
      (the book's rule), with SPY over the same days. Recorded separately, never mixed into NAV.
 
-  3. Regulatory fees (S48). The paper account charges none; a real one pays, on the day of the
-     trade: SEC fee 0.00206% of the sell notional, FINRA TAF $0.000195 per share sold (capped at
-     $9.79 per trade) and CAT $0.000003 per share on both sides, each fee's daily total rounded
-     up to the cent (per book here). equity_auction is net of them (fees_cum).
-  4. Dividends (S48, agent/dividends.py). The paper account pays none; the backtest, the rule
-     replay and SPY / QQQ are total return. div_cum is the running sum of the dividends the
-     book's lots were holder of record for; equity_auction_tr = equity_auction + div_cum. Both
-     the price NAV and the total-return NAV are kept; neither touches the book's cash.
+  3. Regulatory fees (S48). A real account pays, on the day of the trade: SEC fee 0.00206% of the
+     sell notional, FINRA TAF $0.000195 per share sold (capped at $9.79 per trade) and CAT
+     $0.000003 per share on both sides, each fee's daily total rounded up to the cent (per book
+     here). equity_auction is net of this MODEL (fees_cum), so the basis stays comparable with the
+     backtest over time. Since 2026-09-29 the paper account charges its own FEE activities too, and
+     agent/cash_events.py books them into the books' cash (in equity_sim): fee_cash_cum (a positive
+     number) puts them back, so they are not paid twice.
+  4. Dividends (S48, agent/dividends.py). The backtest, the rule replay and SPY / QQQ are total
+     return. div_cum is the running sum of the dividends the book's lots were entitled to by
+     ex-date; equity_auction_tr = equity_auction + div_cum. Since 2026-10-14 the paper account pays
+     DIV activities, which cash_events books into the books' cash on the day they count
+     (equity_sim includes them): div_cash_cum takes them out again, so equity_auction stays the
+     price NAV and a dividend counts once, on its ex-date.
+     equity_auction = equity_sim - div_cash_cum + fee_cash_cum + adj_cum - fees_cum. A catch-up that
+     restates agent_book_nav (cash_events) leaves every equity_auction as it was. The json also
+     compares the broker's fees with the model's and the dividends received with those entitled,
+     listing the entitled ones past their pay date that the broker has not paid.
 
 Missed trades that the book bought anyway: an unfilled insider entry whose ticker the book filled
 within RETRY_DAYS afterwards (the S36b retry) is marked retried_filled and left out of the missed
 comparison, so the same name is not counted as both bought and missed.
 
-Writes optradar.db agent_auction_nav (and agent_dividends) and out/agent/auction_basis.json; read by
+Writes optradar.db agent_auction_nav (and agent_dividends, agent_corp_actions) and out/agent/auction_basis.json; read by
 the review, the dashboard and the paper page. Runs after the close (auction data is 15 minutes delayed).
 
 Usage: python -m agent.auction_basis [--db PATH] [--out PATH]
@@ -43,7 +52,7 @@ import os
 import duckdb
 import pandas as pd
 
-from agent import dividends, ledger
+from agent import cash_events, dividends, ledger
 from agent.books.short_term import HOLD_DAYS
 from agent.sources.alpaca_auctions import AUCTIONS_DB, load as load_auctions
 from hedge_fund.features.panel import PanelStore
@@ -53,7 +62,10 @@ DDL = """CREATE TABLE IF NOT EXISTS agent_auction_nav (as_of DATE, book VARCHAR,
          equity_auction DOUBLE, n_fills INT, PRIMARY KEY (as_of, book))"""
 # added 2026-09-29 (S48); rows written before keep NULL until the next run rewrites every row
 ADD_COLUMNS = [("fees_cum", "DOUBLE"), ("div_cum", "DOUBLE"), ("equity_auction_tr", "DOUBLE")]
-NAV_COLS = ["as_of", "book", "equity_sim", "adj_cum", "equity_auction", "n_fills", "fees_cum", "div_cum", "equity_auction_tr"]
+# added 2026-10-20 (agent/cash_events.py): the broker's DIV and FEE cash inside equity_sim, by the day it counts
+ADD_COLUMNS += [("div_cash_cum", "DOUBLE"), ("fee_cash_cum", "DOUBLE")]
+NAV_COLS = ["as_of", "book", "equity_sim", "adj_cum", "equity_auction", "n_fills", "fees_cum", "div_cum", "equity_auction_tr",
+            "div_cash_cum", "fee_cash_cum"]
 
 SEC_RATE = 0.0000206            # SEC fee, of the sell notional (Alpaca fee schedule, revised 2026-09-17)
 TAF_PER_SHARE = 0.000195        # FINRA trading activity fee, per share sold ...
@@ -90,17 +102,23 @@ def fees_by_day(fills: pd.DataFrame) -> dict[tuple[str, dt.date], float]:
     return out
 
 
-def nav_rows(nav: pd.DataFrame, fills: pd.DataFrame, fees: dict, div: pd.DataFrame) -> list[list]:
-    """One agent_auction_nav row per (day, book) of agent_book_nav, in NAV_COLS order."""
+def nav_rows(nav: pd.DataFrame, fills: pd.DataFrame, fees: dict, div: pd.DataFrame, cash: pd.DataFrame | None = None) -> list[list]:
+    """One agent_auction_nav row per (day, book) of agent_book_nav, in NAV_COLS order.
+
+    cash: the booked broker DIV / FEE rows (cash_events.load). equity_sim holds them from their cash_day on, so the
+    auction basis takes the DIV cash out (div_cum counts the dividend on its ex-date) and the broker's fees back in
+    (fees_cum is the model): equity_auction = equity_sim - div_cash_cum + fee_cash_cum + adj_cum - fees_cum."""
     rows = []
     for (d, book), g in nav.groupby(["as_of", "book"]):
         f = fills[(fills["book"] == book) & (fills["d"] <= d)] if len(fills) else fills
         adj = float(f["adj"].sum()) if len(f) else 0.0
         fee = float(sum(v for (b, fd), v in fees.items() if b == book and fd <= d))
         dv = dividends.cumulative(div, [d], book)[d] if len(div) else 0.0
+        div_cash = cash_events.cumulative(cash, d, book, "DIV")
+        fee_cash = 0.0 - cash_events.cumulative(cash, d, book, "FEE")      # 0.0 - x: no -0.0 in the table
         sim = float(g["equity_usd"].iloc[0])
-        auc = sim + adj - fee
-        rows.append([d, book, sim, adj, auc, int(len(f)), fee, dv, auc + dv])
+        auc = sim - div_cash + fee_cash + adj - fee
+        rows.append([d, book, sim, adj, auc, int(len(f)), fee, dv, auc + dv, div_cash, fee_cash])
     return rows
 
 
@@ -150,20 +168,54 @@ def cross_prices(pairs: set[tuple[str, dt.date]]) -> dict[tuple[str, dt.date], f
     return {(t, d): float(p) for t, d, p in zip(have["ticker"], have["day"], have["open_px"]) if pd.notna(p)}
 
 
-DIV_COLS = ["lot_id", "book", "ticker", "ex_date", "per_share", "qty", "usd", "kind", "computed_at"]
+DIV_COLS = dividends.DIV_COLS
 
 
 def soft_dividends(con) -> tuple[pd.DataFrame, str | None]:
     """dividends.update, but a failure there does not stop the auction basis: the price NAV, the missed-trade
     shadow and auction_basis.json are still written (div_cum 0 for the day; postclose also runs agent.dividends
-    on its own). Returns (rows, error text or None)."""
+    on its own). A failed corporate-actions fetch does not fail the update (the cache is kept) and is returned as
+    the error too. Returns (rows, error text or None)."""
     try:
         with PanelStore(read_only=True) as store:
-            return dividends.update(con, store), None
+            rows = dividends.update(con, store)
     except Exception as e:                        # noqa: BLE001 — reported in the json and on stdout
         msg = f"{type(e).__name__}: {e}"
         print(f"dividends skipped ({msg}); NAV written without them")
         return pd.DataFrame(columns=DIV_COLS), msg
+    fe = rows.attrs.get("fetch_error")
+    if fe:
+        print(f"corporate actions not fetched ({fe}); dividends from the cached ones")
+    return rows, (f"corporate actions fetch failed, cache kept: {fe}" if fe else None)
+
+
+def broker_vs_model(div: pd.DataFrame, cash: pd.DataFrame, fees: dict, today: dt.date) -> tuple[dict, dict]:
+    """(fees, dividends) parts of the json: the broker's fees next to the model's (also from the broker's first fee
+    day, the comparable window), the DIV cash received next to the dividends entitled, and the entitled ones past
+    their pay date that the broker has not paid (cash_events.unpaid, no grace)."""
+    fee_ev = cash[cash["kind"] == "FEE"] if len(cash) else cash
+    div_ev = cash[cash["kind"] == "DIV"] if len(cash) else cash
+    first = min(fee_ev["activity_date"]) if len(fee_ev) else None
+    books = sorted({b for b, _ in fees} | set(fee_ev["book"] if len(fee_ev) else []))
+    f = {"broker_total": round(0.0 - float(fee_ev["net_usd"].sum()), 2) if len(fee_ev) else 0.0,
+         "broker_by_book": {b: round(0.0 - float(fee_ev.loc[fee_ev["book"] == b, "net_usd"].sum()), 2) for b in books} if len(fee_ev) else {},
+         "model_by_book": {b: round(sum(v for (bb, _), v in fees.items() if bb == b), 2) for b in books},
+         "broker_first_day": str(first) if first else None,
+         "model_since_broker_first_day": round(sum(v for (_, d), v in fees.items() if first and d >= first), 2) if first else None}
+    cash_div = div[div["kind"] == "dividend"] if len(div) else div
+    ent = [{"ticker": r.ticker, "book": r.book, "lot_id": r.lot_id, "ex_date": pd.Timestamp(r.ex_date).date(),
+            "record_date": None if pd.isna(getattr(r, "record_date", None)) else pd.Timestamp(r.record_date).date(),
+            "pay_date": None if pd.isna(getattr(r, "pay_date", None)) else pd.Timestamp(r.pay_date).date(), "usd": float(r.usd)}
+           for r in cash_div.itertuples()] if len(cash_div) else []
+    paid = [{"ticker": t, "record_date": rd, "activity_date": ad}
+            for t, rd, ad in zip(div_ev["ticker"], div_ev["record_date"], div_ev["activity_date"])] if len(div_ev) else []
+    unpaid = cash_events.unpaid(ent, paid, today, grace_days=0)
+    dv = {"received_usd": round(float(div_ev["net_usd"].sum()), 2) if len(div_ev) else 0.0,
+          "received_by_book": {b: round(float(g["net_usd"].sum()), 2) for b, g in div_ev.groupby("book")} if len(div_ev) else {},
+          "entitled_by_book": {b: round(float(g["usd"].sum()), 2) for b, g in cash_div.groupby("book")} if len(cash_div) else {},
+          "unpaid_past_pay_date": [{k: (str(v) if isinstance(v, dt.date) else v) for k, v in u.items()} for u in unpaid],
+          "unpaid_usd": round(sum(u["usd"] for u in unpaid), 2)}
+    return f, dv
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -176,6 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         ensure_table(con)
         div, div_error = soft_dividends(con)
+        cash = cash_events.load(con)
         fills = con.execute("""SELECT client_order_id, book, ticker, side, filled_qty, filled_avg_px, CAST(filled_at AS DATE) d, reason,
                                       order_type, limit_price
                                FROM agent_orders WHERE dry_run = FALSE AND filled_qty > 0""").df()
@@ -218,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
         fills["gap_pct"] = [None if (gf or not c) else ((px / c - 1) * 100 * (1 if s == "buy" else -1))
                             for s, px, c, gf in zip(fills["side"], fills["filled_avg_px"], fills["cross"], fills["gap_fill"])]
         fees = fees_by_day(fills) if len(fills) else {}
-        rows = nav_rows(nav, fills, fees, div)
+        rows = nav_rows(nav, fills, fees, div, cash)
         if rows:
             con.executemany(f"INSERT OR REPLACE INTO agent_auction_nav ({', '.join(NAV_COLS)}) VALUES ({', '.join('?' * len(NAV_COLS))})", rows)
     finally:
@@ -248,6 +301,7 @@ def main(argv: list[str] | None = None) -> int:
         by_book[b]["as_of"] = str(last[0])
         del by_book[b]["book"]
     g = fills["gap_pct"].dropna()
+    fee_cmp, div_cmp = broker_vs_model(div, cash, fees, dt.date.today())
     out = {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "books": by_book,
            "fills": {"n": int(len(fills)), "with_cross": int(fills["cross"].notna().sum()) if len(fills) else 0,
                      "n_gap_fills": int(fills["gap_fill"].sum()) if len(fills) else 0,
@@ -259,12 +313,11 @@ def main(argv: list[str] | None = None) -> int:
                                                                          fills["cross"], fills["gap_pct"], fills["reason"], fills["limit_price"], fills["gap_fill"])],
            "missed": miss_rows,
            "fees": {"sec_rate": SEC_RATE, "taf_per_share": TAF_PER_SHARE, "taf_cap": TAF_CAP, "cat_per_share": CAT_PER_SHARE,
-                    "total": float(sum(fees.values())) if fees else 0.0},
+                    "total": float(sum(fees.values())) if fees else 0.0, **fee_cmp},
            "dividends": {"n": int((div["kind"] == "dividend").sum()) if len(div) else 0,
                          "usd": float(div.loc[div["kind"] == "dividend", "usd"].sum()) if len(div) else 0.0,
-                         "to_check": [{"ticker": t, "ex_date": str(x), "kind": k} for t, x, k in
-                                      zip(div["ticker"], div["ex_date"], div["kind"]) if k != "dividend"] if len(div) else [],
-                         "error": div_error},
+                         "to_check": div.attrs.get("to_check") or [], "error": div_error,
+                         "fetch_error": div.attrs.get("fetch_error"), "factor_error": div.attrs.get("factor_error"), **div_cmp},
            "missed_summary": {"n": len(miss_rows) - sum(m["retried_filled"] for m in miss_rows), "closed": len(closed),
                               "n_retried_filled": sum(m["retried_filled"] for m in miss_rows),
                               "mean_ret_pct": sum(m["ret_pct"] for m in closed) / len(closed) if closed else None,
@@ -274,8 +327,9 @@ def main(argv: list[str] | None = None) -> int:
     with open(args.out, "w") as f:
         json.dump(out, f, ensure_ascii=False, indent=1, default=str)
     for b, v in by_book.items():
-        print(f"{b:8s} sim ${v['equity_sim']:,.0f}  auction ${v['equity_auction']:,.0f}  (adj {v['adj_cum']:+,.0f}, fees {v['fees_cum']:,.2f}, "
-              f"{v['n_fills']} fills)  + dividends {v['div_cum']:,.2f} = ${v['equity_auction_tr']:,.0f}")
+        print(f"{b:8s} sim ${v['equity_sim']:,.0f} (broker DIV {v['div_cash_cum']:,.2f}, FEE {v['fee_cash_cum']:,.2f})  auction "
+              f"${v['equity_auction']:,.0f}  (adj {v['adj_cum']:+,.0f}, fees {v['fees_cum']:,.2f}, {v['n_fills']} fills)"
+              f"  + dividends {v['div_cum']:,.2f} = ${v['equity_auction_tr']:,.0f}")
     print("fills vs cross:", out["fills"])
     print("missed:", out["missed_summary"])
     return 0

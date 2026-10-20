@@ -572,3 +572,61 @@ def test_nightly_submit_claims_first_records_each_order_and_a_rerun_sends_only_w
     out = json.load(open(tmp_path / "exec_2026-09-22.json"))
     assert [o["ticker"] for o in out["orders"]] == ["BBB"]                   # AAA is working: not a candidate again
     assert out["cash_check"]["ok"] is None                                    # AAA is working: not compared
+
+
+def test_a_sync_run_books_the_brokers_fee_and_goes_on_when_the_activities_cannot_be_read(store, tmp_path, monkeypatch):
+    """execute.main --sync-only, Tuesday 17:00 ET: the broker charged a $3 fee on Tuesday's fill. The first run cannot
+    read the activities: it records the error, goes on, and its cash check shows the $3. The second books the fee into
+    the insider book (the only one that traded) and the check passes."""
+    import types
+    from agent.books.data import Market
+
+    alloc = sum(b["alloc_usd"] for b in BOOKS.values())
+    orphan = client_id("insider", MON.date(), "CCC", "buy")
+    fb = FakeBroker()
+    fb.submit("CCC", "buy", 10, "limit", "day", orphan, 10.3)
+    fb.fill(orphan, 10, 10.0, filled_at="2026-09-22T13:30:00Z")
+    fb.account = lambda: {"account_number": "PA1", "equity": str(alloc), "cash": str(alloc - 103.0)}
+    fb.calendar = lambda start, end: list(SESSIONS)
+    fb.positions = lambda: {"CCC": {"qty": "10"}}
+    fee = {"id": "20260922000000000::cat", "activity_type": "FEE", "activity_sub_type": "CAT", "date": "2026-09-22",
+           "net_amount": "-3", "description": "CAT fee for proceed of 1 trades on 2026-09-22 by PA1"}
+
+    def down(types_, after):
+        raise BrokerError("GET /account/activities -> no answer: TimeoutError: timed out")
+    fb.activities = down
+
+    class Now(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return dt.datetime(2026, 9, 22, 17, 0, tzinfo=tz)
+
+    class Kept:
+        def __enter__(self):
+            return store
+
+        def __exit__(self, *a):
+            return False
+
+    def market(_store, _start):
+        close = store.bars_wide("close")
+        adv = (close * store.bars_wide("volume")).rolling(20).mean()
+        return Market(close, close, close, adv, close.notna(), pd.Series(1.0, index=close.index), {})
+
+    monkeypatch.setattr(execute.broker_mod, "from_env", lambda: fb)
+    monkeypatch.setattr(execute, "dt", types.SimpleNamespace(date=dt.date, time=dt.time, timedelta=dt.timedelta, datetime=Now))
+    monkeypatch.setattr(execute, "PanelStore", lambda read_only=False: Kept())
+    monkeypatch.setattr(execute, "load_market", market)
+    db = str(tmp_path / "l.db")
+    monkeypatch.setattr(sys, "argv", ["execute", "--sync-only", "--no-update", "--optradar-db", db, "--out-dir", str(tmp_path)])
+    assert execute.main() == 0
+    out = json.load(open(tmp_path / "sync_2026-09-22.json"))
+    assert out["cash_events"]["error"].startswith("BrokerError: GET /account/activities -> no answer")
+    assert out["cash_check"]["ok"] is False and out["cash_check"]["diff"] == -3.0
+    fb.activities = lambda types_, after: [dict(fee)]
+    assert execute.main() == 0
+    out = json.load(open(tmp_path / "sync_2026-09-22.json"))
+    assert [b["books"] for b in out["cash_events"]["booked"]] == [{"insider": -3.0}]
+    assert out["cash_check"]["ok"] is True and out["cash_check"]["diff"] == 0.0
+    assert {b["book"]: b["cash_usd"] for b in out["books"]}["insider"] == BOOKS["insider"]["alloc_usd"] - 103.0
+    assert out["cash_events"]["booked"][0]["cash_day"] == "2026-09-22"      # tonight's row holds it: nothing restated

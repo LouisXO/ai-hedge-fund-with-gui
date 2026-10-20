@@ -31,7 +31,7 @@
 | 主机 | 工作用 M4 Max,tailnet 节点 `optradar`;`bin/install_power.sh` 已装(AC 上不睡,08:30 / 13:20 / 16:05 定时唤醒) |
 | Python | `~/.hedgefund-venv/bin/python`(hedge-fund,3.13)· `~/.moomoo/venv/bin/python`(optradar + moomoo,3.10) |
 | 跑法 | `cd ~/hedge-fund && PYTHONPATH=. ~/.hedgefund-venv/bin/python -W ignore -m agent.<模块>` |
-| 数据库 | `~/.hedge-fund/agent/panel.db`(bars、fundamentals、insider_tx、sch13d)· `news.db`(Alpaca 新闻,1.9M 条)· `options.db`(Alpaca 期权日线,561 名)· `retail.db`(散户热度)· `~/optradar/optradar.db`(账本:`agent_books/agent_orders/agent_lots/agent_book_nav`、`acct_*` 真实账户快照、`paper_ledger`) |
+| 数据库 | `~/.hedge-fund/agent/panel.db`(bars、fundamentals、insider_tx、sch13d)· `news.db`(Alpaca 新闻,1.9M 条)· `options.db`(Alpaca 期权日线,561 名)· `retail.db`(散户热度)· `~/optradar/optradar.db`(账本:`agent_books/agent_orders/agent_lots/agent_book_nav`、`agent_cash_events`(券商分红和费用入账)、`agent_dividends`/`agent_corp_actions`(按除息日应得的分红)、`acct_*` 真实账户快照、`paper_ledger`) |
 | DuckDB 锁 | 读写连接独占文件。**同一时刻只能有一个进程写某个库**;分析脚本用 `read_only=True`。两个 session 同时跑回测会互相卡死 |
 | 输出 | `~/optradar/out/agent/`:`exec_<date>.json/.html`、`watch_<date>.json`、`execute.log`;早报 `~/optradar/out/<date>.html` |
 | Python 3.10 陷阱 | optradar 侧 f-string 里不能嵌套同种引号 |

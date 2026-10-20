@@ -16,6 +16,9 @@ up exactly (dollars, then as % of the book's equity at the start of the week):
              largest name.
   execution  fill vs the day's open, on entry and exit days
 
+The NAV change the layers explain is on the same total-return basis (book_equity): the broker's DIV
+cash is taken out of the paper NAV and the dividends the lots were entitled to by ex-date are put in.
+
 Entry days are measured open → close, exit days previous close → open, other days close →
 close, and every benchmark uses the same leg, so the layers stay comparable.
 
@@ -43,6 +46,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+from agent import cash_events, dividends
 from agent.books import long_v2_bundle as v2
 from agent.books.data import fundamentals, load_market
 from agent.books.industry import UNCLASSIFIED, industry_by_ticker
@@ -128,6 +132,27 @@ def extras(b: pd.DataFrame, eq0: float) -> dict:
             "stock_ex_top1_usd": ex, "stock_ex_top1_pct": ex / eq0 * 100}
 
 
+def book_equity(con, start: dt.date, end: dt.date) -> pd.DataFrame:
+    """as_of, book, equity_usd on the total-return simulator basis: agent_book_nav.equity_usd - the broker's DIV cash
+    in it by then (agent_cash_events, by cash_day) + the dividends entitled by then (agent_dividends, by ex-date).
+
+    The layers are measured on adj (total-return) prices, so a dividend is in them on its ex-date; the paper NAV has
+    the broker's DIV cash from its pay date (agent/cash_events.py). Taking that cash out and the entitled dividends
+    in puts the NAV change on the layers' basis, so a dividend is neither unexplained nor counted twice. Both sums
+    come from their own tables, not from agent_auction_nav: a day the auction rebuild failed would otherwise leave
+    one row of the window on the raw basis and move the week's change by the dividends not yet paid."""
+    nav = con.execute("SELECT as_of, book, equity_usd FROM agent_book_nav WHERE as_of BETWEEN ? AND ?", [start, end]).df()
+    ev = cash_events.load(con)
+    try:
+        div = con.execute("SELECT book, kind, ex_date, usd FROM agent_dividends").df()
+    except Exception:                                           # a ledger without the table: no entitlement yet
+        div = pd.DataFrame(columns=["book", "kind", "ex_date", "usd"])
+    days = [pd.Timestamp(d).date() for d in nav["as_of"]]
+    nav["equity_usd"] = [float(e) - cash_events.cumulative(ev, d, b, "DIV") + dividends.cumulative(div, [d], b)[d]
+                         for e, d, b in zip(nav["equity_usd"], days, nav["book"])]
+    return nav
+
+
 def factor_week(market, fund, prev_friday: pd.Timestamp, end: pd.Timestamp) -> dict:
     fs = v2.scored(market, fund, prev_friday)
     r = (market.adj.loc[end] / market.adj.loc[prev_friday] - 1).reindex(fs.index)
@@ -157,7 +182,7 @@ def main() -> int:
         prev = idx[idx < monday][-1]
         con = duckdb.connect(DB, read_only=True)
         lots = con.execute("SELECT book, ticker, qty, entry_day, entry_px, exit_day, exit_px FROM agent_lots WHERE book IN ('long', 'insider')").df()
-        nav = con.execute("SELECT as_of, book, equity_usd FROM agent_book_nav WHERE as_of BETWEEN ? AND ?", [prev.date(), end.date()]).df()
+        nav = book_equity(con, prev.date(), end.date())       # total return, as the layers (see book_equity)
         con.close()
         df = attribute(lots, market, store, groups, days)
         factors = factor_week(market, fund, prev, end)

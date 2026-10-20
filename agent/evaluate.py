@@ -7,9 +7,14 @@ Two parts, kept apart on purpose.
    before a book owned anything are not part of its record, and SPY / QQQ are taken from the
    same close, on adj_close (total return). The combined index chains the daily returns of the
    books that have started, so a book joining does not move it. Three bases, always labelled:
-     sim         the simulator's NAV (agent_book_nav): what the paper account shows, no dividends
-     sim_tr      sim + the dividends the lots were entitled to (agent/dividends.py): total return,
-                 the same basis as SPY / QQQ adj_close
+     sim         the simulator's NAV (agent_book_nav): what the paper account shows, with the DIV cash
+                 it has paid since 2026-10-14 and the fees it charges (agent/cash_events.py)
+     sim_tr      sim - the DIV cash it holds + the dividends the lots were entitled to by ex-date
+                 (agent/dividends.py; agent_auction_nav.div_cum): total return, the same basis as
+                 SPY / QQQ adj_close, each dividend counted once, on its ex-date. The DIV cash is
+                 summed from agent_cash_events, as booked now: a run after the 13:25 auction rebuild
+                 that books a dividend puts it in equity_usd, and agent_auction_nav.div_cash_cum
+                 would not have it until the next rebuild
      auction_tr  every fill re-priced at the opening cross, net of regulatory fees, plus
                  dividends (agent_auction_nav.equity_auction_tr): the basis the evaluation reads
    Next to every return: the average invested share (market value / NAV since the first fill),
@@ -43,7 +48,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from agent import ledger
+from agent import cash_events, ledger
 from hedge_fund.validation.stats import newey_west_t
 
 OUT = "/Users/louis/optradar/out/agent/evaluate.json"
@@ -54,7 +59,7 @@ BOOK_LABEL = {"long": "长线综合因子", "insider": "内部人短线", "core"
 BOOK_ORDER = ("long", "insider", "core")
 BENCH = ("SPY", "QQQ")
 BASES = ("sim", "sim_tr", "auction_tr")
-BASIS_LABEL = {"sim": "模拟器口径(不含分红)", "sim_tr": "模拟器口径含分红", "auction_tr": "竞价口径含分红、扣监管费"}
+BASIS_LABEL = {"sim": "模拟器口径(含券商实付的分红和费用)", "sim_tr": "模拟器口径含分红", "auction_tr": "竞价口径含分红、扣监管费"}
 FINAL = ("filled", "expired", "canceled", "rejected", "done_for_day", "replaced")
 
 
@@ -75,8 +80,10 @@ def load_books(con) -> tuple[pd.DataFrame, dict, dict]:
         auc["as_of"] = pd.to_datetime(auc["as_of"]).dt.date
     df = nav.merge(auc[["as_of", "book", "equity_auction", "div_cum", "equity_auction_tr"]], on=["as_of", "book"], how="left")
     df["div_cum"] = df["div_cum"].fillna(0.0)
+    ev = cash_events.load(con)                                   # the DIV cash equity_usd holds now (empty before cash_events)
+    df["div_cash_cum"] = [cash_events.cumulative(ev, d, b, "DIV") for d, b in zip(df["as_of"], df["book"])]
     df["sim"] = df["equity_usd"]
-    df["sim_tr"] = df["equity_usd"] + df["div_cum"]
+    df["sim_tr"] = df["equity_usd"] - df["div_cash_cum"] + df["div_cum"]
     df["auction_tr"] = df["equity_auction_tr"].fillna(df["equity_auction"].fillna(df["equity_usd"]) + df["div_cum"])
     first = {b: pd.Timestamp(d).date() for b, d in con.execute(
         """SELECT book, min(CAST(filled_at AS DATE)) FROM agent_orders

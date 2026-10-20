@@ -33,7 +33,9 @@ returns; a POST that fails is looked up by client_order_id (found = accepted,
 the broker has under this system's ids that the ledger lacks. Fills are
 booked by increment (applied_qty). Buys still in flight hold their slot and
 cash; the planned buys must fit in the book's cash plus its sells' proceeds
-and in the account's cash (`guard_buys`).
+and in the account's cash (`guard_buys`). The broker's dividends and fees
+are booked into the books' cash after the fills (agent/cash_events.py), so
+the cash check compares like with like.
 
 Usage:
   python -m agent.execute [--submit] [--no-update] [--book long|insider] [--date YYYY-MM-DD]
@@ -52,7 +54,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from agent import ledger, signals_insider
+from agent import cash_events, ledger, signals_insider
 from agent.books import live as long_live
 from agent.books.data import load_market
 from agent.books.long_term import TOP_N
@@ -470,8 +472,10 @@ def split_hints(lots: list[dict], positions: dict[str, dict]) -> list[dict]:
 
 def cash_check(con, broker_cash: float | None, tol: float = 1.0) -> dict:
     """The three books' cash must add up to the account's cash within $1, checked only when no order is in
-    flight (a working order's fill has not reached the books yet). ok = None when it was not checked.
-    Written to the JSON as cash_check; agent.health reads it."""
+    flight (a working order's fill has not reached the books yet). ok = None when it was not checked. The books'
+    cash holds the fills and the broker's DIV / FEE activities (agent/cash_events.py); an activity it could not
+    book (unallocated, or the sync failed) shows here as a difference. Written to the JSON as cash_check;
+    agent.health reads it."""
     books_cash = float(con.execute("SELECT coalesce(sum(cash_usd), 0) FROM agent_books").fetchone()[0])
     n_open = int(con.execute(f"""SELECT count(*) FROM agent_orders WHERE dry_run = FALSE
                                  AND (status IS NULL OR status NOT IN ({FINAL_SQL}))""").fetchone()[0])
@@ -482,6 +486,18 @@ def cash_check(con, broker_cash: float | None, tol: float = 1.0) -> dict:
     out["diff"] = round(broker_cash - books_cash, 2)
     out["ok"] = abs(out["diff"]) <= tol
     return out
+
+
+def soft_cash_events(con, broker, calendar: list[dt.date], run_day: dt.date) -> dict:
+    """cash_events.sync (the broker's DIV and FEE activities into the books' cash), run after sync_fills and before the
+    cash check in every mode, as sync_fills is. Any failure (the broker not answering, a ledger error) is recorded in
+    the result and printed, and the run goes on: the cash check then shows what was not booked."""
+    try:
+        return cash_events.sync(con, broker, calendar, run_day)
+    except Exception as exc:                          # noqa: BLE001 — never stops the evening's orders
+        err = f"{type(exc).__name__}: {str(exc)[:200]}"
+        print(f"  cash events not booked: {err}")
+        return {"error": err}
 
 
 def inflight_buys(con, book: str | None = None) -> list[dict]:
@@ -875,7 +891,8 @@ def main() -> int:
             if claim_error and args.submit:
                 skipped_reason = skipped_reason or "orphan check failed: the broker's order list could not be read"
             sync = sync_fills(con, broker, calendar)
-            books = ensure_books(con)                         # after the sync: its fills moved the cash
+            cash_ev = soft_cash_events(con, broker, calendar, day.date())
+            books = ensure_books(con)                         # after the sync: its fills and the cash events moved the cash
             cash_chk = cash_check(con, float(acct["cash"]) if acct.get("cash") is not None else None)
             flying = inflight_buys(con)
             n_model = fill_model_px(con, store)
@@ -937,7 +954,8 @@ def main() -> int:
                "skipped_reason": None if args.sync_only else skipped_reason,
                "mode": "sync" if args.sync_only else "submit" if args.submit else "dry_run", "account_equity": float(acct["equity"]),
                "account_cash": float(acct["cash"]), "sync": sync, "model_px_filled": n_model,
-               "reconcile": msgs, "possible_splits": splits, "cash_check": cash_chk, "targets": targets_dbg, "books": nav,
+               "reconcile": msgs, "possible_splits": splits, "cash_check": cash_chk, "cash_events": cash_ev,
+               "targets": targets_dbg, "books": nav,
                "claimed_orders": [r["client_order_id"] for r in claimed], "claim_error": claim_error,
                "guard_notes": guard_notes, "not_attempted": not_attempted,
                "orders": [{k: (str(v) if isinstance(v, (dt.date, pd.Timestamp)) else v) for k, v in o.items()} for o in sent],
@@ -955,7 +973,8 @@ def main() -> int:
     print(f"[{tag}] bar {day.date()} (last session {last_session}{note}) tif={tif} "
           f"· account ${float(acct['equity']):,.0f} · fills synced {sync['filled']}+{sync['closed']} · "
           f"reconcile {'ok' if not msgs else msgs} · cash check "
-          f"{'not run (orders in flight)' if cash_chk['ok'] is None else 'ok' if cash_chk['ok'] else 'OFF by $' + format(cash_chk['diff'], ',.2f')}")
+          f"{'not run (orders in flight)' if cash_chk['ok'] is None else 'ok' if cash_chk['ok'] else 'OFF by $' + format(cash_chk['diff'], ',.2f')}"
+          f" · {cash_events.summary_line(cash_ev)}")
     for b in nav:
         print(f"  {b['book']:8s} equity ${b['equity_usd']:,.0f}  cash ${b['cash_usd']:,.0f}  positions {b['n_positions']}")
     for o in sent:

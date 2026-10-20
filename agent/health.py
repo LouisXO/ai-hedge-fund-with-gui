@@ -19,6 +19,9 @@ check that was not run (ok None: orders in flight or no broker cash) warns.
 
 2026-10-19: the long book's recorded lists of the last two weeks must come from the 16:10 job (check_list_writers):
 10-16's were written by the next brief on a panel with a tenth of the day's bars, and no check looked at who wrote them.
+2026-10-20: the broker's DIV and FEE activities must reach the books (check_cash_events, agent/cash_events.py): one that
+could not be given to a book is bad; an unknown activity type, a booked one the broker canceled, a dividend unpaid 5 days
+past its pay date and a failed corporate-actions fetch warn.
 
 Usage: python -m agent.health [--no-notify] [--no-llm-probe]
 """
@@ -26,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import glob
 import json
 import os
 import re
@@ -93,6 +97,7 @@ REPAIR_PREFIX = "repair-"   # run_id of a list rewritten after the fact on purpo
 LIST_RUNS_CHECKED = {       # run_id of a list from elsewhere, compared with a recompute: a warning, not bad
     "2026-10-08-75f33e": "10-19 核对过,和重算一致",
 }
+UNPAID_GRACE_DAYS = 5       # an entitled dividend this many days past its pay date with no broker DIV is named (a note only)
 
 DATA = [  # name, db, sql for the latest date, max age in sessions before warn / bad
     ("价格日线 bars", f"{A}/panel.db", "SELECT max(trade_date) FROM bars", 1, 3),
@@ -440,6 +445,96 @@ def check_list_writers(now: dt.datetime, db: str = "/Users/louis/optradar/optrad
     return r
 
 
+def _latest_run_json(out_dir: str) -> tuple[str | None, dict | None]:
+    """(file name, content) of the newest exec_<day>.json or sync_<day>.json by generated_at (the 16:10 run or the
+    13:25 sync, whichever wrote last; both run agent/cash_events.py)."""
+    names = sorted(glob.glob(os.path.join(out_dir, "exec_*.json")))[-5:] + sorted(glob.glob(os.path.join(out_dir, "sync_*.json")))[-5:]
+    runs = []
+    for n in names:
+        j = _load_json(n)
+        if isinstance(j, dict):
+            runs.append((str(j.get("generated_at") or ""), os.path.basename(n), j))
+    if not runs:
+        return None, None
+    _, name, j = max(runs, key=lambda r: (r[0], r[1]))
+    return name, j
+
+
+def _usd(v) -> str:
+    return f"${float(v or 0):,.2f}"
+
+
+def check_cash_events(now: dt.datetime, out_dir: str = f"{OUT}/agent", db: str = "/Users/louis/optradar/optradar.db",
+                      auction: str | None = None) -> dict:
+    """The broker's DIV and FEE activities reached the books (agent/cash_events.py, run by every 16:10 / 13:25 run).
+
+    From the newest run record: an activity that could not be given to a book (no holder lot, no fill that day, a status
+    other than executed / canceled) is bad, since the books' cash then differs from the broker's; an activity type
+    nothing handles, a booked activity the broker has since canceled, or a sync that failed, warns. From the ledger (read-only): an entitled dividend more than UNPAID_GRACE_DAYS past its pay date with no
+    broker DIV of that ticker warns, with names and amounts (a note: the paper broker does not pay every dividend).
+    From auction_basis.json: a corporate-actions fetch that failed warns (the dividends come from the cache)."""
+    r = {"name": "券商分红和费用入账", "label": "cash_events", "level": "ok", "detail": ""}
+    bad, warn, ok = [], [], []
+    name, j = _latest_run_json(out_dir)
+    ce = (j or {}).get("cash_events")
+    if j is None:
+        warn.append("没有找到执行记录(exec/sync json)")
+    elif not isinstance(ce, dict):
+        warn.append(f"{name} 里没有现金事件记录(写它的程序还没有 cash_events)")
+    elif ce.get("error"):
+        warn.append(f"{name} 的现金事件没有同步:{str(ce['error'])[:80]}(现金核对会显示没入账的部分)")
+    else:
+        un = ce.get("unallocated") or []
+        if un:
+            bad.append(f"{len(un)} 笔券商流水分不到书里,现金核对会差这么多:" + "、".join(
+                f"{u.get('ticker') or u.get('type')} {u.get('type')} {u.get('date')} {_usd(u.get('net_usd'))}({u.get('why')})" for u in un[:3])
+                + (" 等" if len(un) > 3 else ""))
+        uh = ce.get("unhandled") or []
+        if uh:
+            warn.append(f"{len(uh)} 笔没有处理的流水类型:" + "、".join(f"{u.get('type')} {u.get('date')} {_usd(u.get('net_usd'))}"
+                                                            for u in uh[:3]) + (" 等" if len(uh) > 3 else ""))
+        if ce.get("unhandled_error"):
+            warn.append(f"未处理流水的检查没做成:{str(ce['unhandled_error'])[:60]}")
+        back = [c for c in ce.get("canceled") or [] if c.get("booked")]
+        if back:
+            warn.append(f"{len(back)} 笔已入账的流水被券商撤销(账本没改,现金核对会显示是否差钱):" + "、".join(
+                f"{c.get('ticker') or c.get('type')} {c.get('type')} {c.get('date')} {_usd(c.get('net_usd'))}" for c in back[:3])
+                + (" 等" if len(back) > 3 else ""))
+        booked = ce.get("booked") or []
+        ok.append(f"{name} 新入账 {len(booked)} 笔" + (f"({_usd(sum(sum((b.get('books') or {}).values()) for b in booked))})" if booked else ""))
+    try:
+        con = duckdb.connect(db, read_only=True)
+        try:
+            have = {x[0] for x in con.execute("SELECT table_name FROM information_schema.tables").fetchall()}
+            dcols = {x[0] for x in con.execute("DESCRIBE agent_dividends").fetchall()} if "agent_dividends" in have else set()
+            ent = con.execute("""SELECT ticker, book, ex_date, record_date, pay_date, usd FROM agent_dividends
+                                 WHERE kind = 'dividend' AND pay_date IS NOT NULL""").fetchall() if {"pay_date", "record_date"} <= dcols else []
+            paid = con.execute("""SELECT ticker, record_date, activity_date FROM agent_cash_events WHERE kind = 'DIV'"""
+                               ).fetchall() if "agent_cash_events" in have else []
+            n_ev = con.execute("SELECT count(DISTINCT activity_id) FROM agent_cash_events").fetchone()[0] if "agent_cash_events" in have else 0
+        finally:
+            con.close()
+        from agent.cash_events import unpaid
+        late = unpaid([{"ticker": t, "book": b, "ex_date": x, "record_date": rd, "pay_date": pay, "usd": u} for t, b, x, rd, pay, u in ent],
+                      [{"ticker": t, "record_date": rd, "activity_date": ad} for t, rd, ad in paid], now.date(), UNPAID_GRACE_DAYS)
+        if late:
+            warn.append(f"过了支付日 {UNPAID_GRACE_DAYS} 天以上券商还没付的分红(只是提示,模拟盘不一定付):" + "、".join(
+                f"{u['ticker']} {_usd(u['usd'])}(支付日 {u['pay_date']:%m-%d})" for u in late[:6]) + (" 等" if len(late) > 6 else ""))
+        ok.append(f"账本里共 {n_ev} 笔券商分红和费用流水")
+    except Exception as exc:
+        lock = "lock" in str(exc).lower()
+        warn.append("optradar.db 正在写入,稍后再查" if lock else f"读不出分红和流水:{str(exc)[:60]}")
+    a = _load_json(auction or os.path.join(OUT, "agent", "auction_basis.json"))
+    err = ((a or {}).get("dividends") or {}).get("error")
+    if err:
+        warn.append(f"分红数据有问题(按缓存的公司行动计算):{str(err)[:80]}")
+    if bad or warn:
+        r.update(level="bad" if bad else "warn", detail=";".join(bad + warn))
+    else:
+        r["detail"] = ",".join(ok) + ",没有分不下去的流水"
+    return r
+
+
 def check_jobs(now: dt.datetime) -> list[dict]:
     try:
         listing = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=15).stdout
@@ -607,7 +702,7 @@ def main() -> int:
     args = ap.parse_args()
     now = dt.datetime.now()
     rep = {"generated_at": now.isoformat(timespec="seconds"),
-           "jobs": check_jobs(now) + [check_exec(now)] + check_fetch_runs(now) + [check_list_writers(now)],
+           "jobs": check_jobs(now) + [check_exec(now)] + check_fetch_runs(now) + [check_list_writers(now), check_cash_events(now)],
            "data": check_data(now.date(), now),
            "system": check_system(not args.no_llm_probe)}
     try:                                                  # agent.drift: paper book vs its rules and the backtest's range

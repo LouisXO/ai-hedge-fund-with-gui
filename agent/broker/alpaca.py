@@ -9,7 +9,8 @@ read-only as before: this module never imports it and the two never share
 credentials.
 
 Plain urllib, no SDK: the surface we use is a few GETs, one POST and one
-DELETE (only `agent.execute --cancel-open --confirm` cancels).
+DELETE (only `agent.execute --cancel-open --confirm` cancels). The account
+activities read here include the dividends and fees agent/cash_events.py books.
 Order semantics we rely on (docs.alpaca.markets/docs/orders-at-alpaca):
   * time_in_force="opg" + type="limit"  = limit-on-open, the backtest's
     "fill at the next open" with a price cap; submitted after 09:28 ET it
@@ -116,11 +117,17 @@ class PaperBroker:
                 return None
             raise
 
-    def fills(self, after: dt.datetime) -> list[dict]:
-        """Account activities of type FILL after `after` (UTC-aware or naive-UTC)."""
+    def activities(self, activity_types: list[str] | None, after: dt.datetime) -> list[dict]:
+        """Account activities after `after` (UTC-aware or naive-UTC), oldest first; every type when activity_types is
+        None. The broker refuses the whole request (422) when one name in activity_types is not a type it knows, and an
+        `after` without a zone ('2026-09-19T00:00:00', what isoformat() gives for a naive time): it is sent as UTC
+        RFC 3339 to the second, as orders_since does."""
+        stamp = (after if after.tzinfo else after.replace(tzinfo=dt.timezone.utc)).astimezone(dt.timezone.utc)
         out, token = [], None
         while True:
-            params = {"activity_types": "FILL", "after": after.isoformat(), "direction": "asc", "page_size": 100}
+            params = {"after": stamp.strftime("%Y-%m-%dT%H:%M:%SZ"), "direction": "asc", "page_size": 100}
+            if activity_types:
+                params["activity_types"] = ",".join(activity_types)
             if token:
                 params["page_token"] = token
             chunk = self._req("GET", "/account/activities", params) or []
@@ -128,6 +135,10 @@ class PaperBroker:
             if len(chunk) < 100:
                 return out
             token = chunk[-1]["id"]
+
+    def fills(self, after: dt.datetime) -> list[dict]:
+        """Account activities of type FILL after `after` (UTC-aware or naive-UTC)."""
+        return self.activities(["FILL"], after)
 
     # -- writes --------------------------------------------------------------------
     def submit(self, symbol: str, side: str, qty: int, order_type: str, tif: str,

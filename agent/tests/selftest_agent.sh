@@ -28,7 +28,7 @@ if [ -s "$J" ]; then
   AS_OF=$($PY - "$J" <<'PY' || fail=1
 import json, sys
 d = json.load(open(sys.argv[1])); bad = []
-for k in ("as_of", "last_session", "stale_bars", "tif", "mode", "account_equity", "sync", "reconcile", "targets", "books", "orders"):
+for k in ("as_of", "last_session", "stale_bars", "tif", "mode", "account_equity", "sync", "cash_events", "reconcile", "targets", "books", "orders"):
     if k not in d: bad.append(f"json missing {k}")
 if d.get("mode") != "dry_run": bad.append(f"mode is {d.get('mode')!r}, expected dry_run")
 if any(not o.get("dry_run") for o in d.get("orders", [])): bad.append("an order is not marked dry_run")

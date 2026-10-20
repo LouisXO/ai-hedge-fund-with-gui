@@ -4,7 +4,8 @@
 # plans or sends an order — that stays in execute.sh at 16:10 PT (Alpaca's OPG window opens 19:00 ET
 # and the evening's Form 4 filings need to be in first).
 #   1. agent.execute --sync-only   bars through today (Alpaca, 16-min delay), SPY/IWM/VIX, fills synced,
-#                                   model prices, lots vs positions reconciled, books marked
+#                                   the broker's DIV / FEE booked (agent/cash_events.py), model prices,
+#                                   lots vs positions reconciled, books marked
 #   2. account_snapshot            moomoo real account (read-only): NAV, positions, today's deals
 #   2b. moomoo_shares              share counts from moomoo quote snapshots for flagged names + long top 60 (S47b)
 #   3. agent.watch                 watchlist alerts (runs again at 16:10 for evening filings; deduped)
