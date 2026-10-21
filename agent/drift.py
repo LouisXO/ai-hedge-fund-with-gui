@@ -40,8 +40,9 @@ auction row yet) is missing, never filled with the price NAV (until 2026-10-21 i
 long-alarm checks that need it warn and are not computed.
 
 Output: out/agent/drift.json, shown by agent.health, and one line per run appended to long_alarm_log.jsonl
-next to it (ALARM_LOG; never rewritten, so a past alarm reading and its inputs stay reproducible after drift.json
-and agent_auction_nav are rewritten; out/agent is in the daily backup).
+next to it (ALARM_LOG; never rewritten, so a past alarm reading and its inputs stay reproducible after drift.json,
+agent_auction_nav and index_daily are rewritten: the line carries the window's daily NAV and regressors and each fit's
+return per NAV step, a few tens of kB; out/agent is in the daily backup).
 Usage: python -m agent.drift [--db PATH] [--out PATH] [--alarm-log PATH]   (the log defaults to --out's directory)
   python -m agent.drift --build-alarm-thresholds [--panel PATH]   once, at the S54 registration: writes the frozen table
 """
@@ -198,6 +199,11 @@ def factor_returns(store, open_to_close: bool = False) -> pd.DataFrame:
     return pd.DataFrame({"SPY": r["SPY"], **{f"{s}-SPY": r[s] - r["SPY"] for s in syms[1:]}})
 
 
+def _floats(v) -> list:
+    """A series or array as a JSON list: floats at full precision (so the log reproduces a reading exactly), None for NaN."""
+    return [None if pd.isna(x) else float(x) for x in np.asarray(v, dtype=float)]
+
+
 def fit_return(f: pd.DataFrame, betas: dict) -> pd.Series:
     """The frozen benchmark's daily return, no intercept; NaN on a day one of its regressors is missing."""
     return sum(f[k] * float(b) for k, b in betas.items())
@@ -246,7 +252,7 @@ def s54_registered(path: str = CONFIG) -> dt.date:
 
 
 def long_alarm(tr: pd.Series, first_fill: dt.date, factors: pd.DataFrame, table: dict, cfg: dict, *,
-               oc: pd.DataFrame) -> list[dict]:
+               oc: pd.DataFrame, trace: dict | None = None) -> list[dict]:
     """One check per frozen fit: book - fit, compounded over the last min(window, sessions since the first fill) sessions.
 
     tr: the long book's auction-basis NAV with dividends by day (agent_auction_nav.equity_auction_tr), from the close
@@ -257,7 +263,14 @@ def long_alarm(tr: pd.Series, first_fill: dt.date, factors: pd.DataFrame, table:
     length: bad. A regressor missing on a day of the window, or the NAV unknown on a day of it (its base, the close
     before its first session, included; 2026-10-21: before, such a day was dropped or took the price NAV): warn, nothing
     compared. A computed check also carries its window_start, base_day / base_nav, end_day / end_nav and first_session
-    (open_to_close or close_to_close), for the append-only log."""
+    (open_to_close or close_to_close), for the append-only log.
+
+    trace: a dict to fill with the window's series, for the log only (drift.json does not carry them): "nav" {days,
+    equity_auction_tr (None where unknown)} from the base day to the last, "regressors" {sessions, one list per column}
+    as the fits read them (the first-fill session open to close), and "fit_step" {fit: its return over each NAV step,
+    for the fits computed}, so that prod(1 + nav_t / nav_t-1 - 1 - fit_step_t) - 1 is the reading. 2026-10-21 review:
+    the base and end NAV alone do not reproduce it (every daily value in between counts), and agent_auction_nav and
+    index_daily are rewritten by later runs."""
     tr = tr.sort_index()
     before = tr.index[tr.index < pd.Timestamp(first_fill)]
     if not len(before):
@@ -272,6 +285,13 @@ def long_alarm(tr: pd.Series, first_fill: dt.date, factors: pd.DataFrame, table:
     L = min(int(cfg["window"]), len(sess))
     start = sess[-L]
     nav = tr.loc[tr.index[tr.index < start][-1]:]           # from the close before the window's first session
+    if trace is not None:                                    # for the log, also when a check below cannot be computed
+        reg = factors.loc[sess].loc[start:].copy()
+        if start == sess[0]:                                 # as the fits read it: the first-fill session open to close
+            reg.iloc[0] = oc.reindex([start]).iloc[0].reindex(reg.columns).to_numpy()
+        trace.update(nav={"days": [str(d.date()) for d in nav.index], "equity_auction_tr": _floats(nav)},
+                     regressors={"sessions": [str(d.date()) for d in reg.index], **{c: _floats(reg[c]) for c in reg.columns}},
+                     fit_step={})
     if nav.isna().any():                                     # unknown dividends are not the price NAV and not $0
         gap = [str(d.date()) for d in nav.index[nav.isna()]]
         return [chk(f"长线冻结基准报警 · {FIT_ZH.get(n, n)}", "warn",
@@ -292,6 +312,8 @@ def long_alarm(tr: pd.Series, first_fill: dt.date, factors: pd.DataFrame, table:
             continue
         fv = np.r_[1.0, (1 + win).cumprod().reindex(nav.index[1:], method="pad").to_numpy()]
         diff = book - (fv[1:] / fv[:-1] - 1)
+        if trace is not None:
+            trace["fit_step"][name] = _floats(fv[1:] / fv[:-1] - 1)
         cum = float(np.prod(1 + diff) - 1) * 100
         thr = float(table["thresholds_pct"][name][L - 1])
         bk, ft = float(nav.iloc[-1] / nav.iloc[0] - 1) * 100, float(fv[-1] - 1) * 100
@@ -325,22 +347,34 @@ def code_commit() -> str | None:
 
 
 def alarm_record(run_at: str, first_fill, auct: pd.DataFrame, alarm: list[dict], dividends: dict | None,
-                 index: dict | None, commit: str | None) -> dict:
+                 index: dict | None, commit: str | None, trace: dict | None = None, auction_at: str | None = None) -> dict:
     """One line of the append-only alarm log: the reading per fit and what reproduces it (the window's base and end NAV,
-    div_cum at the end, the first session's mode, the dividends' status, the regressors' last index_daily rows, the code).
+    div_cum at the end, the first session's mode, the dividends' status and when auction_basis.json was written, the
+    regressors' last index_daily rows, the code), and the window's daily series from long_alarm's trace: per check its
+    fit_step, under inputs the NAV path (window_nav: days, equity_auction_tr, div_cum) and the regressors as read
+    (window_regressors). From those alone, cum_diff_pct = (prod(1 + nav_t / nav_t-1 - 1 - fit_step_t) - 1) * 100
+    (2026-10-21 review: base and end NAV alone did not reproduce it).
     auct: the long book's rows as main() reads them (one per NAV day, equity_auction_tr NaN where unknown)."""
     comp = next((c for c in alarm if c.get("base_day")), {})              # base and end are the same for both fits
     last = auct.iloc[-1] if len(auct) else None
     num = (lambda v: None if v is None or pd.isna(v) else float(v))
+    trace = trace or {}
+    steps = trace.get("fit_step") or {}
+    window = None
+    if trace.get("nav"):
+        dc = ({str(pd.Timestamp(d).date()): num(v) for d, v in zip(auct["as_of"], auct["div_cum"])}
+              if "div_cum" in auct else {})
+        window = {**trace["nav"], "div_cum": [dc.get(d) for d in trace["nav"]["days"]]}
     return {"run_at": run_at, "as_of": str(pd.Timestamp(last["as_of"]).date()) if last is not None else None,
             "first_fill": str(first_fill) if first_fill else None,
-            "checks": [{k: c.get(k) for k in ("fit", "level", "window", "window_start", "cum_diff_pct", "threshold_pct", "book_pct",
-                                               "fit_pct", "flagged", "detail")} for c in alarm],
+            "checks": [{**{k: c.get(k) for k in ("fit", "level", "window", "window_start", "cum_diff_pct", "threshold_pct", "book_pct",
+                                                  "fit_pct", "flagged", "detail")}, "fit_step": steps.get(c.get("fit"))} for c in alarm],
             "inputs": {"base_day": comp.get("base_day"), "base_nav": comp.get("base_nav"),
                        "end_day": comp.get("end_day"), "end_nav": comp.get("end_nav"),
                        "end_div_cum": num(last.get("div_cum")) if last is not None else None,
                        "first_session": comp.get("first_session"),
-                       "dividends": dividends, "index_daily": index},
+                       "dividends": dividends, "auction_basis_generated_at": auction_at, "index_daily": index,
+                       "window_nav": window, "window_regressors": trace.get("regressors")},
             "commit": commit}
 
 
@@ -503,7 +537,7 @@ def main(argv: list[str] | None = None) -> int:
                            f"{mine:+.2f}%,回测第 {pct:.0f} 百分位(回测 5 日收益中位数 {r5.median():+.2f}%,2.5%–97.5% 区间 {r5.quantile(.025):+.1f}% 到 {r5.quantile(.975):+.1f}%)",
                            ret5_pct=mine, percentile=pct))
     # 7) S54: the long book against the two frozen S53a benchmarks
-    alarm = []
+    alarm, trace = [], {}                                            # trace: the window's series, for the log only
     try:
         acfg = s54_config()
         if factors is None:
@@ -511,7 +545,7 @@ def main(argv: list[str] | None = None) -> int:
         table = json.load(open(os.path.join(ROOT, acfg["thresholds"])))
         if first_fill is not None and len(auct):
             alarm = long_alarm(auct.set_index(pd.to_datetime(auct["as_of"]))["equity_auction_tr"], pd.Timestamp(first_fill).date(),
-                               factors, table, acfg, oc=factors_oc)
+                               factors, table, acfg, oc=factors_oc, trace=trace)
     except Exception as exc:                                         # never let this check stop the others
         alarm = [chk("长线冻结基准报警", "warn", f"没算出来:{str(exc)[:120]}")]
     out += alarm
@@ -527,7 +561,8 @@ def main(argv: list[str] | None = None) -> int:
         dv = auction_json.get("dividends") if isinstance(auction_json, dict) else None
         entry = alarm_record(rep["generated_at"], first_fill, auct, alarm,
                              {k: dv.get(k) for k in ("status", "error", "computed_at", "tr_unknown_days")} if isinstance(dv, dict) else None,
-                             index_rows, code_commit())
+                             index_rows, code_commit(), trace,
+                             auction_json.get("generated_at") if isinstance(auction_json, dict) else None)   # a stale json shows
     except Exception as exc:                                         # noqa: BLE001 — a line saying so, never a stop
         entry = {"run_at": rep["generated_at"], "error": f"record not built: {str(exc)[:160]}"}
     append_alarm_log(args.alarm_log or os.path.join(os.path.dirname(os.path.abspath(args.out)), os.path.basename(ALARM_LOG)), entry)

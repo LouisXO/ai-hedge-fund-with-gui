@@ -241,7 +241,9 @@ def _headline(r: dict) -> tuple[float, str]:
         return r["auction_tr"], f"竞价口径含分红(评估口径);模拟器口径含分红 {_p(r.get('sim_tr'))}"
     if r.get("sim_tr") is not None:
         return r["sim_tr"], "模拟器口径含分红(竞价口径暂缺)"
-    return r.get("sim"), "模拟器口径,不含分红(分红不知道,两个含分红口径都暂缺,不按 0 计)"     # agent/evaluate.py, 2026-10-21
+    # agent/evaluate.py, 2026-10-21: both with-dividends bases unknown. "sim" is equity_usd, which holds the DIV cash the
+    # broker paid (BASIS_LABEL["sim"]); only the dividends entitled by ex-date and not yet paid are missing from it
+    return r.get("sim"), "模拟器口径(含券商实付的分红;按除息日应得、还没到账的分红暂不知道,不按 0 计)"
 
 
 def book_cards(base: dict, closed: dict) -> str:

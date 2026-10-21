@@ -49,6 +49,12 @@ def test_the_research_etfs_stay_out_of_the_production_index_refresh():
         assert "backfill_factor_etfs" not in src and "FACTOR_ETFS" not in src, f
 
 
+def _et_today():
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    return dt.datetime.now(ZoneInfo("America/New_York")).date()
+
+
 @pytest.mark.parametrize("closed, days", [(False, 0), (True, 1)])
 def test_default_end_leaves_out_an_open_session(store, monkeypatch, closed, days):
     # yf's end is exclusive: during the session the default must stop at yesterday (no in-progress bar).
@@ -58,13 +64,13 @@ def test_default_end_leaves_out_an_open_session(store, monkeypatch, closed, days
     monkeypatch.setattr(bf, "session_closed", lambda now=None: closed)
     dl, calls = _fake_download(list(FACTOR_ETFS))
     backfill_factor_etfs(store, download=dl)
-    assert calls[0][2] == (dt.date.today() + dt.timedelta(days=days)).isoformat()
+    assert calls[0][2] == (_et_today() + dt.timedelta(days=days)).isoformat()            # New York's date (download_end)
 
 
 def test_nothing_downloaded_writes_nothing(store):
     for dl in (_fake_download([])[0], lambda symbols, start, end: pd.DataFrame()):   # yfinance can return an empty frame
         assert backfill_factor_etfs(store, download=dl, end="2024-01-10") == {"rows": 0, "symbols": {}, "missing": list(FACTOR_ETFS),
-                                                                                 "refused": {}}
+                                                                                 "refused": {}, "rescaled": {}}
     assert store.con.execute("SELECT count(*) FROM index_daily").fetchone()[0] == 0
 
 
@@ -138,21 +144,58 @@ def test_a_partial_response_on_a_new_adjustment_basis_is_not_written(store, days
 def test_a_day_dropped_inside_the_response_counts_as_left_out(store):
     _seed(store)
     before = _stored(store)
-    rows = [(d, None if d == DAYS[2] else 100.0 + i, (100.0 + i) * 0.98) for i, d in enumerate(DAYS)]   # NaN close: _frame drops it
-    out = backfill_factor_etfs(store, download=lambda s, a, b: _raw({"MTUM": rows}), end="2026-10-20")
-    assert "1 stored day(s) (2026-10-14)" in out["refused"]["MTUM"] and _stored(store) == before
-    same = [(d, c, None if c is None else c * 0.99) for d, c, _ in rows]                 # the same gap on the stored basis
+    rows = [(d, 100.0 + i, (100.0 + i) * 0.98) for i, d in enumerate(DAYS)]
+    lead = [(d, None if d in DAYS[:1] else c, a) for d, c, a in rows]                   # NaN close: _frame drops it
+    out = backfill_factor_etfs(store, download=lambda s, a, b: _raw({"MTUM": lead}), end="2026-10-20")
+    assert "1 stored day(s) (2026-10-12)" in out["refused"]["MTUM"] and _stored(store) == before
+    assert "docs/RUNBOOK.md" in out["refused"]["MTUM"]                                 # says where the way out is written
+    same = [(d, c, None if c is None else c * 0.99) for d, c, _ in lead]                 # the same gap on the stored basis
     out = backfill_factor_etfs(store, download=lambda s, a, b: _raw({"MTUM": same}), end="2026-10-20")
-    assert out["refused"] == {} and len(_stored(store)) == 6                          # same basis: written, 10-14 kept
+    assert out["refused"] == {} and out["rescaled"] == {} and len(_stored(store)) == 6   # same basis: written, 10-12 kept
 
 
-def test_the_factors_command_fails_the_step_when_an_etf_was_refused(monkeypatch):
+def test_a_stored_day_left_out_between_two_returned_days_is_rescaled_to_the_new_basis(store):
+    # 2026-10-21 review: a day Yahoo stops returning must not refuse the symbol at every download after its next
+    # distribution. Between two returned days on the same basis change, the left-out day takes that change.
+    _seed(store)
+    old = dict(store.con.execute("SELECT trade_date, adj_close FROM index_daily WHERE symbol = 'MTUM'").fetchall())
+    rows = [(d, None if d == DAYS[2] else 100.0 + i, (100.0 + i) * 0.98) for i, d in enumerate(DAYS)]
+    out = backfill_factor_etfs(store, download=lambda s, a, b: _raw({"MTUM": rows}), end="2026-10-20")
+    assert out["refused"] == {} and "1 stored day(s) the response left out (2026-10-14)" in out["rescaled"]["MTUM"]
+    got = dict(store.con.execute("SELECT trade_date, adj_close FROM index_daily WHERE symbol = 'MTUM'").fetchall())
+    assert [round(r, 9) for _, r in _stored(store)] == [0.98] * 6                       # one basis, the new day included
+    d = [pd.Timestamp(x).date() for x in DAYS]
+    assert got[d[2]] / got[d[1]] == pytest.approx(old[d[2]] / old[d[1]], rel=1e-12)     # no junction: the stored returns
+    assert got[d[3]] / got[d[2]] == pytest.approx(old[d[3]] / old[d[2]], rel=1e-12)
+    assert store.con.execute("SELECT close, fetched_at FROM index_daily WHERE symbol = 'MTUM' AND trade_date = ?",
+                             [d[2]]).fetchone() == (102.0, pd.Timestamp("2026-10-16"))  # its close and fetch time as stored
+    again = backfill_factor_etfs(store, download=lambda s, a, b: _raw({"MTUM": [(x, c, None if c is None else c * 0.97)
+                                                                                for x, c, _ in rows]}), end="2026-10-20")
+    assert again["refused"] == {} and "MTUM" in again["rescaled"]                      # the next distribution: no lock-in
+
+
+def test_a_left_out_day_next_to_a_new_ex_date_is_still_refused(store):
+    _seed(store)
+    before = _stored(store)
+    # the new distribution's ex-date is 10-15: days before it move by 0.98 / 0.99, from it on they do not
+    rows = [(d, None if d == DAYS[2] else 100.0 + i, (100.0 + i) * (0.98 if i < 3 else 0.99)) for i, d in enumerate(DAYS)]
+    out = backfill_factor_etfs(store, download=lambda s, a, b: _raw({"MTUM": rows}), end="2026-10-20")
+    assert "MTUM" in out["refused"] and out["rescaled"] == {} and _stored(store) == before
+    rows = [(d, None if d in (DAYS[0], DAYS[2]) else 100.0 + i, (100.0 + i) * 0.98) for i, d in enumerate(DAYS)]
+    out = backfill_factor_etfs(store, download=lambda s, a, b: _raw({"MTUM": rows}), end="2026-10-20")
+    assert "2 stored day(s) (2026-10-12, 2026-10-14)" in out["refused"]["MTUM"] and _stored(store) == before   # one can't be
+
+
+def test_the_factors_command_fails_the_step_when_an_etf_was_refused(monkeypatch, capsys):
     import sys
 
     import agent.backfill as bf
+    from agent import health
     monkeypatch.setattr(bf, "backfill_factor_etfs", lambda: {"rows": 5, "symbols": {}, "missing": [], "refused": {"MTUM": "x"}})
     monkeypatch.setattr(sys, "argv", ["agent.backfill", "factors"])
-    assert bf.main() == 1
+    assert bf.main() == 2                                                       # written but one refused: postclose.sh says "partly"
+    line = next(l for l in capsys.readouterr().out.splitlines() if "MTUM" in l and "not written" in l)
+    assert health.section_failures([line])[0] == "warn"                         # the job check sees it
 
 
 @pytest.mark.parametrize("closed, days", [(False, 0), (True, 1)])
@@ -163,7 +206,7 @@ def test_the_index_refresh_leaves_out_an_open_session_too(store, monkeypatch, cl
     monkeypatch.setattr(bf, "session_closed", lambda now=None: closed)
     calls = []
     bf.backfill_index(store, download=lambda s, a, b: calls.append((tuple(s), a, b)) or pd.DataFrame())
-    assert calls == [(INDEX_SYMBOLS, "2012-01-01", (dt.date.today() + dt.timedelta(days=days)).isoformat())]
+    assert calls == [(INDEX_SYMBOLS, "2012-01-01", (_et_today() + dt.timedelta(days=days)).isoformat())]
 
 
 def test_every_scheduled_index_refresh_runs_after_the_cut():
@@ -179,11 +222,32 @@ def test_every_scheduled_index_refresh_runs_after_the_cut():
     assert not bf.session_closed(dt.datetime(2026, 10, 21, 16, 10, tzinfo=et))
 
 
+def test_download_end_takes_new_yorks_date_with_its_clock():
+    # 2026-10-21 review: from 21:00 PT the PT date + 0 left out the session that had just closed
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    import agent.backfill as bf
+    pt, et = ZoneInfo("America/Los_Angeles"), ZoneInfo("America/New_York")
+    at = lambda *a: bf.download_end(dt.datetime(*a, tzinfo=pt))                       # noqa: E731
+    assert at(2026, 10, 21, 8, 41) == "2026-10-21"              # the brief, session open: through 10-20
+    assert at(2026, 10, 21, 13, 25) == at(2026, 10, 21, 16, 10) == "2026-10-22"       # postclose, execute: 10-21 included
+    assert at(2026, 10, 21, 21, 30) == "2026-10-22"             # a late re-run (00:30 ET on the 22nd): 10-21 still included
+    assert at(2026, 10, 22, 0, 30) == "2026-10-22"              # after midnight PT: through 10-21, the 22nd not open yet
+    assert at(2026, 10, 23, 21, 30) == "2026-10-25"             # Friday evening (Saturday in New York): Friday included
+    assert at(2026, 12, 21, 21, 30) == "2026-12-22"             # PST: the same
+    assert bf.download_end(dt.datetime(2026, 10, 22, 0, 30)) == "2026-10-22"          # a naive time is New York's
+    assert bf.download_end(dt.datetime(2026, 10, 22, 0, 30, tzinfo=et)) == at(2026, 10, 21, 21, 30)
+
+
 def test_the_index_refresh_prints_a_refusal_and_writes_the_rest_without_raising(store, capsys):
     import agent.backfill as bf
     _seed(store, "SPY")
     rows = [(d, 100.0 + DAYS.index(d), (100.0 + DAYS.index(d)) * 0.98) for d in DAYS[2:]]
     n = bf.backfill_index(store, download=lambda s, a, b: _raw({"SPY": rows, "IWM": rows}))
-    assert n == len(rows) and "index SPY: not written" in capsys.readouterr().out
+    line = next(l for l in capsys.readouterr().out.splitlines() if "index SPY" in l)
+    assert n == len(rows) and "index SPY: update failed, not written" in line
+    from agent import health
+    assert health.section_failures([line])[0] == "warn"                                # execute / postclose job checks warn
     assert [round(r, 6) for _, r in _stored(store, "SPY")] == [0.99] * 5 and len(_stored(store, "IWM")) == len(rows)
     assert bf.backfill_index(store, download=lambda s, a, b: pd.DataFrame()) == 0     # nothing returned: no concat error

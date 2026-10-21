@@ -122,6 +122,25 @@ PYTHONPATH=. $PY -W ignore -m agent.audit                 # 七层数据审计
 
 **什么时候停**:数据不对就跳过当晚,不在同一晚用修过的数据手工补单。保护开关拒绝下单的日子不需要任何操作。
 
+### 指数 / 因子 ETF 没写入(basis_guard,2026-10-21 起)
+
+**怎么发现**:`execute.log` 里 `index <代码>: update failed, not written: the response leaves out N stored day(s) (...)`(13:25、16:10 两个任务和 08:41 早报都会打)或 `factor ETF <代码>: update failed, not written`(13:25 的 `agent.backfill factors`,后面一行 `factor ETF update partly failed`);健康页的任务一行变黄,`指数 SPY/IWM/QQQ` 或 `因子 ETF` 的新鲜度过两三个交易日变红;长线冻结基准报警写"因子数据缺 …这一条没算"。
+
+**原因**:Yahoo 每次分红都把整段 Adj Close 重新复权。返回的数据缺了已经存下的某些日子,而复权基准又变了,写进去就会在新旧基准的接缝上造出一个假收益,所以这个代码整只不写,旧行保留。缺的日子夹在返回的两天之间、两边基准变化一样时会自动按新基准重算后写入(打一行 `rescaled to its basis`),不需要处理。
+
+**先看**:同一批日子是不是连着两次以上被漏掉。只有一次的,多半是 Yahoo 那次返回不全,等下一次任务(或手工重跑下面的命令)。
+
+**命令**(连着两次漏掉同一批日子时:说明 Yahoo 不再给这些日子,删掉这些已存的行再重跑;删之前看一眼这些行,日志里列了日期)
+
+```bash
+cd ~/hedge-fund
+PYTHONPATH=. $PY -W ignore -m agent.backfill index        # SPY / ^VIX / IWM / QQQ(或 factors:因子 ETF)
+# 还是被拒:按日志里的代码和日期删掉漏掉的行(只删这些),再跑一次上面的命令
+$PY -c "import duckdb; c = duckdb.connect('/Users/louis/.hedge-fund/agent/panel.db'); c.execute(\"DELETE FROM index_daily WHERE symbol = 'SPY' AND trade_date IN ('2020-03-16')\"); c.close()"
+```
+
+删行要在没有任务写 panel.db 的时候做(避开 13:25 和 16:10 前后)。删的是 Yahoo 已经不给的日子,之后的下载不再缺它们,整段按新基准写入。
+
 ## 5. 立即全部平仓 / 撤掉全部挂单
 
 **顺序**:先停发单(见上),再撤挂单,最后平仓。不先停发单,16:10 任务会把空出来的槽位重新买上。

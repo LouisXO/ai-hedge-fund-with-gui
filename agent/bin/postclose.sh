@@ -37,7 +37,9 @@ if [ -f agent/dividends.py ]; then   # S48 package C; the guard lets this script
   $PY -W ignore -m agent.dividends >> "$LOG" 2>&1 || echo "dividends failed (non-fatal)" >> "$LOG"
 fi
 $PY -W ignore -m agent.shadow_v2 >> "$LOG" 2>&1 || echo "shadow v2 failed (non-fatal)" >> "$LOG"            # S44: six shadow lines replayed on the recorded lists
-$PY -W ignore -m agent.backfill factors >> "$LOG" 2>&1 || echo "factor ETF update failed (non-fatal)" >> "$LOG"    # S54: MTUM/VLUE/QUAL/USMV/... for the long alarm (yfinance, off the order path)
+# S54: MTUM/VLUE/QUAL/USMV/... for the long alarm (yfinance, off the order path). Exit 2: written except the ETFs
+# basis_guard refused (each named above this line in the log); any other failure: nothing written, or the step crashed
+$PY -W ignore -m agent.backfill factors >> "$LOG" 2>&1 || { [ $? -eq 2 ] && echo "factor ETF update partly failed: the refused ETFs kept their stored rows, the others were written (non-fatal)" >> "$LOG" || echo "factor ETF update failed (non-fatal)" >> "$LOG"; }
 $PY -W ignore -m agent.drift >> "$LOG" 2>&1 || echo "drift monitor failed (non-fatal)" >> "$LOG"                # paper vs rule replay vs backtest range; S54 long alarm
 if [ -f agent/evaluate.py ]; then    # S48 package C (frozen evaluation metrics); guarded like dividends
   $PY -W ignore -m agent.evaluate >> "$LOG" 2>&1 || echo "evaluate failed (non-fatal)" >> "$LOG"

@@ -315,3 +315,20 @@ def test_insider_shadow_report(tmp_path):
     r = health.check_insider_shadow(thu_eve, _shadow(tmp_path, sprt={"n": 830, "mean_pct": -0.11, "lower_pct": -0.11,
                                                                       "upper_pct": 0.57, "decision": "H0", "decided": dec}))
     assert r["level"] == "ok" and '判"无"(第 830 个事件,2027-09-14)' in r["detail"]
+
+
+def test_the_index_freshness_check_reads_the_oldest_of_spy_iwm_and_qqq(tmp_path):
+    # 2026-10-21 review: only SPY was read, so a QQQ (the pages' benchmark) or an IWM (the long alarm) basis_guard kept
+    # back showed nowhere; ^VIX is not read, as before
+    import pandas as pd
+    name, _, sql, warn, bad = next(x for x in health.DATA if x[0].startswith("指数"))
+    assert name == "指数 SPY/IWM/QQQ" and (warn, bad) == (1, 3)
+    last = {"SPY": dt.date(2026, 10, 21), "IWM": dt.date(2026, 10, 21), "QQQ": dt.date(2026, 10, 20), "^VIX": dt.date(2026, 10, 19)}
+    with PanelStore(tmp_path / "p.db") as s:
+        s.upsert_index(pd.DataFrame([{"symbol": k, "trade_date": d, "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "adj_close": 1.0,
+                                      "source": "t", "fetched_at": pd.Timestamp("2026-10-21")} for k, v in last.items()
+                                     for d in (v - dt.timedelta(days=1), v)]))
+        assert s.con.execute(sql).fetchone()[0] == dt.date(2026, 10, 20)
+        s.con.execute("DELETE FROM index_daily WHERE symbol = 'QQQ' AND trade_date = '2026-10-20'")
+        s.con.execute("INSERT INTO index_daily VALUES ('QQQ', '2026-10-21', 1, 1, 1, 1, 1, 't', now())")
+        assert s.con.execute(sql).fetchone()[0] == dt.date(2026, 10, 21)        # all three current: SPY's day, as before

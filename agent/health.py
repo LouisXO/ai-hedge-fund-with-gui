@@ -111,7 +111,10 @@ SPRT_ZH = {"none": "未越线", "H1": '判"有"', "H0": '判"无"'}
 
 DATA = [  # name, db, sql for the latest date, max age in sessions before warn / bad
     ("价格日线 bars", f"{A}/panel.db", "SELECT max(trade_date) FROM bars", 1, 3),
-    ("指数 SPY/VIX", f"{A}/panel.db", "SELECT max(trade_date) FROM index_daily WHERE symbol = 'SPY'", 1, 3),
+    # the oldest of SPY / IWM / QQQ's last days (2026-10-21 review: only SPY was read, so a QQQ that stopped updating, the
+    # pages' same-period benchmark, or an IWM the long alarm needs, showed nowhere; ^VIX is not read, as before)
+    ("指数 SPY/IWM/QQQ", f"{A}/panel.db", "SELECT min(d) FROM (SELECT max(trade_date) AS d FROM index_daily "
+     "WHERE symbol IN ('SPY', 'IWM', 'QQQ') GROUP BY symbol)", 1, 3),
     ("内部人 Form 4", f"{A}/panel.db", "SELECT max(filing_date) FROM insider_tx", 2, 4),
     ("基本面 XBRL", f"{A}/panel.db", "SELECT max(filed) FROM fundamentals_pit", 8, 15),
     # the OLDEST tenth of the companies, not the newest fetch: one re-fetched company must not make the table look fresh

@@ -224,10 +224,61 @@ def test_drift_main_appends_the_reading_and_its_inputs_next_to_its_output(tmp_pa
     assert (i["base_day"], i["end_day"], i["first_session"]) == (str(days[4].date()), str(days[-1].date()), "open_to_close")
     assert i["end_nav"] == pytest.approx(60000 * (1 + 0.001 * (len(days) - 1)) + 1.5) and i["end_div_cum"] == 1.5
     assert set(i["index_daily"]) == set(SYMS) and i["index_daily"]["SPY"]["last"] == str(days[-1].date())
-    assert i["dividends"] is None and "commit" in e
+    assert i["dividends"] is None and i["auction_basis_generated_at"] is None and "commit" in e
+    w = i["window_nav"]                                                               # the whole NAV path, base day to the last
+    assert w["days"] == [str(d.date()) for d in days[4:]] and w["div_cum"] == [1.5] * (len(days) - 4)
+    assert w["equity_auction_tr"] == [60000 * (1 + 0.001 * k) + 1.5 for k in range(4, len(days))]
+    reg = i["window_regressors"]
+    assert reg["sessions"] == [str(d.date()) for d in days[5:]] and set(reg) == {"sessions", "SPY", *(f"{x}-SPY" for x in SYMS[1:])}
     assert drift.main(args) == 0                                                      # a second run: a second line, the first kept
     lines = log.read_text().splitlines()
     assert len(lines) == 2 and json.loads(lines[0]) == e
+
+
+def _from_log(e: dict) -> dict:
+    """cum_diff_pct per fit recomputed from one log line alone: the window's NAV path and each fit's step returns."""
+    nav = np.array(e["inputs"]["window_nav"]["equity_auction_tr"])
+    return {c["fit"]: float(np.prod(1 + (nav[1:] / nav[:-1] - 1) - np.array(c["fit_step"])) - 1) * 100 for c in e["checks"]}
+
+
+def test_each_log_line_reproduces_its_own_reading_after_the_nav_is_rewritten(tmp_path, monkeypatch):
+    # 2026-10-21 review: base and end NAV alone did not tell two NAV paths apart (a later restatement inside the window
+    # moved the reading while the logged inputs stayed byte-identical)
+    import json
+
+    import duckdb
+    db, days = _drift_world(tmp_path, monkeypatch)
+    (tmp_path / "ab.json").write_text(json.dumps({"generated_at": "2026-10-21T13:31:02", "dividends": {"status": "ok"}}))
+    args = ["--db", db, "--out", str(tmp_path / "drift.json"), "--auction", str(tmp_path / "ab.json")]
+    assert drift.main(args) == 0
+    con = duckdb.connect(db)
+    con.execute("UPDATE agent_auction_nav SET equity_auction_tr = equity_auction_tr + 600, div_cum = div_cum + 600 "
+                "WHERE as_of BETWEEN ? AND ?", [days[10].date(), days[15].date()])                # a restatement mid-window
+    con.close()
+    assert drift.main(args) == 0
+    a, b = [json.loads(x) for x in (tmp_path / "long_alarm_log.jsonl").read_text().splitlines()]
+    for e in (a, b):
+        assert _from_log(e) == pytest.approx({c["fit"]: c["cum_diff_pct"] for c in e["checks"]}, abs=1e-12)
+        assert e["inputs"]["auction_basis_generated_at"] == "2026-10-21T13:31:02"     # a stale auction_basis.json shows
+    assert a["checks"][0]["cum_diff_pct"] != b["checks"][0]["cum_diff_pct"]
+    assert {k: a["inputs"][k] for k in ("base_nav", "end_nav", "end_div_cum")} == {k: b["inputs"][k] for k in ("base_nav", "end_nav", "end_div_cum")}
+    assert a["inputs"]["window_nav"] != b["inputs"]["window_nav"]                     # the paths differ, and the line says so
+    assert b["inputs"]["window_nav"]["div_cum"][7] == 601.5 and a["checks"][0]["fit_step"] == b["checks"][0]["fit_step"]
+
+
+def test_the_trace_names_the_unknown_days_and_the_first_session_as_the_fits_read_it():
+    days = pd.bdate_range("2026-09-01", periods=20)
+    f, oc = _factors(days, 4), _factors(days, 14)
+    nav = pd.Series(np.linspace(60000, 61000, 20), index=days)
+    t = {}
+    c = drift.long_alarm(nav, days[5].date(), f, _table(), CFG, oc=oc, trace=t)
+    assert t["regressors"]["sessions"][0] == str(days[5].date()) and t["regressors"]["SPY"][0] == oc.loc[days[5], "SPY"]
+    assert t["regressors"]["SPY"][1] == f.loc[days[6], "SPY"] and set(t["fit_step"]) == set(CFG["fits"])
+    nav.iloc[-3] = np.nan
+    t = {}
+    c = drift.long_alarm(nav, days[5].date(), f, _table(), CFG, oc=oc, trace=t)
+    assert {x["level"] for x in c} == {"warn"} and t["fit_step"] == {}
+    assert t["nav"]["equity_auction_tr"][-3] is None and t["nav"]["days"][-3] == str(days[-3].date())
 
 
 def test_drift_main_never_reads_the_price_nav_for_a_missing_total_return(tmp_path, monkeypatch):

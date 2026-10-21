@@ -13,13 +13,13 @@ BIN = Path(__file__).resolve().parents[1] / "bin"
 STUB = """#!/bin/zsh
 echo "ran $*"
 for m in ${=FAIL_MODULES}; do
-  if [[ " $* " == *" $m "* ]]; then echo "Traceback (most recent call last):"; exit 3; fi
+  if [[ " $* " == *" $m "* ]]; then echo "Traceback (most recent call last):"; exit ${FAIL_RC:-3}; fi
 done
 exit 0
 """
 
 
-def run(tmp_path: Path, script: str, fail: str = "", env_exec: str = "on", modules=()) -> tuple[int, list[str]]:
+def run(tmp_path: Path, script: str, fail: str = "", env_exec: str = "on", modules=(), fail_rc: int = 3) -> tuple[int, list[str]]:
     repo, home, log = tmp_path / "repo", tmp_path / "home", tmp_path / "job.log"
     (repo / "agent").mkdir(parents=True, exist_ok=True)
     for m in modules:                                            # modules another package adds (guarded in the script)
@@ -37,7 +37,7 @@ def run(tmp_path: Path, script: str, fail: str = "", env_exec: str = "on", modul
     text = text.replace("cd /Users/louis/hedge-fund", f"cd {repo}").replace("=/Users/louis/hedge-fund", f"={repo}")
     assert "/Users/louis" not in text.replace("/Users/louis/optradar/bin/", ""), "the copy must not reach production"
     (tmp_path / script).write_text(text)
-    env = {**os.environ, "HOME": str(home), "FAIL_MODULES": fail}
+    env = {**os.environ, "HOME": str(home), "FAIL_MODULES": fail, "FAIL_RC": str(fail_rc)}
     rc = subprocess.run(["zsh", str(tmp_path / script)], env=env, capture_output=True, text=True, timeout=60).returncode
     return rc, log.read_text().splitlines()
 
@@ -115,3 +115,12 @@ def test_postclose_runs_the_insider_shadow_after_evaluate_and_its_failure_is_not
     assert rc == 0 and "insider shadow failed (non-fatal)" in lines
     assert order.index("agent.insider_shadow") == order.index("agent.evaluate") + 1
     assert order.index("agent.backfill") < order.index("agent.drift") < order.index("agent.health")
+
+
+def test_postclose_names_a_partly_refused_factor_update_and_goes_on(tmp_path):
+    # 2026-10-21 review: exit 2 = written except the ETFs basis_guard refused; the line says "partly", still non-fatal
+    rc, lines = run(tmp_path, "postclose.sh", fail="agent.backfill", fail_rc=2)
+    assert rc == 0 and any(l.startswith("factor ETF update partly failed:") and l.endswith("(non-fatal)") for l in lines)
+    assert "factor ETF update failed (non-fatal)" not in lines and ran(lines, "agent.drift")
+    rc, lines = run(tmp_path / "b", "postclose.sh", fail="agent.backfill")                      # anything else: as before
+    assert rc == 0 and "factor ETF update failed (non-fatal)" in lines and not any("partly" in l for l in lines)
