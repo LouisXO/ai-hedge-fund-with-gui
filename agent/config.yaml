@@ -20,3 +20,44 @@ evaluate_at:
 # S47 (2026-09-29): the data correction took effect with the 2026-09-29 list (first fills at the 09-30 open).
 # Evaluation counts only lots whose entry order's as_of is on or after this date (read by agent/brief.py).
 evaluate_from: 2026-09-29
+
+# S54 (registered 2026-10-20, before any new data was read; docs/AGENT_PLAN.md "### S54 预注册", commit 2ee01e9).
+# A measurement, not a new variant (§5.5 #13): evaluate_at above is unchanged and stays the primary evaluation.
+# Every number of the registration lives here and only here: agent/insider_shadow.py and agent/drift.py read it.
+# A change to any of them is a new registration and must be dated here.
+s54:
+  registered: 2026-10-20
+  insider_shadow:                  # 1. every event the v1 rule takes, without slots, cash or the larger-first order
+    first_event_day: 2026-10-21    # filings before it, and events seen before it, are not part of the test
+    window_sessions: 2             # the live rule's window (execute.insider_targets): a filing first seen later is not an event
+    dedupe_sessions: 10            # one event per ticker per 10 sessions: the first
+    exits:                         # sessions after the event day D (entry = the open of D+1), and the print
+      E1: [1, close]
+      E5c: [5, close]
+      E6o: [6, open]               # the running rule's exit
+      E10: [10, close]
+    benchmark: IWM                 # the test's benchmark, over the stock's exact window
+    reported: [SPY, band_ew]       # reported, not judged: SPY, and the equal-weight return of the same ADV band
+    reading_date: 2027-06-30       # the exit-curve readings: when the SPRT decides or on this date, whichever is first
+  sprt:                            # truncated Wald SPRT on the E1 abnormal return, in % per event
+    h0_pct: 0.0
+    h1_pct: 0.27
+    alpha: 0.05
+    beta: 0.20
+    sigma_prior_pct: 5.95
+    sigma_reestimate_n: 200        # at the 200th event: the sample sd of the first 200, then frozen
+    truncate_n: 2400               # no boundary by then: H1 if the mean >= (h0 + h1) / 2, else H0
+  exit_readings:                   # read once, on the same events, direction only
+    a_abs_max_pp: 0.10             # |E5c - E6o| <= 0.10pp: v3 exits at the day-5 close
+    b_max_pp: 0.0                  # E5c - E1 <= 0: v3 considers the same-day round trip
+    c_min_pp: 0.30                 # E10 - E5c >= +0.3pp and t >= 2: v3 considers a longer hold
+    c_min_t: 2.0
+  long_alarm:                      # 2. the long book against two frozen S53a benchmarks (no intercept)
+    window: 189
+    percentile: 5
+    nav: site-data/validation/s53a_base_nav.csv
+    thresholds: site-data/validation/s54_long_alarm_thresholds.json   # computed once at registration, never again
+    registered_threshold_pct: {alpha2_fit: -13.7, etf_replica: -18.9}  # the 189-session values in the registration
+    fits:
+      alpha2_fit: {SPY: 1.096, IWM-SPY: 0.762}
+      etf_replica: {SPY: 0.944, IWM-SPY: 0.778, MTUM-SPY: 1.06, VLUE-SPY: 0.014, QUAL-SPY: -0.558, USMV-SPY: -0.262}

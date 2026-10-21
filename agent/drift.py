@@ -20,17 +20,30 @@ strategy: (1) an implementation error, (2) execution, (3) the rules not working.
   week        the book's last 5-session return inside the backtest's distribution of 5-session
               returns (site-data/validation/s47_base_nav.csv); outside the central 95% is flagged —
               which by construction happens one week in twenty, so it is a note, not an alarm
+  long alarm  S54 (registered 2026-10-20): the long book's auction-basis return with dividends minus each of two
+              frozen S53a benchmarks (no intercept: the alpha2 fit, SPY + IWM - SPY; the factor-ETF replica, + MTUM /
+              VLUE / QUAL / USMV - SPY), compounded over the last min(189, sessions since the first fill) sessions,
+              against the backtest's 5th percentile of the same statistic for windows of that length
+              (site-data/validation/s54_long_alarm_thresholds.json, computed once at registration, never again).
+              Below it is bad: "the live book is outside the backtest's distribution". It opens a data and
+              implementation investigation only; the paper book is not changed (betas and windows in config.yaml s54).
+              The first-fill session is open to close on both sides: the NAV's base is the close before it, when
+              the book held cash, and it bought at that day's opening auction, so the fit takes the regressors'
+              open-to-close return that day (not close to close, whose overnight gap the book never held); every
+              later session, and every backtest day behind the table, is close to close
 
 The replay and the backtest are total return (adjusted prices), so the paper side is the auction
 basis plus the dividends the lots were entitled to (agent_auction_nav.equity_auction_tr, S48).
 The replay's NAV goes into drift.json ("replay") every day, for agent/evaluate.py.
 
 Output: out/agent/drift.json, shown by agent.health. Usage: python -m agent.drift [--db PATH] [--out PATH]
+  python -m agent.drift --build-alarm-thresholds [--panel PATH]   once, at the S54 registration: writes the frozen table
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 
@@ -56,6 +69,9 @@ FINAL = ["filled", "expired", "canceled", "rejected"]
 BREAKEVEN_PCT = {"long": 0.95, "insider": 0.30}
 SIM_COST_PCT = 0.6           # what the simulator basis assumed before the sweep; used for a book without a break-even
 GAP_BAD_PCT = 2.0            # far above any 10-fill mean since 2026-09-22 (max ~1.3): order handling, not the simulator
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
+FIT_ZH = {"alpha2_fit": "alpha2 拟合(SPY、IWM−SPY)", "etf_replica": "因子 ETF 复制(+ MTUM/VLUE/QUAL/USMV)"}
 
 
 def chk(name: str, level: str, detail: str, **kw) -> dict:
@@ -149,12 +165,147 @@ def insider_check(con, store, since: dt.date | None) -> dict | None:
     return insider_vs_rule(ordered, names, int(BOOKS["insider"]["max_positions"]) - int(held) + int(sells), str(day.date()))
 
 
+# ---------------------------------------------------------------- S54 long alarm ----
+def s54_config(path: str = CONFIG) -> dict:
+    import yaml
+    return yaml.safe_load(open(path))["s54"]["long_alarm"]
+
+
+def factor_returns(store, open_to_close: bool = False) -> pd.DataFrame:
+    """Daily returns of the frozen fits' regressors from index_daily: SPY, and IWM / MTUM / VLUE / QUAL / USMV in excess
+    of SPY (the S53a regression's columns, S45 D3's construction). Close to close from adj_close; open_to_close: the
+    same day's close / open - 1 (the adjustment factor cancels within a day), for the alarm's first-fill session."""
+    syms = ["SPY", "IWM", "MTUM", "VLUE", "QUAL", "USMV"]
+    px = store.con.execute(f"SELECT symbol, trade_date, open, close, adj_close FROM index_daily "
+                           f"WHERE symbol IN ({', '.join('?' * len(syms))})", syms).df()
+    if open_to_close:
+        px["oc"] = px["close"] / px["open"] - 1
+        r = px.pivot(index="trade_date", columns="symbol", values="oc").sort_index().reindex(columns=syms)
+    else:
+        w = px.pivot(index="trade_date", columns="symbol", values="adj_close").sort_index().reindex(columns=syms)
+        r = w / w.shift(1) - 1                               # a day a symbol lacks stays NaN: never a two-day return
+    r.index = pd.to_datetime(r.index)
+    return pd.DataFrame({"SPY": r["SPY"], **{f"{s}-SPY": r[s] - r["SPY"] for s in syms[1:]}})
+
+
+def fit_return(f: pd.DataFrame, betas: dict) -> pd.Series:
+    """The frozen benchmark's daily return, no intercept; NaN on a day one of its regressors is missing."""
+    return sum(f[k] * float(b) for k, b in betas.items())
+
+
+def window_percentiles(diff: pd.Series, max_len: int, pct: float) -> list[float]:
+    """For L = 1..max_len, the pct-th percentile (linear, as pandas' quantile) of the compounded diff over every run
+    of L consecutive days, in %."""
+    c = np.concatenate([[0.0], np.cumsum(np.log1p(diff.to_numpy(dtype=float)))])
+    return [float(np.percentile(np.expm1(c[L:] - c[:-L]), pct) * 100) for L in range(1, max_len + 1)]
+
+
+def build_alarm_thresholds(store, cfg: dict, nav_csv: str) -> dict:
+    """The frozen table: per fit, the backtest's percentile of book - fit compounded over 1..window days. Rows where
+    the NAV or any of the fit's regressors is missing are left out before the windows are formed (as replica.py did)."""
+    nav = pd.read_csv(nav_csv, parse_dates=["trade_date"]).set_index("trade_date")["v1c"]
+    r = nav.pct_change().dropna()
+    f = factor_returns(store).reindex(r.index)
+    out, at = {}, {}
+    for name, betas in cfg["fits"].items():
+        diff = (r - fit_return(f, betas)).dropna()
+        out[name] = [round(v, 4) for v in window_percentiles(diff, int(cfg["window"]), float(cfg["percentile"]))]
+        at[name] = {"n_days": int(len(diff)), "start": str(diff.index[0].date()), "end": str(diff.index[-1].date()),
+                    "computed_pct": out[name][-1], "registered_pct": float(cfg["registered_threshold_pct"][name]),
+                    "difference_pp": round(out[name][-1] - float(cfg["registered_threshold_pct"][name]), 4)}
+    return {"what": "S54 long alarm thresholds (docs/AGENT_PLAN.md S54 item 2): for each window length L = 1..window, the "
+                    f"{cfg['percentile']}th percentile of prod(1 + book_t - fit_t) - 1 over every run of L consecutive "
+                    "backtest days, in %. book = daily return of the long v1 base NAV; fit = frozen betas x regressor "
+                    "returns, no intercept. thresholds_pct[fit][L - 1] is the threshold for a window of L sessions. "
+                    "Computed once at registration; never recomputed.",
+            "registered": str(s54_registered()), "registration_commit": "2ee01e9",
+            "computed_at": dt.datetime.now().isoformat(timespec="seconds"),
+            "inputs": {"nav": os.path.relpath(nav_csv, ROOT), "nav_column": "v1c",
+                       "nav_sha1": hashlib.sha1(open(nav_csv, "rb").read()).hexdigest(),
+                       "factors": "index_daily adj_close (SPY, IWM, MTUM, VLUE, QUAL, USMV), daily simple returns, "
+                                  "regressors in excess of SPY, on the NAV's days",
+                       "panel": os.path.basename(str(getattr(store, "path", ""))),
+                       "nav_start": str(nav.index[0].date()), "nav_end": str(nav.index[-1].date())},
+            "fits": cfg["fits"], "window": int(cfg["window"]), "percentile": float(cfg["percentile"]),
+            "check_at_window": at, "thresholds_pct": out}
+
+
+def s54_registered(path: str = CONFIG) -> dt.date:
+    import yaml
+    return yaml.safe_load(open(path))["s54"]["registered"]
+
+
+def long_alarm(tr: pd.Series, first_fill: dt.date, factors: pd.DataFrame, table: dict, cfg: dict, *,
+               oc: pd.DataFrame) -> list[dict]:
+    """One check per frozen fit: book - fit, compounded over the last min(window, sessions since the first fill) sessions.
+
+    tr: the long book's auction-basis NAV with dividends by day (agent_auction_nav.equity_auction_tr), from the close
+    before the first fill. factors: the regressors close to close; oc: open to close (factor_returns). While the window
+    still starts at the first-fill session, that session's fit is open to close (module doc). Each NAV step is compared
+    with the fit compounded over the same sessions, so a day the NAV skipped is not lost. Below the table's threshold
+    for that window length: bad. A regressor missing on a day of the window: warn, nothing compared."""
+    tr = tr.dropna().sort_index()
+    before = tr.index[tr.index < pd.Timestamp(first_fill)]
+    if not len(before):
+        return []
+    tr = tr.loc[before[-1]:]
+    sess = factors.index[(factors.index > tr.index[0]) & (factors.index <= tr.index[-1])]   # sessions since the first fill
+    if not len(sess):
+        return []
+    if sess[-1] < tr.index[-1]:                              # the NAV's last day has no index_daily row at all
+        return [chk(f"长线冻结基准报警 · {FIT_ZH.get(n, n)}", "warn", f"因子数据缺 {tr.index[-1].date()}(index_daily),这一条没算",
+                    fit=n, window=None, flagged=None) for n in cfg["fits"]]
+    L = min(int(cfg["window"]), len(sess))
+    start = sess[-L]
+    nav = tr.loc[tr.index[tr.index < start][-1]:]           # from the close before the window's first session
+    book = nav.to_numpy()[1:] / nav.to_numpy()[:-1] - 1
+    out = []
+    for name, betas in cfg["fits"].items():
+        cname = f"长线冻结基准报警 · {FIT_ZH.get(name, name)}"
+        win = fit_return(factors.loc[sess], betas).loc[start:]
+        if start == sess[0]:                                 # the first-fill session: bought at its open
+            win.iloc[0] = fit_return(oc.reindex([start]), betas).iloc[0]
+        if win.isna().any():
+            gap = [str(d.date()) for d in win.index[win.isna()]]
+            out.append(chk(cname, "warn", f"因子数据缺 {', '.join(gap[:3])} 等 {len(gap)} 天(index_daily),这一条没算",
+                           fit=name, window=L, flagged=None))
+            continue
+        fv = np.r_[1.0, (1 + win).cumprod().reindex(nav.index[1:], method="pad").to_numpy()]
+        diff = book - (fv[1:] / fv[:-1] - 1)
+        cum = float(np.prod(1 + diff) - 1) * 100
+        thr = float(table["thresholds_pct"][name][L - 1])
+        bk, ft = float(nav.iloc[-1] / nav.iloc[0] - 1) * 100, float(fv[-1] - 1) * 100
+        level = "bad" if cum < thr else "ok"
+        short = (f",不满 {cfg['window']} 天按开始以来" if L < int(cfg["window"]) else "") + \
+            (",首日按开盘到收盘" if start == sess[0] else "")
+        out.append(chk(cname, level,
+                       f"最近 {L} 个交易日({start.date()} 起{short}):竞价口径含分红 {bk:+.2f}%,冻结基准 {ft:+.2f}%,"
+                       f"逐日差累计 {cum:+.2f}%;门槛 {thr:+.2f}%(回测同长度窗口的第 {float(cfg['percentile']):g} 百分位)"
+                       + (";低于门槛:实盘落在回测分布之外,只开数据和实现排查,模拟盘不改" if level == "bad" else ""),
+                       fit=name, window=L, cum_diff_pct=cum, threshold_pct=thr, book_pct=bk, fit_pct=ft, flagged=level == "bad"))
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=DB, help="the ledger (a copy, for a test run)")
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--auction", default=AUCTION)
+    ap.add_argument("--build-alarm-thresholds", action="store_true", help="S54, once: write the frozen threshold table")
+    ap.add_argument("--panel", default=None, help="with --build-alarm-thresholds: the panel to read index_daily from")
     args = ap.parse_args(argv)
+    if args.build_alarm_thresholds:
+        cfg = s54_config()
+        dest = os.path.join(ROOT, cfg["thresholds"])
+        if os.path.exists(dest):                             # frozen at registration: never rebuilt
+            print(f"{dest} exists; the table is frozen (S54), not rebuilt")
+            return 1
+        with (PanelStore(args.panel, read_only=True) if args.panel else PanelStore(read_only=True)) as store:
+            table = build_alarm_thresholds(store, cfg, os.path.join(ROOT, cfg["nav"]))
+        with open(dest, "w") as f:
+            json.dump(table, f, ensure_ascii=False, indent=1)
+        print(json.dumps(table["check_at_window"], indent=1))
+        return 0
     out = []
     con = duckdb.connect(args.db, read_only=True)
     picks = con.execute("SELECT as_of, ticker, rank FROM agent_picks WHERE signal_name = ? AND as_of >= ? ORDER BY as_of, rank", [long_live.SIGNAL, PAPER_START]).df()
@@ -163,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
                             WHERE dry_run = FALSE AND as_of >= current_date - 9 AND alpaca_id IS NOT NULL""").df()   # broker had it
     auct = con.execute("SELECT * FROM agent_auction_nav WHERE book = 'long' ORDER BY as_of").df()
     capital = float(con.execute("SELECT alloc_usd FROM agent_books WHERE book = 'long'").fetchone()[0])   # S48: not a constant
+    first_fill = con.execute("SELECT min(entry_day) FROM agent_lots WHERE book = 'long'").fetchone()[0]          # S54 alarm window
     con.close()                                  # no ledger lock held through the replay and the list recomputation
     if "equity_auction_tr" not in auct:                                  # before the S48 columns: price NAV only
         auct["equity_auction_tr"] = auct["equity_auction"]
@@ -170,6 +322,10 @@ def main(argv: list[str] | None = None) -> int:
     lists = {pd.Timestamp(d): g["ticker"].tolist() for d, g in picks.groupby("as_of")}
     with PanelStore(read_only=True) as store:
         market = load_market(store, PAPER_START)
+        try:
+            factors, factors_oc, factor_err = factor_returns(store), factor_returns(store, True), None   # S54, store open
+        except Exception as exc:
+            factors, factors_oc, factor_err = None, None, str(exc)[:120]
         last = market.adj.index[-1]
         # 1) + 2) replay
         from agent.s44_v2_bundle import entry_zone
@@ -254,7 +410,23 @@ def main(argv: list[str] | None = None) -> int:
         out.append(chk("最近 5 日收益 在 回测分布里的位置", "ok" if 2.5 <= pct <= 97.5 else "warn",
                        f"{mine:+.2f}%,回测第 {pct:.0f} 百分位(回测 5 日收益中位数 {r5.median():+.2f}%,2.5%–97.5% 区间 {r5.quantile(.025):+.1f}% 到 {r5.quantile(.975):+.1f}%)",
                        ret5_pct=mine, percentile=pct))
+    # 7) S54: the long book against the two frozen S53a benchmarks
+    alarm = []
+    try:
+        acfg = s54_config()
+        if factors is None:
+            raise RuntimeError(f"index_daily 读不出:{factor_err}")
+        table = json.load(open(os.path.join(ROOT, acfg["thresholds"])))
+        if first_fill is not None and len(auct):
+            alarm = long_alarm(auct.set_index(pd.to_datetime(auct["as_of"]))["equity_auction_tr"], pd.Timestamp(first_fill).date(),
+                               factors, table, acfg, oc=factors_oc)
+    except Exception as exc:                                         # never let this check stop the others
+        alarm = [chk("长线冻结基准报警", "warn", f"没算出来:{str(exc)[:120]}")]
+    out += alarm
     rep = {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "checks": out, "replay": replay,
+           "long_alarm": {"first_fill": str(first_fill) if first_fill else None,
+                          "checks": [{k: c.get(k) for k in ("fit", "level", "window", "cum_diff_pct", "threshold_pct", "book_pct",
+                                                             "fit_pct", "flagged")} for c in alarm]},
            "level": "bad" if any(c["level"] == "bad" for c in out) else "warn" if any(c["level"] == "warn" for c in out) else "ok"}
     with open(args.out, "w") as f:
         json.dump(rep, f, ensure_ascii=False, indent=1, default=float)

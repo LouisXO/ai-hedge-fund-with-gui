@@ -1,0 +1,88 @@
+# Ledger rows the report collector cannot read (hedge_fund/validation/family_log.py; added 2026-10-20 for S54,
+# docs/AGENT_PLAN.md "### S54 预注册" item 3: "Holm 账本 9/30 之后没重写:补上 S53、信号层试验和 S54").
+#
+# Every number below is the one §9 recorded (source: docs/AGENT_PLAN.md line numbers at commit 2ee01e9). Nothing
+# here re-runs a test or changes a verdict; the ledger only counts what was tested.
+#
+#   family: signal       a signal-level test that never ran as a book (IC, event study, long-short deciles, option
+#                        gates). n_trials = the trials §9 says the test ran; best_t = the largest |t| §9 reports, with
+#                        its sign. The ledger shows p_group = min(1, n_trials x p(best_t)), the Bonferroni bound for the
+#                        best of the group, and counts n_trials in the trial total that the deflated Sharpe uses.
+#                        Signal tests that §9 counted +0 (S49 D2-D6 diagnostics, S50 and S52 descriptive records) and
+#                        execution-layer tests that §9 keeps out of Holm (S31, S41) are not listed.
+#   family: measurement  a registered measurement without a result yet: one trial in the total; t stays empty until
+#                        it reads, and is then filled in here with its source line.
+#
+# S53's counted variant (composite_long_fpi) is a book: the collector reads it from its report's top-level `fpi`
+# block (family_log.TOP_LEVEL), so it is not repeated here.
+rows:
+  - variant: s1_price_signals
+    family: signal
+    session: S1
+    n_trials: 2
+    best_t: 2.00
+    report: s1_2026-09-19.md
+    source: "AGENT_PLAN.md L224-L225 (S1): mom_12_1 h5 IC NW t 0.93; reversal_5 h5 IC NW t 2.00"
+  - variant: s3_option_signals
+    family: signal
+    session: S3
+    n_trials: 48
+    best_t: 2.55
+    report: s3_2026-09-19.md
+    source: "AGENT_PLAN.md L249 (S3): 3 signals x 4 cheapness gates x 2 sides x 2 holds = 48 combinations; L252: best 7-day t 1.34, 14-day 2.55"
+  - variant: s7_stock_books
+    family: signal
+    session: S7
+    n_trials: 8
+    best_t: 1.16
+    report: s7_2026-09-19.md
+    source: "AGENT_PLAN.md L272-L277 (S7): 4 books x (excess, long-short) NW t; best mom_12_1 63-day excess 1.16"
+  - variant: s8_insider_sp500
+    family: signal
+    session: S8
+    n_trials: 12
+    best_t: 1.95
+    report: s8_2026-09-20.md
+    source: "AGENT_PLAN.md L289-L291 (S8 table) and L294: 12 combinations, best 10-day t 1.95 (>= $250k)"
+  - variant: s11_insider_wide
+    family: signal
+    session: S11
+    n_trials: 28
+    best_t: 4.91
+    report: s11_2026-09-20.md
+    source: "AGENT_PLAN.md L331 (S11): micro 5-day +0.607%, NW t 4.91; L340: 28 combinations, Holm-significant"
+  - variant: s17_long_short_deciles
+    family: signal
+    session: S17
+    n_trials: 4
+    best_t: 2.10
+    report: "none (§9 only)"
+    source: "AGENT_PLAN.md L435 (S17): long-short deciles after the quality fix, composite t 0.86, quality 0.69, value negative, momentum 2.10 (the pre-fix reads are superseded, as a restatement)"
+  - variant: s26_option_gate
+    family: signal
+    session: S26
+    n_trials: 2
+    best_t: 1.06
+    report: s26_option_gate_2026-09-22.md
+    source: "AGENT_PLAN.md L508 (S26): straddle gate pass - fail, h5 t 1.06, h10 t -0.73"
+  - variant: s32_unusual_options
+    family: signal
+    session: S32
+    n_trials: 2
+    best_t: -2.3
+    report: s32_unusual_options_2026-09-23.md
+    source: "AGENT_PLAN.md L542 (S32): call flow h5 t 1.0, put flow h10 t -2.3; L543: Holm +2"
+  - variant: s42_rv5_gates
+    family: signal
+    session: S42
+    n_trials: 2
+    best_t: 5.80
+    report: s42_rv5_gate_2026-09-25.md
+    source: "AGENT_PLAN.md L620 (S42): S26 rule on 5-minute RV t 1.68, ratio gate h5 t 5.80; L622: the two gates count as signal-level trials (S42b: a stale-print artifact, not adopted)"
+  - variant: s54_insider_all_event_sprt
+    family: measurement
+    session: S54
+    n_trials: 1
+    best_t: null
+    report: insider_shadow.json (out/agent, from 2026-10-22)
+    source: "AGENT_PLAN.md L1049, L1053-L1057 (S54 item 1): truncated Wald SPRT on the all-event E1 abnormal return vs IWM; L1051: a measurement, not a new variant, one ledger row"

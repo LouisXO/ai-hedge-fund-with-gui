@@ -26,9 +26,24 @@ S48 (2026-09-29, audit research #1 and #5):
     are not independent (five of the thirteen are one composite book), so only a range is
     honest, and each DSR assumes sd(t) = 1 across trials.
 
-Signal-level tests before the books existed (S3's three price signals,
-S7's stock versions, S8's insider event study) were separate families and
-all failed their own gates; they are listed in §9 and not repeated here.
+Signal-level tests (S1's price ICs, S3's option-scored signals, S7's stock versions, S8/S11's insider
+event studies, S17's long-short deciles, the option gates and flows of S26/S32/S42) were separate
+families with their own gates. Until S54 they were only in §9; they are now listed, one row per test,
+in their own table (below) and never enter the book family's Holm.
+
+S54 (2026-10-20): the ledger had not been rewritten since 2026-09-30 (S49 changed the code on 10-06
+without --write), and it could not count S53, whose report keeps its books at the top level, nor the
+signal-level trials. Now:
+  - TOP_LEVEL: S53's counted variant `composite_long_fpi` from the report's `fpi` block (its `v1` block
+    is the base restated on the same data, +0);
+  - site-data/validation/family_log_extra.yaml: rows no report can give, each with its §9 source line —
+    the signal-level tests (one row per test: its trial count and best t, shown with the Bonferroni bound
+    for the best of the group) and registered measurements without a result yet (S54). They are listed in
+    their own tables of family_log.md and counted in the trial total; the book family's Holm is over the book
+    rows, as before, so no book row's p changes because of them. family_log.jsonl stays the book family, one
+    row per Holm variant (optradar's weekly pack counts its lines as variants): the hand-kept rows live in the
+    yaml and the .md only;
+  - the deflated Sharpe is also given at the trial total (book rows + signal trials + measurements).
 
 Usage: python -m hedge_fund.validation.family_log [--write] [--reports DIR] [--nav CSV] [--panel DB]
 """
@@ -50,7 +65,14 @@ CONTROLS = {"insider_5d", "short_insider_5d"}          # the same v1 insider boo
 BASELINES = {"lc_ew"}                                    # S37's no-selection baseline: pre-registered as not a candidate (2026-10-06 review)
 ALIASES = {"long_composite_daily_n30": "base",         # S19's daily composite is S24's base
            "insider_buy_h5": "insider_v1_5d"}           # the v1 line under the event-line interface (S23 control)
+# S27's re-run on 2026-10-06 (S54 rebuild): its half-spread books are the base and the insider v1 restated (+0, as
+# every restatement), and its measured-cost books are the same cost test re-measured, so the later report wins
+REPORT_ALIASES = {"s27_exec_cost_2026-10-06.json": {"long_half_spread": "base", "insider_half_spread": "insider_v1_5d"}}
+ALIASES.update({"long_measured_0.61pct": "long_measured_cost", "long_measured_0.59pct": "long_measured_cost",
+                "insider_measured_1.04pct": "insider_measured_cost"})
 SECTIONS = {"s30_momentum_book_": "full"}              # reports whose books sit under another key than `books`
+TOP_LEVEL = {"s53_fpi_backtest_": {"fpi": "composite_long_fpi"}}   # reports whose books sit at the top level (S53, S54)
+EXTRA = "family_log_extra.yaml"                        # rows no report can give (S54): signal-level tests, measurements
 # Keyed by the exact report file: a later S24 re-run on the corrected data (s24_long_v2_<newer date>.json)
 # replaces these rows through the "later report wins" rule and must not inherit the flag.
 PRE_AUDIT = {"s24_long_v2_2026-09-22.json": {"n50", "invvol", "stop20", "issuance", "secneutral", "combo"}}
@@ -67,6 +89,9 @@ def _books(fname: str, d: dict) -> dict | None:
     for prefix, key in SECTIONS.items():
         if fname.startswith(prefix) and isinstance(d.get(key), dict):
             return d[key]
+    for prefix, keys in TOP_LEVEL.items():
+        if fname.startswith(prefix):
+            return {name: d[k] for k, name in keys.items() if isinstance(d.get(k), dict)} or None
     books = d.get("books")
     return books if isinstance(books, dict) else None
 
@@ -103,7 +128,7 @@ def collect(reports: str = REPORTS) -> list[dict]:
             t = m.get("alpha2_t_nw") if isinstance(m, dict) else None
             if t is None or (isinstance(t, float) and math.isnan(t)) or not m.get("n_trades"):
                 continue                                   # factor-only cells never traded: not a tested variant
-            key = ALIASES.get(name, name)
+            key = REPORT_ALIASES.get(fname, {}).get(name) or ALIASES.get(name, name)
             if key in CONTROLS:
                 key = "insider_v1_5d"
             row = {"variant": key, "report": fname, "t": float(t),
@@ -116,6 +141,27 @@ def collect(reports: str = REPORTS) -> list[dict]:
             seen.add(key)
             rows.append(row)
     return dedup_same_book(rows)
+
+
+def extra_rows(reports: str = REPORTS) -> list[dict]:
+    """The hand-kept rows of family_log_extra.yaml, with p of the best t and the group's Bonferroni bound."""
+    path = os.path.join(reports, EXTRA)
+    if not os.path.exists(path):
+        return []
+    import yaml
+    rows = []
+    for r in (yaml.safe_load(open(path)) or {}).get("rows", []):
+        r = dict(r)
+        if r.get("best_t") is not None:
+            r["p_raw"] = _p_two_sided(float(r["best_t"]))
+            r["p_group"] = min(1.0, int(r["n_trials"]) * r["p_raw"])
+        rows.append(r)
+    return rows
+
+
+def trial_total(rows: list[dict], extra: list[dict]) -> int:
+    """Book rows + every signal-level trial + every registered measurement."""
+    return len(rows) + sum(int(r.get("n_trials") or 1) for r in extra)
 
 
 def holm(rows: list[dict]) -> list[dict]:
@@ -196,7 +242,7 @@ def base_book_dsr(nav_csv: str, panel_path: str, trials: list[int], nav_col: str
 
 # -- output ------------------------------------------------------------------------------------
 
-def render(rows: list[dict], dsr: dict | None = None, dsr_note: str | None = None) -> str:
+def render(rows: list[dict], dsr: dict | None = None, dsr_note: str | None = None, extra: list[dict] | None = None) -> str:
     n_same = sum(len(r.get("same_as", [])) for r in rows)
     L = [f"# Family-wise ledger — {len(rows)} book-level variants", "",
          "Two-sided p from the Newey-West t; Holm step-down over the whole family. "
@@ -213,15 +259,35 @@ def render(rows: list[dict], dsr: dict | None = None, dsr_note: str | None = Non
             note = (note + "; " if note else "") + f"= {len(r['same_as'])} re-run(s)"
         L.append(f"| {r['variant']} | {r['report']} | {r['t']:.2f} | {a} | {r['p_raw']:.3f} | {r['p_holm']:.3f} | "
                  f"{'✓' if r['p_holm'] <= 0.05 else ''} | {'✓' if r['p_holm'] <= 0.10 else ''} | {note} |")
-    L += ["", "## Selection: expected best t of N null trials", "",
+    extra = extra or []
+    sig = [r for r in extra if r.get("family") == "signal"]
+    meas = [r for r in extra if r.get("family") != "signal"]
+    total = trial_total(rows, extra)
+    if sig:
+        L += ["", f"## Signal-level trials ({sum(int(r['n_trials']) for r in sig)} in {len(sig)} tests, never run as a book)", "",
+              "From docs/AGENT_PLAN.md §9 (family_log_extra.yaml, each row with its source line). One row per test: its trial "
+              "count and the best t §9 reports; p group = min(1, trials × p(best t)), the Bonferroni bound for the best of "
+              "the group. Not part of the book family's Holm above; counted in the trial total below.", "",
+              "| test | session | trials | best t | p raw | p group | source |", "|---|---|---|---|---|---|---|"]
+        for r in sig:
+            L.append(f"| {r['variant']} | {r['session']} | {r['n_trials']} | {float(r['best_t']):+.2f} | {r['p_raw']:.2g} | "
+                     f"{r['p_group']:.3g} | {r['source']} |")
+    if meas:
+        L += ["", "## Registered measurements (one trial each; the result is entered when it reads)", "",
+              "| measurement | session | t | source |", "|---|---|---|---|"]
+        for r in meas:
+            L.append(f"| {r['variant']} | {r['session']} | {'—' if r.get('best_t') is None else format(float(r['best_t']), '+.2f')} | {r['source']} |")
+    L += ["", f"**Trial total: {total}** = {len(rows)} book rows + {sum(int(r['n_trials']) for r in sig)} signal-level trials"
+          f" + {len(meas)} measurement(s).",
+          "", "## Selection: expected best t of N null trials", "",
           "| N trials | E[max t] |", "|---|---|"]
-    for n in sorted({5, 13, len(rows)}):
+    for n in sorted({5, 13, len(rows), total}):
         L.append(f"| {n} | {expected_max_t(n):.2f} |")
     L += ["", "## Base book: PSR(0) and deflated Sharpe", ""]
     if dsr is None:
         L.append(f"Not computed: {dsr_note or 'no NAV / panel given'}.")
     else:
-        source = (" This NAV is the latest restatement on the corrected data (agent/s47_restate.py: S47, then S47b); the base row in the ledger above still comes "
+        source = (" This NAV is the latest restatement on the corrected data (S47, S47b, then S53a: the file name was kept); the base row in the ledger above still comes "
                   "from its own report, so its t and alpha2 can differ from these."
                   if dsr["nav_file"] == BASE_NAV else "")
         L += [f"alpha2 series (alpha + residual on SPY and IWM − SPY) of `{dsr['nav_file']}` [{dsr['column']}], "
@@ -249,18 +315,19 @@ def main() -> int:
     ap.add_argument("--panel", default=str(PANEL_DB))
     args = ap.parse_args()
     rows = holm(collect(args.reports))
+    extra = extra_rows(args.reports)
     nav = args.nav or os.path.join(args.reports, BASE_NAV)
     dsr, note = None, None
     try:
-        dsr = base_book_dsr(nav, args.panel, sorted({5, 13, len(rows)}), args.nav_col)
+        dsr = base_book_dsr(nav, args.panel, sorted({5, 13, len(rows), trial_total(rows, extra)}), args.nav_col)
     except Exception as exc:                            # a locked or missing panel must not block the ledger
         note = f"{type(exc).__name__}: {exc}"
-    text = render(rows, dsr, note)
+    text = render(rows, dsr, note, extra)
     print(text)
     if args.write:
         with open(os.path.join(args.reports, "family_log.jsonl"), "w") as f:
-            for r in rows:
-                f.write(json.dumps(r) + "\n")
+            for r in rows:                              # the book family only, each row with p_holm: readers count its
+                f.write(json.dumps(r) + "\n")         # lines as Holm variants (optradar weekly_pack); extras: .md + yaml
         with open(os.path.join(args.reports, "family_log.md"), "w") as f:
             f.write(text)
         if dsr is not None:

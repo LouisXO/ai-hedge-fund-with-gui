@@ -9,6 +9,14 @@ LOG=/Users/louis/optradar/out/agent/collect.log
 export PYTHONPATH=/Users/louis/hedge-fund
 echo "=== weekly fundamentals $(date) ===" >> "$LOG"
 FAIL=0
+# S54: a restore-tested copy of panel.db before anything below rewrites its history (the 10/05 refresh moved the backtest
+# with no copy to compare against); 2 kept in ~/.hedge-fund/agent/snapshots/panel/. Without a good copy nothing that
+# rewrites panel.db's history runs this week (the XBRL re-fetch, the ADS ratios, the fundamentals rebuild, the listing
+# refresh), and the job fails so the health page shows it: a week of stale fundamentals costs less than a refresh that
+# can never be diffed. The short-interest update (short.db), the audit and the weekly backup still run.
+SNAP_OK=1
+$PY -W ignore -m agent.backup --snapshot panel >> "$LOG" 2>&1 || { echo "panel snapshot FAILED (exit $?): XBRL, ADS ratios, fundamentals and listing not refreshed this week" >> "$LOG"; SNAP_OK=0; FAIL=1; }
+if [ "$SNAP_OK" = "1" ]; then
 # --max-age-days 6 = re-fetch every company (2026-09-28: the job called a --force flag that never existed, so nothing was ever refreshed)
 # The first full refresh also brings ~4,000 companies loaded on 2026-09-20 up to the current tag list, which moves
 # the long book's list; it waits for the owner's date (docs/AGENT_PLAN.md S46): touch ~/.hedge-fund/agent/refresh_fundamentals.ok
@@ -31,6 +39,7 @@ print('fundamentals_pit', len(df), 'rows', df['ticker'].nunique(), 'names')
 " >> "$LOG" 2>&1 || { echo "fundamentals rebuild FAILED or skipped" >> "$LOG"; FAIL=1; }
 # the listing table is the books' universe mask: a failed refresh is logged and fails the job (it used to be '|| true')
 $PY -W ignore -m agent.sources.av_listing refresh >> "$LOG" 2>&1 || { echo "listing refresh FAILED (exit $?)" >> "$LOG"; FAIL=1; }
+fi   # SNAP_OK
 $PY -W ignore -m agent.sources.finra_short update >> "$LOG" 2>&1 || echo "finra short interest update failed (non-fatal)" >> "$LOG"   # S38 data, twice-monthly source
 echo "=== done $(date) ===" >> "$LOG"   # the audit and the weekly backup below stay non-fatal
 $PY -W ignore -m agent.audit >> "$LOG" 2>&1 || echo "audit reported failures" >> "$LOG"

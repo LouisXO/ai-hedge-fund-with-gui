@@ -1,5 +1,7 @@
 # S23 — insider_ceo as a short-term event line (2026-09-22)
 
+> **Note (S54, 2026-10-21):** in this report the SPY benchmark starts at the close of D+1 while the stock starts at the open of D+1. At h1 the benchmark is therefore 0 and "mean abn %" is the raw open-to-close return; for h > 1 the stock has one more session than SPY. The numbers and verdicts here are not recomputed or changed (registration S54 item 3, docs/AGENT_PLAN.md §9); `agent/event_report.py` uses the stock's own window (open D+1 to the exit close) from 2026-10-21.
+
 Hypothesis: v1 insider rule restricted by 'ceo' keeps the informative purchases.
 
 2017-01-01 → 2026-08-31, 3647 tradable events (ADV $3M–$100M), entry at the open after the event date, abnormal = minus SPY, clustered by event date.

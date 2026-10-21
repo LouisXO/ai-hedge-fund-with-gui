@@ -87,3 +87,31 @@ def test_weekly_listing_refresh_failure_is_logged_and_fails_the_job(tmp_path):
     assert ran(lines, "agent.backup") and lines[-1].startswith("weekly fundamentals job FAILED")
     rc, lines = run(tmp_path / "b", "weekly_fundamentals.sh", fail="agent.sources.finra_short")
     assert rc == 0 and "finra short interest update failed (non-fatal)" in lines
+
+
+def test_weekly_takes_the_panel_snapshot_first_and_rewrites_nothing_without_it(tmp_path):
+    # S54: the 10/05 refresh changed the backtest with no copy of the panel before it
+    (tmp_path / "home" / ".hedge-fund" / "agent").mkdir(parents=True)
+    (tmp_path / "home" / ".hedge-fund" / "agent" / "refresh_fundamentals.ok").write_text("")
+    rc, lines = run(tmp_path, "weekly_fundamentals.sh")
+    order = [l for l in lines if l.startswith("ran ")]
+    assert rc == 0 and order[0] == "ran -W ignore -m agent.backup --snapshot panel"
+    assert ran(lines, "agent.sources.sec_xbrl") and ran(lines, "agent.sources.av_listing")
+    (tmp_path / "b" / "home" / ".hedge-fund" / "agent").mkdir(parents=True)
+    (tmp_path / "b" / "home" / ".hedge-fund" / "agent" / "refresh_fundamentals.ok").write_text("")
+    rc, lines = run(tmp_path / "b", "weekly_fundamentals.sh", fail="--snapshot")
+    assert rc == 1 and any(l.startswith("panel snapshot FAILED (exit 3)") for l in lines)
+    for m in ("agent.sources.sec_xbrl", "agent.sources.ads_ratio", "agent.sources.av_listing", "factor_inputs"):
+        assert not any(m in l for l in lines if l.startswith("ran ")), m
+    assert ran(lines, "agent.sources.finra_short") and ran(lines, "agent.audit") and ran(lines, "--weekly")
+    assert lines[-1].startswith("weekly fundamentals job FAILED")
+
+
+def test_postclose_runs_the_insider_shadow_after_evaluate_and_its_failure_is_not_fatal(tmp_path):
+    rc, lines = run(tmp_path / "a", "postclose.sh", modules=("dividends", "evaluate"))           # not in the checkout: skipped
+    assert rc == 0 and not ran(lines, "agent.insider_shadow")
+    rc, lines = run(tmp_path, "postclose.sh", fail="agent.insider_shadow", modules=("dividends", "evaluate", "insider_shadow"))
+    order = [l.split()[4] for l in lines if l.startswith("ran -W ignore -m ")]
+    assert rc == 0 and "insider shadow failed (non-fatal)" in lines
+    assert order.index("agent.insider_shadow") == order.index("agent.evaluate") + 1
+    assert order.index("agent.backfill") < order.index("agent.drift") < order.index("agent.health")

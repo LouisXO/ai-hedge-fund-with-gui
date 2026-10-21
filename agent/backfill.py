@@ -15,6 +15,7 @@ Usage:
   python -m agent.backfill bars [--start 2013-01-01] [--chunk 50]
   python -m agent.backfill bars --incremental
   python -m agent.backfill index
+  python -m agent.backfill factors      the research ETFs (FACTOR_ETFS), every day from agent/bin/postclose.sh (S54)
 """
 from __future__ import annotations
 
@@ -160,9 +161,14 @@ def backfill_index(store: PanelStore, start: str = "2012-01-01") -> int:
 # Research-only factor ETFs for the S45 D3 attribution (momentum MTUM/SPMO, value VLUE, quality QUAL,
 # low vol USMV, small value AVUV/IJS/VBR/IWN, small growth IWO). Kept apart from INDEX_SYMBOLS on
 # purpose (S48): backfill_index runs inside execute.py and daily.py, and one throttled research
-# download must never cost SPY its close. backfill_factor_etfs is run by hand or by the weekly job
-# only; the index audit keeps checking SPY/IWM/QQQ/^VIX. AVUV starts 2019-09: regressions that use
-# it cover a shorter window and must say so.
+# download must never cost SPY its close. The index audit keeps checking SPY/IWM/QQQ/^VIX. AVUV starts
+# 2019-09: regressions that use it cover a shorter window and must say so.
+# S54 (2026-10-20): this comment said "run by hand or by the weekly job", but no job ever called it, so after the
+# one manual backfill (2026-09-29) index_daily stopped at 2026-09-28 for all ten. The long book's frozen ETF
+# benchmark (agent/drift.py) needs MTUM/VLUE/QUAL/USMV every day: agent/bin/postclose.sh now runs
+# `python -m agent.backfill factors` after the close, as a step of its own (non-fatal, off the order path). The
+# whole history is downloaded each time, as backfill_index does: Yahoo's Adj Close is rescaled back to the start
+# at every distribution, and rows written from a short window would not match the older ones.
 FACTOR_ETFS = ("MTUM", "VLUE", "QUAL", "USMV", "AVUV", "IJS", "VBR", "IWN", "IWO", "SPMO")
 
 
@@ -210,11 +216,15 @@ def backfill_factor_etfs(store: PanelStore | None = None, start: str = "2012-01-
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["bars", "index"])
+    ap.add_argument("cmd", choices=["bars", "index", "factors"])
     ap.add_argument("--start", default="2014-01-01")
     ap.add_argument("--chunk", type=int, default=50)
     ap.add_argument("--incremental", action="store_true")
     args = ap.parse_args()
+    if args.cmd == "factors":                      # downloads first; the panel is opened only for the write
+        out = backfill_factor_etfs()
+        print({"factor_etfs": out})
+        return 1 if not out["rows"] else 0
     with PanelStore() as store:
         if args.cmd == "bars":
             print(backfill_bars(store, args.start, args.chunk, args.incremental))

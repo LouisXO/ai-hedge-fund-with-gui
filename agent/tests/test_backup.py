@@ -137,3 +137,52 @@ def test_runbook_restore_procedure_does_not_replay_the_old_wal(tmp_path):
         assert con.execute("SELECT count(*) FROM a").fetchone()[0] == 100      # 105 if the old WAL were replayed
     finally:
         con.close()
+
+
+# ---- S54: the panel snapshot before the Sunday refresh ----
+def test_snapshot_keeps_the_newest_two_and_a_failure_keeps_them(tmp_path, monkeypatch):
+    src = str(tmp_path / "panel.db")
+    _make_db(src)
+    root = str(tmp_path / "snap")
+    for day in ("2026-10-11", "2026-10-18", "2026-10-25"):
+        r = backup.snapshot(src, root, keep=2, day=day)
+        assert r["status"] == "ok" and r["dir"] == os.path.join(root, "panel", day)
+    assert sorted(os.listdir(os.path.join(root, "panel"))) == ["2026-10-18", "2026-10-25"]       # bounded: 2 kept
+    assert r["pruned"] == ["2026-10-11"]
+    assert _restore(os.path.join(root, "panel", "2026-10-25", "panel.db.zst"), tmp_path) == 100
+    monkeypatch.setattr(backup, "_compress", lambda s, d: open(d, "wb").write(b"not zstd"))     # a copy that fails its test
+    for day in ("2026-11-01", "2026-10-25"):                                                   # a new day, and a rerun of the last
+        r = backup.snapshot(src, root, keep=2, day=day)
+        assert r["status"].startswith("failed")
+    assert sorted(os.listdir(os.path.join(root, "panel"))) == ["2026-10-18", "2026-10-25"]       # nothing pruned, nothing replaced
+    assert _restore(os.path.join(root, "panel", "2026-10-25", "panel.db.zst"), tmp_path) == 100
+
+
+def test_snapshot_waits_for_a_writer_and_clears_a_killed_runs_partial(tmp_path, monkeypatch):
+    """Review fix (2026-10-21): a lock held by another job is waited out (the weekly job skips the whole refresh
+    without a copy), and a '.<day>.partial' left by a killed run on another day does not stay on disk."""
+    from hedge_fund.features import panel
+    src = str(tmp_path / "panel.db")
+    _make_db(src)
+    root = tmp_path / "snap"
+    stale = root / "panel" / ".2026-10-18.partial"
+    stale.mkdir(parents=True)
+    (stale / "panel.db.zst").write_bytes(b"x" * 1000)
+    real, calls = duckdb.connect, []
+
+    def locked_once(path, read_only=False, **kw):                 # the 16:10 job holds the file at the first try
+        calls.append(path)
+        if len(calls) == 1:
+            raise duckdb.IOException("IO Error: Could not set lock on file: Conflicting lock is held")
+        return real(path, read_only=read_only, **kw)
+    monkeypatch.setattr(panel.duckdb, "connect", locked_once)
+    monkeypatch.setattr(backup, "SNAPSHOT_LOCK_STEP_S", 0.01)
+    r = backup.snapshot(src, str(root), keep=2, day="2026-10-25", lock_wait=1.0)
+    monkeypatch.setattr(panel.duckdb, "connect", real)
+    assert r["status"] == "ok" and len(calls) >= 2
+    assert sorted(os.listdir(root / "panel")) == ["2026-10-25"]                          # the stale partial is gone
+    monkeypatch.setattr(panel.duckdb, "connect", lambda *a, **k: (_ for _ in ()).throw(
+        duckdb.IOException("Could not set lock on file")))
+    r = backup.snapshot(src, str(root), keep=2, day="2026-11-01", lock_wait=0.0)        # no wait: skipped, nothing kept
+    assert r["status"].startswith("skipped") and sorted(os.listdir(root / "panel")) == ["2026-10-25"]
+

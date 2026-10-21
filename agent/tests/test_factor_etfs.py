@@ -65,3 +65,24 @@ def test_nothing_downloaded_writes_nothing(store):
     for dl in (_fake_download([])[0], lambda symbols, start, end: pd.DataFrame()):   # yfinance can return an empty frame
         assert backfill_factor_etfs(store, download=dl, end="2024-01-10") == {"rows": 0, "symbols": {}, "missing": list(FACTOR_ETFS)}
     assert store.con.execute("SELECT count(*) FROM index_daily").fetchone()[0] == 0
+
+
+def test_postclose_updates_the_factor_etfs_every_day_before_drift():
+    # S54: the comment said "the weekly job", no job ever called it, and index_daily stopped at 2026-09-28
+    lines = [l for l in open(os.path.join(ROOT, "agent/bin/postclose.sh")).read().splitlines() if l.startswith("$PY")]
+    i = next(k for k, l in enumerate(lines) if "-m agent.backfill factors" in l)
+    j = next(k for k, l in enumerate(lines) if "-m agent.drift" in l)
+    assert i < j and "|| echo" in lines[i] and "non-fatal" in lines[i]
+
+
+def test_the_factors_command_downloads_then_opens_the_panel(monkeypatch):
+    import sys
+
+    import agent.backfill as bf
+    calls = []
+    monkeypatch.setattr(bf, "backfill_factor_etfs", lambda: calls.append("etfs") or {"rows": 5, "symbols": {}, "missing": []})
+    monkeypatch.setattr(bf, "PanelStore", lambda *a, **k: calls.append("panel"))     # the command opens nothing itself
+    monkeypatch.setattr(sys, "argv", ["agent.backfill", "factors"])
+    assert bf.main() == 0 and calls == ["etfs"]
+    monkeypatch.setattr(bf, "backfill_factor_etfs", lambda: {"rows": 0, "symbols": {}, "missing": list(FACTOR_ETFS)})
+    assert bf.main() == 1                                                           # nothing downloaded: the step says so

@@ -1,4 +1,4 @@
-# Family-wise ledger — 103 book-level variants
+# Family-wise ledger — 104 book-level variants
 
 Two-sided p from the Newey-West t; Holm step-down over the whole family. Variants with a negative t are the rejected event lines (the sign is informative, the test is symmetric). Holm is reported, not used as an adoption gate (AGENT_PLAN §5.5, thresholds v3).
 
@@ -6,6 +6,7 @@ One backtest, one row: 10 re-runs of the same book under another name (same trad
 
 | variant | report | t | alpha2/yr | p raw | p Holm | ≤0.05 | ≤0.10 | note |
 |---|---|---|---|---|---|---|---|---|
+| insider_measured_cost | s27_exec_cost_2026-10-06.json | -12.09 | -51.7% | 0.000 | 0.000 | ✓ | ✓ |  |
 | move_news_up_h2 | s25_move_news_up_2026-09-22.json | -5.55 | -55.0% | 0.000 | 0.000 | ✓ | ✓ |  |
 | move_news_up_h5 | s25_move_news_up_2026-09-22.json | -4.65 | -53.0% | 0.000 | 0.000 | ✓ | ✓ |  |
 | move_news_up_h10 | s25_move_news_up_2026-09-22.json | -4.49 | -55.8% | 0.000 | 0.001 | ✓ | ✓ |  |
@@ -75,40 +76,64 @@ One backtest, one row: 10 re-runs of the same book under another name (same trad
 | insider_opp_ceo_h10 | s23_insider_opp_ceo_2026-09-22.json | 0.95 | +3.7% | 0.343 | 1.000 |  |  |  |
 | insider_contrarian_h10 | s23_insider_contrarian_2026-09-22.json | 0.94 | +8.5% | 0.348 | 1.000 |  |  |  |
 | long_composite_n100 | books_2026-09-20_spycash_n100.json | 0.90 | +3.6% | 0.366 | 1.000 |  |  |  |
-| lc_mom | s37_largecap_2026-09-24.json | 0.87 | +6.4% | 0.384 | 1.000 |  |  |  |
 | mom_top_lowvol | s30_momentum_book_2026-09-22.json | 0.86 | +7.0% | 0.390 | 1.000 |  |  |  |
 | insider_base_f144_5 | s39_dilution_144_2026-09-24.json | 0.85 | +6.3% | 0.397 | 1.000 |  |  |  |
-| lc_ew | s37_largecap_2026-09-24.json | -0.82 | -0.9% | 0.412 | 1.000 |  |  |  |
-| lc_qlv | s37_largecap_2026-09-24.json | 0.81 | +2.1% | 0.416 | 1.000 |  |  |  |
 | pead_small_h40 | s22_pead_small_2026-09-22.json | -0.81 | -2.4% | 0.418 | 1.000 |  |  |  |
+| lc_mom | s49_d1b_2026-10-06.json | 0.80 | +6.0% | 0.423 | 1.000 |  |  |  |
 | insider_opp_h10 | s23_insider_opp_2026-09-22.json | 0.78 | +3.7% | 0.436 | 1.000 |  |  |  |
 | mom_top_momcrash | s30_momentum_book_2026-09-22.json | 0.78 | +7.8% | 0.437 | 1.000 |  |  |  |
 | long_value_n30 | books_2026-09-20_spycash.json | 0.77 | +4.0% | 0.443 | 1.000 |  |  |  |
 | insider_opp_ceo_h5 | s23_insider_opp_ceo_2026-09-22.json | 0.75 | +2.5% | 0.455 | 1.000 |  |  |  |
-| lc_qv | s37_largecap_2026-09-24.json | 0.73 | +2.8% | 0.468 | 1.000 |  |  |  |
+| composite_long_fpi | s53_fpi_backtest_2026-10-14.json | 0.72 | +4.3% | 0.470 | 1.000 |  |  |  |
 | pead_small_h10 | s22_pead_small_2026-09-22.json | -0.67 | -1.6% | 0.502 | 1.000 |  |  |  |
 | mom_top | s30_momentum_book_2026-09-22.json | 0.67 | +6.7% | 0.502 | 1.000 |  |  |  |
-| long_measured_0.61pct | s27_exec_cost_2026-09-24.json | 0.65 | +3.6% | 0.519 | 1.000 |  |  |  |
 | combo | s24_long_v2_2026-09-22.json | 0.63 | +1.9% | 0.528 | 1.000 |  |  | 修正前数据 |
 | buyback_clean_h20 | s34_buyback_clean_2026-09-23.json | 0.61 | +2.0% | 0.539 | 1.000 |  |  |  |
 | insider_floor5 | s40_price_floor_2026-09-24.json | 0.60 | +2.3% | 0.548 | 1.000 |  |  |  |
+| lc_rankz | s49_d1b_2026-10-06.json | 0.47 | +1.5% | 0.636 | 1.000 |  |  |  |
 | sch13d_h5 | s21_13d_2026-09-22.json | -0.46 | -4.2% | 0.646 | 1.000 |  |  |  |
-| lc_value | s37_largecap_2026-09-24.json | 0.41 | +1.7% | 0.681 | 1.000 |  |  |  |
-| lc_secneutral | s37_largecap_2026-09-24.json | 0.34 | +0.9% | 0.734 | 1.000 |  |  |  |
+| lc_composite | s49_d1b_2026-10-06.json | 0.46 | +1.6% | 0.648 | 1.000 |  |  |  |
+| lc_qlv | s49_d1b_2026-10-06.json | 0.45 | +1.1% | 0.654 | 1.000 |  |  |  |
+| lc_secneutral | s37_largecap_2026-10-06.json | 0.44 | +1.2% | 0.660 | 1.000 |  |  |  |
+| long_measured_cost | s27_exec_cost_2026-10-06.json | 0.43 | +2.6% | 0.665 | 1.000 |  |  |  |
+| lc_qv | s49_d1b_2026-10-06.json | 0.34 | +1.3% | 0.737 | 1.000 |  |  |  |
 | secneutral | s24_long_v2_2026-09-22.json | 0.30 | +1.2% | 0.764 | 1.000 |  |  | 修正前数据 |
-| lc_composite50 | s37_largecap_2026-09-24.json | -0.30 | -0.9% | 0.766 | 1.000 |  |  |  |
+| lc_value | s49_d1b_2026-10-06.json | 0.29 | +1.1% | 0.775 | 1.000 |  |  |  |
 | buyback_clean_h40 | s34_buyback_clean_2026-09-23.json | 0.28 | +0.9% | 0.778 | 1.000 |  |  |  |
-| lc_composite | s37_largecap_2026-09-24.json | 0.23 | +0.8% | 0.817 | 1.000 |  |  |  |
 | sch13d_h10 | s21_13d_2026-09-22.json | -0.22 | -2.4% | 0.824 | 1.000 |  |  |  |
 | rankz_momcrash | s24_long_v2_2026-09-22.json | 0.21 | +0.7% | 0.835 | 1.000 |  |  |  |
 | insider_f144_5 | s39_dilution_144_2026-09-24.json | 0.19 | +1.3% | 0.850 | 1.000 |  |  |  |
 | rankz | s24_long_v2_2026-09-22.json | 0.14 | +0.5% | 0.890 | 1.000 |  |  |  |
 | sch13d_h20 | s21_13d_2026-09-22.json | -0.12 | -1.3% | 0.903 | 1.000 |  |  |  |
 | buyback_clean_h5 | s34_buyback_clean_2026-09-23.json | 0.10 | +0.3% | 0.923 | 1.000 |  |  |  |
+| lc_payout | s37_largecap_2026-10-06.json | 0.08 | +0.3% | 0.938 | 1.000 |  |  |  |
 | long_quality_n30 | books_2026-09-20_spycash.json | 0.07 | +0.2% | 0.946 | 1.000 |  |  |  |
 | insider_contrarian_h5 | s23_insider_contrarian_2026-09-22.json | -0.05 | -0.2% | 0.958 | 1.000 |  |  |  |
-| lc_rankz | s37_largecap_2026-09-24.json | 0.03 | +0.1% | 0.975 | 1.000 |  |  |  |
-| lc_payout | s37_largecap_2026-09-24.json | 0.00 | +0.0% | 0.999 | 1.000 |  |  |  |
+| lc_composite50 | s49_d1b_2026-10-06.json | 0.03 | +0.1% | 0.974 | 1.000 |  |  |  |
+
+## Signal-level trials (108 in 9 tests, never run as a book)
+
+From docs/AGENT_PLAN.md §9 (family_log_extra.yaml, each row with its source line). One row per test: its trial count and the best t §9 reports; p group = min(1, trials × p(best t)), the Bonferroni bound for the best of the group. Not part of the book family's Holm above; counted in the trial total below.
+
+| test | session | trials | best t | p raw | p group | source |
+|---|---|---|---|---|---|---|
+| s1_price_signals | S1 | 2 | +2.00 | 0.046 | 0.091 | AGENT_PLAN.md L224-L225 (S1): mom_12_1 h5 IC NW t 0.93; reversal_5 h5 IC NW t 2.00 |
+| s3_option_signals | S3 | 48 | +2.55 | 0.011 | 0.517 | AGENT_PLAN.md L249 (S3): 3 signals x 4 cheapness gates x 2 sides x 2 holds = 48 combinations; L252: best 7-day t 1.34, 14-day 2.55 |
+| s7_stock_books | S7 | 8 | +1.16 | 0.25 | 1 | AGENT_PLAN.md L272-L277 (S7): 4 books x (excess, long-short) NW t; best mom_12_1 63-day excess 1.16 |
+| s8_insider_sp500 | S8 | 12 | +1.95 | 0.051 | 0.614 | AGENT_PLAN.md L289-L291 (S8 table) and L294: 12 combinations, best 10-day t 1.95 (>= $250k) |
+| s11_insider_wide | S11 | 28 | +4.91 | 9.1e-07 | 2.55e-05 | AGENT_PLAN.md L331 (S11): micro 5-day +0.607%, NW t 4.91; L340: 28 combinations, Holm-significant |
+| s17_long_short_deciles | S17 | 4 | +2.10 | 0.036 | 0.143 | AGENT_PLAN.md L435 (S17): long-short deciles after the quality fix, composite t 0.86, quality 0.69, value negative, momentum 2.10 (the pre-fix reads are superseded, as a restatement) |
+| s26_option_gate | S26 | 2 | +1.06 | 0.29 | 0.578 | AGENT_PLAN.md L508 (S26): straddle gate pass - fail, h5 t 1.06, h10 t -0.73 |
+| s32_unusual_options | S32 | 2 | -2.30 | 0.021 | 0.0429 | AGENT_PLAN.md L542 (S32): call flow h5 t 1.0, put flow h10 t -2.3; L543: Holm +2 |
+| s42_rv5_gates | S42 | 2 | +5.80 | 6.6e-09 | 1.33e-08 | AGENT_PLAN.md L620 (S42): S26 rule on 5-minute RV t 1.68, ratio gate h5 t 5.80; L622: the two gates count as signal-level trials (S42b: a stale-print artifact, not adopted) |
+
+## Registered measurements (one trial each; the result is entered when it reads)
+
+| measurement | session | t | source |
+|---|---|---|---|
+| s54_insider_all_event_sprt | S54 | — | AGENT_PLAN.md L1049, L1053-L1057 (S54 item 1): truncated Wald SPRT on the all-event E1 abnormal return vs IWM; L1051: a measurement, not a new variant, one ledger row |
+
+**Trial total: 213** = 104 book rows + 108 signal-level trials + 1 measurement(s).
 
 ## Selection: expected best t of N null trials
 
@@ -116,18 +141,20 @@ One backtest, one row: 10 re-runs of the same book under another name (same trad
 |---|---|
 | 5 | 1.19 |
 | 13 | 1.70 |
-| 103 | 2.54 |
+| 104 | 2.54 |
+| 213 | 2.79 |
 
 ## Base book: PSR(0) and deflated Sharpe
 
-alpha2 series (alpha + residual on SPY and IWM − SPY) of `s47_base_nav.csv` [v1c], 2017-01-03 → 2026-08-31, T = 2427: alpha2 +8.54%/yr, NW t 1.44 (iid t 1.36). This NAV is the latest restatement on the corrected data (agent/s47_restate.py: S47, then S47b); the base row in the ledger above still comes from its own report, so its t and alpha2 can differ from these.
+alpha2 series (alpha + residual on SPY and IWM − SPY) of `s47_base_nav.csv` [v1c], 2017-01-03 → 2026-08-31, T = 2427: alpha2 +6.81%/yr, NW t 1.15 (iid t 1.09). This NAV is the latest restatement on the corrected data (S47, S47b, then S53a: the file name was kept); the base row in the ledger above still comes from its own report, so its t and alpha2 can differ from these.
 
-**PSR(0) = 0.924** (no selection at all; the usual bar is 0.95).
+**PSR(0) = 0.874** (no selection at all; the usual bar is 0.95).
 
 | trials N | E[max t] | SR0 (ann.) | SR (ann.) | DSR |
 |---|---|---|---|---|
-| 5 | 1.19 | 0.384 | 0.438 | 0.570 |
-| 13 | 1.70 | 0.549 | 0.438 | 0.359 |
-| 103 | 2.54 | 0.819 | 0.438 | 0.107 |
+| 5 | 1.19 | 0.384 | 0.350 | 0.456 |
+| 13 | 1.70 | 0.549 | 0.350 | 0.258 |
+| 104 | 2.54 | 0.820 | 0.350 | 0.063 |
+| 213 | 2.79 | 0.898 | 0.350 | 0.037 |
 
-**DSR range 0.11–0.57.** The trials are not independent (5 of the 13 books before v1 were variants of one composite book; the ledger rows share data and rules), so the effective N is unknown and only the range is meaningful. Each DSR assumes sd(t) = 1 across trials; skew and kurtosis are the series' own.
+**DSR range 0.04–0.46.** The trials are not independent (5 of the 13 books before v1 were variants of one composite book; the ledger rows share data and rules), so the effective N is unknown and only the range is meaningful. Each DSR assumes sd(t) = 1 across trials; skew and kurtosis are the series' own.

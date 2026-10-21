@@ -23,6 +23,10 @@ check that was not run (ok None: orders in flight or no broker cash) warns.
 could not be given to a book is bad; an unknown activity type, a booked one the broker canceled, a dividend unpaid 5 days
 past its pay date and a failed corporate-actions fetch warn.
 
+2026-10-20 (S54): the insider all-event shadow (agent/insider_shadow.py, 13:25 job) must have written today's report
+without an error (check_insider_shadow: warn, never bad: no book reads it), and the factor ETFs the long alarm needs
+must be fresh (DATA); the long alarm itself is a drift check (agent/drift.py).
+
 Usage: python -m agent.health [--no-notify] [--no-llm-probe]
 """
 from __future__ import annotations
@@ -98,6 +102,9 @@ LIST_RUNS_CHECKED = {       # run_id of a list from elsewhere, compared with a r
     "2026-10-08-75f33e": "10-19 核对过,和重算一致",
 }
 UNPAID_GRACE_DAYS = 5       # an entitled dividend this many days past its pay date with no broker DIV is named (a note only)
+SHADOW = os.path.join(OUT, "agent", "insider_shadow.json")
+SHADOW_DUE, SHADOW_GRACE_MIN = (13, 25), 90          # postclose.sh runs it after agent.evaluate
+SPRT_ZH = {"none": "未越线", "H1": '判"有"', "H0": '判"无"'}
 
 DATA = [  # name, db, sql for the latest date, max age in sessions before warn / bad
     ("价格日线 bars", f"{A}/panel.db", "SELECT max(trade_date) FROM bars", 1, 3),
@@ -117,6 +124,9 @@ DATA = [  # name, db, sql for the latest date, max age in sessions before warn /
     ("分析师共识存档", f"{A}/archive.db", "SELECT max(day) FROM consensus", 2, 5),
     ("难借券存档", f"{A}/archive.db", "SELECT max(day) FROM borrow", 2, 5),
     ("盈利预测 AV", f"{A}/estimates.db", "SELECT CAST(max(fetched_at) AS DATE) FROM av_estimates_log", 3, 7),
+    # S54: the long book's frozen ETF benchmark (agent/drift.py) needs all four; the oldest of their last days counts
+    ("因子 ETF(MTUM/VLUE/QUAL/USMV)", f"{A}/panel.db", "SELECT min(d) FROM (SELECT max(trade_date) AS d FROM index_daily "
+     "WHERE symbol IN ('MTUM', 'VLUE', 'QUAL', 'USMV') GROUP BY symbol)", 2, 5),
     ("模拟盘净值", "/Users/louis/optradar/optradar.db", "SELECT max(as_of) FROM agent_book_nav", 1, 2),
     ("竞价口径净值", "/Users/louis/optradar/optradar.db", "SELECT max(as_of) FROM agent_auction_nav", 1, 3),
     ("实盘快照 moomoo", "/Users/louis/optradar/optradar.db", "SELECT max(date) FROM acct_nav", 1, 3),
@@ -535,6 +545,48 @@ def check_cash_events(now: dt.datetime, out_dir: str = f"{OUT}/agent", db: str =
     return r
 
 
+def shadow_first_run(config: str = os.path.join(os.path.dirname(__file__), "config.yaml")) -> dt.datetime:
+    """The first 13:25 run with an evening to read: the weekday after config s54's first event day."""
+    import yaml
+    d = dt.date.fromisoformat(str(yaml.safe_load(open(config))["s54"]["insider_shadow"]["first_event_day"])) + dt.timedelta(days=1)
+    while d.weekday() >= 5:
+        d += dt.timedelta(days=1)
+    return dt.datetime.combine(d, dt.time(*SHADOW_DUE))
+
+
+def check_insider_shadow(now: dt.datetime, path: str = SHADOW) -> dict:
+    """The S54 shadow's report: warn when it is missing, older than the last 13:25 run, or says the run failed; else one
+    line with the events counted and the SPRT's state. The exit-curve readings stay out until the report shows them."""
+    r = {"name": "内部人全事件影子账(S54)", "label": "insider_shadow", "level": "ok", "detail": ""}
+    j = _load_json(path)
+    if not isinstance(j, dict):
+        first = shadow_first_run()
+        if now < first + dt.timedelta(minutes=SHADOW_GRACE_MIN):
+            r["detail"] = f"第一次运行在 {first:%m-%d %H:%M}(13:25 收盘后任务)"
+        else:
+            r.update(level="warn", detail="还没有 insider_shadow.json(13:25 收盘后任务写)")
+        return r
+    gen = parse_iso(j.get("generated_at"))
+    due = due_day(now, SHADOW_DUE, SHADOW_GRACE_MIN, bool(gen and gen.date() == now.date()))
+    warn = []
+    if j.get("error"):
+        warn.append(f"上次运行失败({j.get('error_at') or '?'}):{str(j['error'])[:80]};下面是上一次成功的结果")
+    if gen is None or gen.date() < due:
+        warn.append(f"报告是 {gen:%m-%d %H:%M} 的,{due} 的没有写" if gen else "报告没有生成时间")
+    s = j.get("sprt") or {}
+    dec = s.get("decided") or {}
+    state = SPRT_ZH.get(s.get("decision"), str(s.get("decision")))
+    if dec:
+        state += f"(第 {dec.get('n')} 个事件,{dec.get('entry_day')}{',截断' if dec.get('truncated') else ''})"
+    cur = (f"均值 {s['mean_pct']:+.3f}%(n {s['n']}),边界 {s['lower_pct']:+.2f}% / {s['upper_pct']:+.2f}%"
+           if s.get("n") else f"自 {j.get('first_event_day')} 起还没有 E1")
+    rr = j.get("exit_readings") or {}
+    info = (f"{j.get('n_events', 0)} 个事件(有 E1 的 {j.get('n_with_E1', 0)});SPRT {state}:{cur};"
+            f"持有期读法 {'已读' if rr.get('status') == 'read' else str(rr.get('due')) + ' 之前不看'}")
+    r.update(level="warn" if warn else "ok", detail=";".join(warn + [info]))
+    return r
+
+
 def check_jobs(now: dt.datetime) -> list[dict]:
     try:
         listing = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=15).stdout
@@ -702,7 +754,8 @@ def main() -> int:
     args = ap.parse_args()
     now = dt.datetime.now()
     rep = {"generated_at": now.isoformat(timespec="seconds"),
-           "jobs": check_jobs(now) + [check_exec(now)] + check_fetch_runs(now) + [check_list_writers(now), check_cash_events(now)],
+           "jobs": check_jobs(now) + [check_exec(now)] + check_fetch_runs(now) + [check_list_writers(now), check_cash_events(now),
+                                                                                  check_insider_shadow(now)],
            "data": check_data(now.date(), now),
            "system": check_system(not args.no_llm_probe)}
     try:                                                  # agent.drift: paper book vs its rules and the backtest's range

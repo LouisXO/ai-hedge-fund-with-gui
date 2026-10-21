@@ -107,12 +107,15 @@ def entry_kind(lag_sessions: int, retry: bool) -> str:
 
 
 def candidates(store: PanelStore, as_of: pd.Timestamp, window: int = 3,
-               sessions: list[dt.date] | None = None, longer: dict[str, int] | None = None) -> pd.DataFrame:
+               sessions: list[dt.date] | None = None, longer: dict[str, int] | None = None,
+               tx_filter: tuple[str, list] | None = None) -> pd.DataFrame:
     """Names with a qualifying Form 4 filing day among the last `window` trading days.
 
     sessions: the exchange calendar (the caller has the broker's). Without one the panel's own
     bar dates stand in, which are the same days up to the last completed bar.
     longer: {ticker: sessions} for names that look further back than `window` (see triggers).
+    tx_filter: only the Form 4 rows it keeps count (books.data.insider_flows): the S54 shadow replays an
+    evening with the rows that evening's run could see. None = every row in the panel, as the live run.
     """
     start = (as_of - pd.Timedelta(days=120)).date().isoformat()
     close = store.bars_wide("close", start=start)
@@ -123,12 +126,12 @@ def candidates(store: PanelStore, as_of: pd.Timestamp, window: int = 3,
     if not days:
         return pd.DataFrame()
     adv = (close * vol).rolling(20).mean()
-    events = InsiderBuys().events(store, days[0].isoformat(), days[-1].isoformat())
+    events = InsiderBuys().events(store, days[0].isoformat(), days[-1].isoformat(), tx_filter)
     listed = listed_mask(store, pd.DatetimeIndex([pd.Timestamp(d) for d in days]), sorted(set(events["ticker"])))
     ev = triggers(events, days, adv, listed, window, longer)
     if ev.empty:
         return ev
-    flows = insider_flows(store, days[0].isoformat()).set_index(["date", "ticker"])["n_buyers"]   # for display only
+    flows = insider_flows(store, days[0].isoformat(), tx_filter).set_index(["date", "ticker"])["n_buyers"]   # for display only
     ev["n_buyers"] = [int(flows.get((pd.Timestamp(d), t), 0)) for d, t in zip(ev["last_filing"], ev["ticker"])]
 
     day = close.index[close.index <= as_of][-1]

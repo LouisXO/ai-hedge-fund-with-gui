@@ -19,7 +19,16 @@ Restore: first move BOTH the old <name>.db and <name>.db.wal out of the way (Duc
 next to the path onto the restored file), then `zstd -d <file>.zst -o <name>.db` into ~/.hedge-fund/agent/ (or
 ~/optradar/ for optradar.db). docs/RUNBOOK.md section 7 has the exact commands.
 
+Snapshot (S54, 2026-10-20): the Sunday job (agent/bin/weekly_fundamentals.sh) rewrites panel.db's history (the XBRL
+re-fetch, the ADS ratios, the fundamentals rebuild, the listing refresh), and the weekly tier above is taken only after
+it, so the 10/05 refresh changed the backtest with no copy of the panel before it (AGENT_PLAN §9 "基数漂移诊断").
+`--snapshot` copies panel.db the same way (read-only connection, zstd, restore test) into a local directory BEFORE the
+job writes; the job runs none of those steps without a good copy. SNAPSHOT_KEEP kept (1.8 GB uncompressed, about 0.7 GB
+compressed each); the oldest is removed only after a good copy. Local, not iCloud: it is there to restate on, not to
+survive the Mac.
+
 Usage: python -m agent.backup [--weekly] [--dest DIR]
+       python -m agent.backup --snapshot panel [--snapshot-dir DIR]   exit 1 when no good copy was made
 """
 from __future__ import annotations
 
@@ -44,6 +53,11 @@ DAILY_DBS = ["/Users/louis/optradar/optradar.db", f"{A}/archive.db", f"{A}/estim
 WEEKLY_DBS = [f"{A}/panel.db", f"{A}/options.db", f"{A}/news.db", f"{A}/short.db", f"{A}/intraday.db"]
 STATE_FILES = [f"{A}/watch_state.json", f"{A}/av_quota.json", f"{A}/balder_seen.json", f"{A}/translate_cache.json", f"{A}/company_sic.csv"]
 KEEP = {"daily": 14, "weekly": 2}
+SNAPSHOTS = f"{A}/snapshots"            # before the Sunday refresh (S54): <dir>/<db name>/<date>/<name>.db.zst
+SNAPSHOT_KEEP = 2
+SNAPSHOT_LOCK_WAIT_S, SNAPSHOT_LOCK_STEP_S = 1800.0, 10.0   # the Sunday job can wait out a writer (a late or manual run
+                                                           # may meet the 16:10 job): one failed open skips a week's refresh
+SNAPSHOT_DBS = {"panel": f"{A}/panel.db"}
 
 
 def _tables(con) -> list[str]:
@@ -63,15 +77,21 @@ def _decompress(src: str, dst: str) -> None:
     subprocess.run([ZSTD, "-q", "-d", "-f", src, "-o", dst], check=True)
 
 
-def backup_db(path: str, out_dir: str) -> dict:
+def backup_db(path: str, out_dir: str, lock_wait: float = 0.0) -> dict:
     """Copy under a read-only connection, compress, then restore-test the .zst that was written: decompress it into
-    an empty temp directory and require the same tables and row counts the source had while it was held."""
+    an empty temp directory and require the same tables and row counts the source had while it was held.
+    lock_wait: seconds to retry a file a writer holds (panel.connect_with_retry); 0 = skip it at once, as the nightly
+    backup does (it comes back tomorrow)."""
     name = os.path.basename(path)
     if not os.path.exists(path):
         return {"file": name, "status": "missing"}
     t0 = time.time()
     try:
-        con = duckdb.connect(path, read_only=True)
+        if lock_wait > 0:
+            from hedge_fund.features.panel import connect_with_retry
+            con = connect_with_retry(path, read_only=True, wait=lock_wait, step=SNAPSHOT_LOCK_STEP_S)
+        else:
+            con = duckdb.connect(path, read_only=True)
     except Exception as exc:
         return {"file": name, "status": "skipped: in use", "detail": str(exc)[:80]}
     tmp = tempfile.mkdtemp(prefix="bk_")
@@ -118,19 +138,57 @@ def backup_db(path: str, out_dir: str) -> dict:
 
 
 def prune(kind: str, dest: str) -> list[str]:
-    root = os.path.join(dest, kind)
-    days = sorted(d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d)))
-    gone = days[:-KEEP[kind]] if len(days) > KEEP[kind] else []
+    return prune_dir(os.path.join(dest, kind), KEEP[kind])
+
+
+def prune_dir(root: str, keep: int) -> list[str]:
+    """Remove all but the `keep` newest dated subdirectories of root (names sort by date; '.' ones are work in progress)."""
+    days = sorted(d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d)) and not d.startswith("."))
+    gone = days[:-keep] if len(days) > keep else []
     for d in gone:
         shutil.rmtree(os.path.join(root, d), ignore_errors=True)
     return gone
+
+
+def snapshot(path: str, root: str = SNAPSHOTS, keep: int = SNAPSHOT_KEEP, day: str | None = None,
+             lock_wait: float | None = None) -> dict:
+    """A restore-tested .zst of `path` in root/<name>/<day>/ (see the module doc). It is written into a '.<day>.partial'
+    directory and renamed only once it passed, so a failed copy leaves nothing behind, replaces nothing (not even an
+    earlier copy of the same day) and prunes nothing: the last good copies stay. A '.partial' left by a run that was
+    killed (any day) is removed first, so disk use stays at `keep` copies plus the one being written. A writer holding
+    the file is waited for (SNAPSHOT_LOCK_WAIT_S)."""
+    name = os.path.splitext(os.path.basename(path))[0]
+    day = day or dt.date.today().isoformat()
+    base = os.path.join(root, name)
+    out, work = os.path.join(base, day), os.path.join(base, f".{day}.partial")
+    if os.path.isdir(base):
+        for d in os.listdir(base):
+            if d.startswith(".") and d.endswith(".partial"):
+                shutil.rmtree(os.path.join(base, d), ignore_errors=True)
+    os.makedirs(work)
+    res = backup_db(path, work, SNAPSHOT_LOCK_WAIT_S if lock_wait is None else lock_wait)
+    res["dir"] = out
+    if res["status"] != "ok":
+        shutil.rmtree(work, ignore_errors=True)
+        return res
+    shutil.rmtree(out, ignore_errors=True)
+    os.rename(work, out)
+    res["pruned"] = prune_dir(base, keep)
+    return res
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--weekly", action="store_true")
     ap.add_argument("--dest", default=DEST)
+    ap.add_argument("--snapshot", choices=sorted(SNAPSHOT_DBS), default=None, help="local copy before the Sunday refresh (S54)")
+    ap.add_argument("--snapshot-dir", default=SNAPSHOTS)
     args = ap.parse_args()
+    if args.snapshot:                                   # nothing else: the weekly job calls this first, then refreshes
+        r = snapshot(SNAPSHOT_DBS[args.snapshot], args.snapshot_dir)
+        size = f"{r.get('bytes', 0) / 1e6:,.0f} MB → {r.get('compressed', 0) / 1e6:,.0f} MB, {r.get('rows', 0):,} rows" if r["status"] == "ok" else ""
+        print(f"  snapshot {r['file']:14s} {r['status']:18s} {size} {r['dir']}" + (f" (removed {r['pruned']})" if r.get("pruned") else ""))
+        return 0 if r["status"] == "ok" else 1
     today = dt.date.today().isoformat()
     report = {"date": today, "generated_at": dt.datetime.now().isoformat(timespec="seconds"), "dest": args.dest, "daily": [], "weekly": []}
     d_dir = os.path.join(args.dest, "daily", today)

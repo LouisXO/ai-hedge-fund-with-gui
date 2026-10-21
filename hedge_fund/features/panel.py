@@ -61,6 +61,11 @@ DDL = [
         acq_disp VARCHAR, shares DOUBLE, price DOUBLE, value_usd DOUBLE, shares_after DOUBLE,
         source VARCHAR, fetched_at TIMESTAMP,
         PRIMARY KEY (accession, ticker, trans_date, trans_code, shares, price))""",
+    # S54 (2026-10-20): when a row first reached the table (UTC instant; fetched_at is the parse time, local, and a
+    # later INSERT OR REPLACE rewrites it). insert() sets it and keeps the first value when the row is written again,
+    # so agent/insider_shadow.py can tell which filings a run could see. Rows stored before the column existed have
+    # NULL until a re-insert, which gives them their old fetched_at (as PT), never the re-insert's time.
+    "ALTER TABLE insider_tx ADD COLUMN IF NOT EXISTS stored_at TIMESTAMPTZ",
     LISTING_DDL.format(name="listing_status"),
     """CREATE TABLE IF NOT EXISTS issuer_seen (
         ticker VARCHAR, cik VARCHAR, quarter VARCHAR, n_filings INT, first_filing DATE, last_filing DATE,
@@ -163,17 +168,39 @@ class PanelStore:
         return len(flat)
 
     def insert(self, table: str, df: pd.DataFrame) -> int:
-        """Generic INSERT OR REPLACE, aligning by column name."""
+        """Generic INSERT OR REPLACE, aligning by column name.
+
+        A table with a `stored_at` column (insider_tx, S54) records when each row first arrived: rows without
+        one get now (UTC), and a row that is already there keeps its first stored_at when it is replaced, so a
+        later re-fetch or the quarterly bulk load cannot make an old filing look new. A row stored before the
+        column existed (stored_at NULL) takes its own old fetched_at (local PT, the parse time it was first
+        written with), not now: the replace rewrites fetched_at, and that is the only trace of when it arrived."""
         if df.empty:
             return 0
         cols = [r[0] for r in self.con.execute(f"DESCRIBE {table}").fetchall()]
         for c in cols:
             if c not in df.columns:
                 df[c] = None
+        sel = "SELECT * FROM _gen_in"
+        if "stored_at" in cols:
+            df["stored_at"] = pd.to_datetime(df["stored_at"], utc=True).fillna(pd.Timestamp.now(tz="UTC"))
+            pk = self.primary_key(table)
+            first = "coalesce(o.stored_at, timezone('America/Los_Angeles', o.fetched_at))" if "fetched_at" in cols else "o.stored_at"
+            keep = f'CASE WHEN o."{pk[0]}" IS NULL THEN g.stored_at ELSE {first} END'    # a key column: NULL = new row
+            pick = [keep if c == "stored_at" else f'g."{c}"' for c in cols]
+            on = [f'o."{k}" = g."{k}"' for k in pk]
+            sel = f"SELECT {', '.join(pick)} FROM _gen_in g LEFT JOIN {table} o ON {' AND '.join(on)}"
         self.con.register("_gen_in", df[cols])
-        self.con.execute(f'INSERT OR REPLACE INTO {table} SELECT * FROM _gen_in')
+        self.con.execute(f'INSERT OR REPLACE INTO {table} {sel}')
         self.con.unregister("_gen_in")
         return len(df)
+
+    def primary_key(self, table: str) -> list[str]:
+        row = self.con.execute("SELECT constraint_column_names FROM duckdb_constraints() "
+                               "WHERE table_name = ? AND constraint_type = 'PRIMARY KEY'", [table]).fetchone()
+        if not row:
+            raise ValueError(f"{table} has no primary key: a first stored_at cannot be kept")
+        return list(row[0])
 
     def _listing_count(self, name: str) -> int:
         return self.con.execute(f"SELECT count(*) FROM {name}").fetchone()[0]

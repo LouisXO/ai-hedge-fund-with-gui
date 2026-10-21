@@ -106,3 +106,48 @@ def test_base_book_dsr_reads_the_nav_and_panel_and_renders(tmp_path):
     text = render(holm([{"variant": "base", "report": "r.json", "t": 1.46, "alpha2_ann_pct": 8.1, "n_trades": 10}]), d)
     assert "PSR(0) = " in text and "DSR range " in text and "Not computed" not in text
     assert "latest restatement" in text                            # the ledger row and this NAV are different sources
+
+
+# ---- S54: S53's top-level book, the S27 re-run, and the hand-kept rows (signal-level tests, measurements) ----
+def test_s53_top_level_book_and_the_s27_rerun_are_counted_once(tmp_path):
+    _write(tmp_path, "s53_fpi_backtest_2026-10-14.json", {"v1": _book(1.15, 1541), "fpi": _book(0.72, 1600), "meta": {"x": 1}})
+    _write(tmp_path, "s27_exec_cost_2026-09-24.json", {"books": {"long_measured_0.61pct": _book(0.65, 1417)}})
+    _write(tmp_path, "s27_exec_cost_2026-10-06.json", {"books": {"long_half_spread": _book(1.24, 1523),
+                                                                 "long_measured_0.59pct": _book(0.43, 1517),
+                                                                 "insider_half_spread": _book(2.04, 6745),
+                                                                 "insider_measured_1.04pct": _book(-12.09, 6745)}})
+    rows = {r["variant"]: r for r in collect(str(tmp_path))}
+    assert rows["composite_long_fpi"]["t"] == 0.72 and "v1" not in rows                 # S53a's restated base is +0
+    assert rows["long_measured_cost"]["report"] == "s27_exec_cost_2026-10-06.json"      # the re-run replaces 0.61%
+    assert rows["insider_measured_cost"]["t"] == -12.09
+    assert rows["base"]["n_trades"] == 1523 and rows["insider_v1_5d"]["n_trades"] == 6745  # the books themselves, re-run
+    assert "long_half_spread" not in rows and "insider_half_spread" not in rows
+
+
+def test_extra_rows_are_listed_apart_and_counted_in_the_trial_total(tmp_path):
+    from hedge_fund.validation.family_log import extra_rows, trial_total
+    (tmp_path / "family_log_extra.yaml").write_text(
+        "rows:\n"
+        "  - {variant: s32_unusual_options, family: signal, session: S32, n_trials: 2, best_t: -2.3, source: 'L542'}\n"
+        "  - {variant: s54_insider_all_event_sprt, family: measurement, session: S54, n_trials: 1, best_t: null, source: 'L1051'}\n")
+    _write(tmp_path, "s21_13d_2026-09-22.json", {"books": {"sch13d_h5": _book(-0.46, 300)}})
+    rows, extra = holm(collect(str(tmp_path))), extra_rows(str(tmp_path))
+    assert [r["variant"] for r in rows] == ["sch13d_h5"] and rows[0]["p_holm"] == rows[0]["p_raw"]   # Holm over books only
+    s32 = extra[0]
+    assert s32["p_group"] == pytest.approx(min(1.0, 2 * s32["p_raw"])) and "p_raw" not in extra[1]
+    assert trial_total(rows, extra) == 1 + 2 + 1
+    text = render(rows, None, "no panel", extra)
+    assert "## Signal-level trials (2 in 1 tests" in text and "| s54_insider_all_event_sprt | S54 | — | L1051 |" in text
+    assert "**Trial total: 4** = 1 book rows + 2 signal-level trials + 1 measurement(s)." in text
+
+
+def test_the_repository_ledger_has_the_s54_rows():
+    import os
+    from hedge_fund.validation.family_log import REPORTS, extra_rows
+    extra = {r["variant"]: r for r in extra_rows(REPORTS)}
+    assert extra["s54_insider_all_event_sprt"]["family"] == "measurement" and extra["s54_insider_all_event_sprt"]["best_t"] is None
+    assert all(r.get("source", "").startswith("AGENT_PLAN.md L") for r in extra.values())
+    lines = [json.loads(l) for l in open(os.path.join(REPORTS, "family_log.jsonl"))]
+    assert "composite_long_fpi" in {r["variant"] for r in lines}
+    assert all("p_holm" in r and "family" not in r for r in lines)       # the Holm family only: its lines are counted as variants
+    assert "| s54_insider_all_event_sprt | S54 |" in open(os.path.join(REPORTS, "family_log.md")).read()

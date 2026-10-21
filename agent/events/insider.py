@@ -20,8 +20,9 @@ class InsiderBuys(EventLine):
                     adv_floor=ADV_FLOOR, adv_ceiling=ADV_CEILING,
                     hypothesis="clustered or large open-market insider purchases are followed by a 1-5 day drift")
 
-    def events(self, store: PanelStore, start: str, end: str) -> pd.DataFrame:
-        f = insider_flows(store, start)
+    def events(self, store: PanelStore, start: str, end: str, tx_filter: tuple[str, list] | None = None) -> pd.DataFrame:
+        """tx_filter: only the Form 4 rows it keeps (books.data.insider_flows); None = all, as the backtest."""
+        f = insider_flows(store, start, tx_filter)
         f = f[(f["n_buyers"] >= 2) | (f["buy_usd"] >= BIG_USD)]
         out = pd.DataFrame({"date": pd.to_datetime(f["date"]), "ticker": f["ticker"], "side": "L",
                             "strength": f["buy_usd"].astype(float),

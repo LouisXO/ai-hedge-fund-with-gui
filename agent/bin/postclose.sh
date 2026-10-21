@@ -10,6 +10,7 @@
 #   2b. moomoo_shares              share counts from moomoo quote snapshots for flagged names + long top 60 (S47b)
 #   3. agent.watch                 watchlist alerts (runs again at 16:10 for evening filings; deduped)
 #   4a. agent.auction_basis        auction-basis NAV + missed-trade shadow (S27b)
+#   4b. factor ETFs, drift, evaluate, insider shadow (S54): records only, nothing here reaches a book
 #   4. agent.review                today's review page + lessons + notification
 #   5. private_index               front page
 #   6. public site publish (hedge-fund.louisleng.com, paper page with today's close)
@@ -36,9 +37,13 @@ if [ -f agent/dividends.py ]; then   # S48 package C; the guard lets this script
   $PY -W ignore -m agent.dividends >> "$LOG" 2>&1 || echo "dividends failed (non-fatal)" >> "$LOG"
 fi
 $PY -W ignore -m agent.shadow_v2 >> "$LOG" 2>&1 || echo "shadow v2 failed (non-fatal)" >> "$LOG"            # S44: six shadow lines replayed on the recorded lists
-$PY -W ignore -m agent.drift >> "$LOG" 2>&1 || echo "drift monitor failed (non-fatal)" >> "$LOG"                # paper vs rule replay vs backtest range
+$PY -W ignore -m agent.backfill factors >> "$LOG" 2>&1 || echo "factor ETF update failed (non-fatal)" >> "$LOG"    # S54: MTUM/VLUE/QUAL/USMV/... for the long alarm (yfinance, off the order path)
+$PY -W ignore -m agent.drift >> "$LOG" 2>&1 || echo "drift monitor failed (non-fatal)" >> "$LOG"                # paper vs rule replay vs backtest range; S54 long alarm
 if [ -f agent/evaluate.py ]; then    # S48 package C (frozen evaluation metrics); guarded like dividends
   $PY -W ignore -m agent.evaluate >> "$LOG" 2>&1 || echo "evaluate failed (non-fatal)" >> "$LOG"
+fi
+if [ -f agent/insider_shadow.py ]; then   # S54: every v1 event, E1/E5c/E6o/E10, SPRT on E1 (record only); guarded like evaluate
+  $PY -W ignore -m agent.insider_shadow >> "$LOG" 2>&1 || echo "insider shadow failed (non-fatal)" >> "$LOG"
 fi
 $PY -W ignore -m agent.attribution >> "$LOG" 2>&1 || echo "attribution failed (non-fatal)" >> "$LOG"           # week to date; one row per week in attribution.jsonl
 $PY -W ignore -m agent.review >> "$LOG" 2>&1 || echo "review failed (non-fatal)" >> "$LOG"

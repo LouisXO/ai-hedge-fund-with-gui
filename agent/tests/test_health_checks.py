@@ -287,3 +287,31 @@ def test_list_writers(tmp_path):
     assert (r["level"], r["detail"]) == ("ok", "最近 10 个交易日的 10 天名单都由 16:10 下单任务写入")
     r = health.check_list_writers(dt.datetime(2026, 12, 1, 17, 0), db)
     assert (r["level"], r["detail"]) == ("warn", "最近 10 个交易日没有长线名单")
+
+
+def _shadow(tmp_path, **kw):
+    rep = {"generated_at": "2026-10-22T13:31:00", "first_event_day": "2026-10-21", "n_events": 14, "n_with_E1": 9,
+           "sprt": {"n": 9, "mean_pct": 0.31, "lower_pct": -22.56, "upper_pct": 40.53, "decision": "none", "decided": None},
+           "exit_readings": {"due": "2027-06-30", "status": "hidden until 2027-06-30"}, "error": None, **kw}
+    p = tmp_path / "insider_shadow.json"
+    p.write_text(json.dumps(rep))
+    return str(p)
+
+
+def test_insider_shadow_report(tmp_path):
+    thu_eve = dt.datetime(2026, 10, 22, 17, 0)
+    r = health.check_insider_shadow(thu_eve, str(tmp_path / "missing.json"))
+    assert r["level"] == "warn" and "还没有" in r["detail"]
+    r = health.check_insider_shadow(dt.datetime(2026, 10, 21, 16, 30), str(tmp_path / "missing.json"))   # deployed, not run yet
+    assert r["level"] == "ok" and "第一次运行在 10-22 13:25" in r["detail"]
+    r = health.check_insider_shadow(thu_eve, _shadow(tmp_path))
+    assert r["level"] == "ok" and "14 个事件(有 E1 的 9)" in r["detail"] and "SPRT 未越线" in r["detail"]
+    assert "2027-06-30 之前不看" in r["detail"]
+    r = health.check_insider_shadow(dt.datetime(2026, 10, 23, 17, 0), _shadow(tmp_path))      # Friday: Thursday's report
+    assert r["level"] == "warn" and "10-23 的没有写" in r["detail"]
+    r = health.check_insider_shadow(thu_eve, _shadow(tmp_path, error="RuntimeError: panel locked", error_at="2026-10-22T13:40"))
+    assert r["level"] == "warn" and "上次运行失败" in r["detail"] and "panel locked" in r["detail"]
+    dec = {"decision": "H0", "n": 830, "entry_day": "2027-09-14", "truncated": False}
+    r = health.check_insider_shadow(thu_eve, _shadow(tmp_path, sprt={"n": 830, "mean_pct": -0.11, "lower_pct": -0.11,
+                                                                      "upper_pct": 0.57, "decision": "H0", "decided": dec}))
+    assert r["level"] == "ok" and '判"无"(第 830 个事件,2027-09-14)' in r["detail"]

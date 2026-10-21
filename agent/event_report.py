@@ -34,6 +34,25 @@ def forward_from_open(market, h: int) -> pd.DataFrame:
     return (market.adj.shift(-h) / market.adj_open.shift(-1) - 1) * 100
 
 
+def index_adj_open(store: PanelStore, symbol: str, index: pd.DatetimeIndex) -> pd.Series:
+    """An index_daily symbol's open on the adjusted scale (open x adj_close / close), on the market's days."""
+    df = store.con.execute("SELECT trade_date, open, close, adj_close FROM index_daily WHERE symbol = ? ORDER BY 1", [symbol]).df()
+    s = pd.Series((df["open"] * df["adj_close"] / df["close"]).to_numpy(), index=pd.to_datetime(df["trade_date"]))
+    return s.reindex(index).ffill()
+
+
+def windows(market, spy_open: pd.Series, h: int) -> tuple[pd.DataFrame, pd.Series]:
+    """(stocks, SPY) % returns over the SAME window: the open of D+1 to the close of D+h.
+
+    S54 (2026-10-20): until then SPY was spy(D+h) / spy(D+1) - 1, from the close of D+1, so at h = 1 the benchmark
+    was identically 0 (the h1 "abnormal" return was the raw open-to-close return) and for h > 1 the stock had one
+    more session than SPY. The twelve reports written that way (s22_pead_small, s23_insider_*, s25_move_*,
+    s34_buyback_clean; 2026-09-22/23) are not rerun and their verdicts stand; as registration S54 item 3 says, each
+    carries a dated note under its title (2026-10-21), and every report written from now on states the window in its
+    header. s21_13d.py, s11_insider_wide.py and s13_real_spreads.py have their own copy of the old window."""
+    return forward_from_open(market, h), (market.spy.shift(-h) / spy_open.shift(-1) - 1) * 100
+
+
 def run(line_name: str, tag: str, start: str, end: str, holds: tuple[int, ...], exec_frac: float,
         extra_lines: dict | None = None) -> str:
     line = LINES[line_name]
@@ -42,6 +61,7 @@ def run(line_name: str, tag: str, start: str, end: str, holds: tuple[int, ...], 
         ev = line.events(store, start, end)
         ins = LINES["insider_buy"].events(store, start, end)
         extra_ev = {k: v.events(store, start, end) for k, v in (extra_lines or {}).items()}
+        spy_open = index_adj_open(store, "SPY", market.adj.index)
     tradable = market.tradable(line.spec.adv_floor, line.spec.adv_ceiling)
     ev = ev[ev["ticker"].isin(tradable.columns)]
     ev["tradable"] = [bool(tradable.at[d, t]) if d in tradable.index else False for d, t in zip(ev["date"], ev["ticker"])]
@@ -49,10 +69,9 @@ def run(line_name: str, tag: str, start: str, end: str, holds: tuple[int, ...], 
     ok["bucket"] = [market.bucket(t, d) for d, t in zip(ok["date"], ok["ticker"])]
     print(f"{line_name}: {len(ev)} events with bars, {len(ok)} tradable; {ok['bucket'].value_counts().to_dict()}", flush=True)
 
-    spy = market.spy
     stats = {}
     for h in HORIZONS:
-        fwd, mkt = forward_from_open(market, h), (spy.shift(-h) / spy.shift(-1) - 1) * 100
+        fwd, mkt = windows(market, spy_open, h)
         stats[f"all_h{h}"] = event_stats(ok, fwd, mkt, h, f"{line_name} all h{h}")
         for b, g in ok.groupby("bucket"):
             stats[f"{b}_h{h}"] = event_stats(g, fwd, mkt, h, f"{line_name} {b} h{h}")
@@ -60,7 +79,7 @@ def run(line_name: str, tag: str, start: str, end: str, holds: tuple[int, ...], 
     idx = market.adj.index
     pos = idx.searchsorted(sh["date"].to_numpy())
     sh["date"] = [idx[min(p + 60, len(idx) - 1)] for p in pos]
-    stats["placebo_shift60_h20"] = event_stats(sh, forward_from_open(market, 20), (spy.shift(-20) / spy.shift(-1) - 1) * 100, 20, "placebo +60d h20")
+    stats["placebo_shift60_h20"] = event_stats(sh, *windows(market, spy_open, 20), 20, "placebo +60d h20")
 
     books = {}
     tg = line.targets(market, ev, start, end)
@@ -82,7 +101,8 @@ def run(line_name: str, tag: str, start: str, end: str, holds: tuple[int, ...], 
     L = [f"# {tag.upper()} — {line_name} as a short-term event line ({stamp})", "",
          f"Hypothesis: {line.spec.hypothesis}.", "",
          f"{start} → {end}, {len(ok)} tradable events (ADV ${line.spec.adv_floor/1e6:.0f}M–${line.spec.adv_ceiling/1e6:.0f}M), "
-         "entry at the open after the event date, abnormal = minus SPY, clustered by event date.", "",
+         "entry at the open after the event date, abnormal = minus SPY over the same window (open D+1 to the exit close; "
+         "reports before 2026-10-20 started SPY at the close of D+1), clustered by event date.", "",
          "| cut | h | events | dates | mean abn % | median | NW t | boot CI95 | hit | years>0 | 1st half | 2nd half |",
          "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for s in stats.values():
