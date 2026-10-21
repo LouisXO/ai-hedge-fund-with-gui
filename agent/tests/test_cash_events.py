@@ -430,8 +430,9 @@ def test_auction_basis_reports_a_failed_fetch_as_its_dividend_error(monkeypatch,
     monkeypatch.setattr(auction_basis, "PanelStore", Store)
     monkeypatch.setattr(dividends, "fetch_alpaca", lambda *a: (_ for _ in ()).throw(RuntimeError("HTTP 500")))
     lot(con, "long", "X", 1, D(2026, 9, 22))
-    rows, err = auction_basis.soft_dividends(con)
-    assert err == "corporate actions fetch failed, cache kept: RuntimeError: HTTP 500" and rows.empty
+    rows, info = auction_basis.soft_dividends(con)
+    assert info["error"] == "corporate actions fetch failed, cache kept: RuntimeError: HTTP 500" and rows.empty
+    assert info["status"] == "cache" and info["known_before"] is None                 # the cache counts for every day
 
 
 def test_factor_steps_no_action_explains_are_listed_to_check_never_counted():
@@ -603,3 +604,30 @@ def test_health_warns_on_a_booked_activity_the_broker_canceled(tmp_path):
     r = health.check_cash_events(dt.datetime(2026, 10, 20, 17, 0), str(out), db, str(tmp_path / "ab.json"))
     assert r["level"] == "warn" and "1 笔已入账的流水被券商撤销" in r["detail"] and "MRP DIV 2026-10-15 $55.30" in r["detail"]
     assert "2026-10-16" not in r["detail"]                                    # never booked: nothing to undo
+
+
+def test_health_names_what_a_failed_dividends_update_used_and_a_missing_newest_total_return_is_bad(tmp_path):
+    # 2026-10-21: the old line read "from the cached corporate actions" while every div_cum had been written as 0
+    db = str(tmp_path / "h.db")
+    _sql(db, ledger.ensure_schema)
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "sync_2026-10-21.json").write_text(json.dumps({"generated_at": "2026-10-21T13:31:00", "cash_events":
+                                                          {"booked": [], "unallocated": [], "unhandled": [], "unhandled_error": None}}))
+    ab = tmp_path / "ab.json"
+
+    def check(dv, long_tr=100.0):
+        ab.write_text(json.dumps({"dividends": dv, "books": {"long": {"as_of": "2026-10-21", "equity_auction_tr": long_tr}}}))
+        return health.check_cash_events(dt.datetime(2026, 10, 21, 14, 0), str(out), db, str(ab))
+    r = check({"status": "fallback", "error": "dividends update failed (RuntimeError: x); fell back ...",
+               "computed_at": "2026-10-20T13:34:33", "tr_unknown_days": {}})
+    assert r["level"] == "warn" and "分红更新失败,用的是 2026-10-20 13:34 存下的结果" in r["detail"] and "缓存" not in r["detail"]
+    r = check({"status": "fallback", "error": "e", "computed_at": "2026-10-20T13:34:33", "tr_unknown_days": {"long": ["2026-10-21"]}},
+              long_tr=None)
+    assert r["level"] == "bad" and "这些天的含分红竞价净值没算(分红不知道):long 2026-10-21" in r["detail"]
+    assert "最新一天的含分红竞价净值没算,长线冻结基准报警和评估这一天都不算:long 2026-10-21" in r["detail"]
+    r = check({"status": "unknown", "error": "e", "computed_at": None, "tr_unknown_days": {}})
+    assert r["level"] == "warn" and "存下的结果也用不了" in r["detail"] and "不按 0 计" in r["detail"]
+    r = check({"status": "cache", "error": "corporate actions fetch failed, cache kept: HTTP 500", "tr_unknown_days": {}})
+    assert r["level"] == "warn" and "分红数据有问题(按缓存的公司行动计算)" in r["detail"]
+    assert check({"status": "ok", "error": None, "tr_unknown_days": {}})["level"] == "ok"

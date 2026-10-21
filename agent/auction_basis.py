@@ -31,6 +31,12 @@ by roughly 4–5% a year. Two corrections, both from the free Alpaca auctions da
      restates agent_book_nav (cash_events) leaves every equity_auction as it was. The json also
      compares the broker's fees with the model's and the dividends received with those entitled,
      listing the entitled ones past their pay date that the broker has not paid.
+     Unknown dividends are never $0 (2026-10-21, S54 investigation; before, a failed dividends.update
+     rewrote every row with div_cum 0, so equity_auction_tr fell to the price NAV for the whole history):
+     when the update fails, the rows it last stored (agent_dividends, rebuilt in one transaction) count
+     for the days before the day they were computed; a later day keeps the div_cum a run with known
+     dividends stored for it, else div_cum and equity_auction_tr are NULL. The json says which
+     (dividends.status, tr_unknown_days); agent.drift, agent.evaluate and agent.health read NULL as unknown.
 
 Missed trades that the book bought anyway: an unfilled insider entry whose ticker the book filled
 within RETRY_DAYS afterwards (the S36b retry) is marked retried_filled and left out of the missed
@@ -102,23 +108,30 @@ def fees_by_day(fills: pd.DataFrame) -> dict[tuple[str, dt.date], float]:
     return out
 
 
-def nav_rows(nav: pd.DataFrame, fills: pd.DataFrame, fees: dict, div: pd.DataFrame, cash: pd.DataFrame | None = None) -> list[list]:
+def nav_rows(nav: pd.DataFrame, fills: pd.DataFrame, fees: dict, div: pd.DataFrame, cash: pd.DataFrame | None = None,
+             known_before: dt.date | None = None, stored: dict | None = None) -> list[list]:
     """One agent_auction_nav row per (day, book) of agent_book_nav, in NAV_COLS order.
 
     cash: the booked broker DIV / FEE rows (cash_events.load). equity_sim holds them from their cash_day on, so the
     auction basis takes the DIV cash out (div_cum counts the dividend on its ex-date) and the broker's fees back in
-    (fees_cum is the model): equity_auction = equity_sim - div_cash_cum + fee_cash_cum + adj_cum - fees_cum."""
+    (fees_cum is the model): equity_auction = equity_sim - div_cash_cum + fee_cash_cum + adj_cum - fees_cum.
+    known_before (soft_dividends): `div` counts the dividends of the days before it only (None: every day); a later
+    day takes its stored div_cum ({(day, book): div_cum} of the rows a run with known dividends wrote), else div_cum
+    and equity_auction_tr are None: unknown, never $0."""
     rows = []
     for (d, book), g in nav.groupby(["as_of", "book"]):
         f = fills[(fills["book"] == book) & (fills["d"] <= d)] if len(fills) else fills
         adj = float(f["adj"].sum()) if len(f) else 0.0
         fee = float(sum(v for (b, fd), v in fees.items() if b == book and fd <= d))
-        dv = dividends.cumulative(div, [d], book)[d] if len(div) else 0.0
+        if known_before is None or d < known_before:
+            dv = dividends.cumulative(div, [d], book)[d] if len(div) else 0.0
+        else:
+            dv = (stored or {}).get((d, book))
         div_cash = cash_events.cumulative(cash, d, book, "DIV")
         fee_cash = 0.0 - cash_events.cumulative(cash, d, book, "FEE")      # 0.0 - x: no -0.0 in the table
         sim = float(g["equity_usd"].iloc[0])
         auc = sim - div_cash + fee_cash + adj - fee
-        rows.append([d, book, sim, adj, auc, int(len(f)), fee, dv, auc + dv, div_cash, fee_cash])
+        rows.append([d, book, sim, adj, auc, int(len(f)), fee, dv, None if dv is None else auc + dv, div_cash, fee_cash])
     return rows
 
 
@@ -171,22 +184,70 @@ def cross_prices(pairs: set[tuple[str, dt.date]]) -> dict[tuple[str, dt.date], f
 DIV_COLS = dividends.DIV_COLS
 
 
-def soft_dividends(con) -> tuple[pd.DataFrame, str | None]:
-    """dividends.update, but a failure there does not stop the auction basis: the price NAV, the missed-trade
-    shadow and auction_basis.json are still written (div_cum 0 for the day; postclose also runs agent.dividends
-    on its own). A failed corporate-actions fetch does not fail the update (the cache is kept) and is returned as
-    the error too. Returns (rows, error text or None)."""
+def soft_dividends(con) -> tuple[pd.DataFrame, dict]:
+    """dividends.update, but a failure there does not stop the auction basis (the price NAV, the missed-trade shadow
+    and auction_basis.json are still written), and dividends it could not establish are never counted as $0.
+
+    Returns (rows, info); info["status"] is
+      ok        the update ran
+      cache     it ran, but the corporate-actions fetch failed and the cached actions were used (the cache is kept)
+      fallback  it failed (stored_dividends): the rows the last successful update stored, computed at info["computed_at"]
+      unknown   it failed and no stored rows can be used
+    info["error"] is the text for the json (None when ok); info["known_before"] is nav_rows' argument: None, every day
+    from these rows."""
     try:
         with PanelStore(read_only=True) as store:
             rows = dividends.update(con, store)
     except Exception as e:                        # noqa: BLE001 — reported in the json and on stdout
-        msg = f"{type(e).__name__}: {e}"
-        print(f"dividends skipped ({msg}); NAV written without them")
-        return pd.DataFrame(columns=DIV_COLS), msg
+        return stored_dividends(con, f"{type(e).__name__}: {e}")
     fe = rows.attrs.get("fetch_error")
     if fe:
         print(f"corporate actions not fetched ({fe}); dividends from the cached ones")
-    return rows, (f"corporate actions fetch failed, cache kept: {fe}" if fe else None)
+    return rows, {"status": "cache" if fe else "ok", "error": f"corporate actions fetch failed, cache kept: {fe}" if fe else None,
+                  "computed_at": None, "known_before": None}
+
+
+def stored_dividends(con, msg: str) -> tuple[pd.DataFrame, dict]:
+    """soft_dividends once dividends.update has failed with `msg`: agent_dividends as the last successful update left it
+    (it rebuilds the table in one transaction, so a failure never leaves it half written). Those rows count every
+    ex-date up to the last NAV session before the day they were computed, so they are used for the days before that day
+    (known_before); a later day keeps the div_cum a run with known dividends stored for it, else it is unknown. Rows
+    that cannot be read, or an empty table while paper lots exist (no date to trust it to), leave every day to its
+    stored div_cum (status unknown); with no paper lot nothing is owed and $0 is known."""
+    empty = pd.DataFrame(columns=DIV_COLS)
+    why = None
+    try:
+        rows = con.execute("SELECT * FROM agent_dividends").df().reindex(columns=DIV_COLS)
+        at = pd.Timestamp(rows["computed_at"].min()) if len(rows) else None
+    except Exception as e:                        # noqa: BLE001 — named in the error text
+        rows, at, why = empty, None, f"{type(e).__name__}: {str(e)[:120]}"
+    if at is not None and not pd.isna(at):
+        err = (f"dividends update failed ({msg}); fell back to the rows stored at {at:%Y-%m-%d %H:%M} (ex-dates through the "
+               f"session before {at.date()}; a later day keeps its stored div_cum or is left unknown)")
+        print(err)
+        return rows, {"status": "fallback", "error": err, "computed_at": at.isoformat(timespec="seconds"), "known_before": at.date()}
+    try:
+        no_lots = why is None and dividends.paper_lots(con).empty
+    except Exception:                             # noqa: BLE001 — lots unknown: they may be owed something
+        no_lots = False
+    if no_lots:
+        err = f"dividends update failed ({msg}); no paper lot, so no dividend is owed"
+        print(err)
+        return empty, {"status": "fallback", "error": err, "computed_at": None, "known_before": None}
+    err = (f"dividends update failed ({msg}); no stored rows to fall back on ({why or 'agent_dividends is empty'}): "
+           "every day keeps its stored div_cum, a day without one is left unknown (NULL), never $0")
+    print(err)
+    return empty, {"status": "unknown", "error": err, "computed_at": None, "known_before": dt.date.min}
+
+
+def stored_div_cum(con) -> dict[tuple[dt.date, str], float]:
+    """{(day, book): div_cum} of the agent_auction_nav rows that have one (a run with known dividends wrote it); {} when
+    unreadable, so a day the dividends do not cover is then unknown."""
+    try:
+        got = con.execute("SELECT as_of, book, div_cum FROM agent_auction_nav WHERE div_cum IS NOT NULL").fetchall()
+    except Exception:                             # noqa: BLE001
+        return {}
+    return {(pd.Timestamp(d).date(), b): float(v) for d, b, v in got}
 
 
 def broker_vs_model(div: pd.DataFrame, cash: pd.DataFrame, fees: dict, today: dt.date) -> tuple[dict, dict]:
@@ -227,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     con = ledger.connect(args.db)
     try:
         ensure_table(con)
-        div, div_error = soft_dividends(con)
+        div, dinfo = soft_dividends(con)
         cash = cash_events.load(con)
         fills = con.execute("""SELECT client_order_id, book, ticker, side, filled_qty, filled_avg_px, CAST(filled_at AS DATE) d, reason,
                                       order_type, limit_price
@@ -271,7 +332,8 @@ def main(argv: list[str] | None = None) -> int:
         fills["gap_pct"] = [None if (gf or not c) else ((px / c - 1) * 100 * (1 if s == "buy" else -1))
                             for s, px, c, gf in zip(fills["side"], fills["filled_avg_px"], fills["cross"], fills["gap_fill"])]
         fees = fees_by_day(fills) if len(fills) else {}
-        rows = nav_rows(nav, fills, fees, div, cash)
+        stored = stored_div_cum(con) if dinfo["known_before"] is not None else None    # read before the rows are replaced
+        rows = nav_rows(nav, fills, fees, div, cash, dinfo["known_before"], stored)
         if rows:
             con.executemany(f"INSERT OR REPLACE INTO agent_auction_nav ({', '.join(NAV_COLS)}) VALUES ({', '.join('?' * len(NAV_COLS))})", rows)
     finally:
@@ -302,6 +364,10 @@ def main(argv: list[str] | None = None) -> int:
         del by_book[b]["book"]
     g = fills["gap_pct"].dropna()
     fee_cmp, div_cmp = broker_vs_model(div, cash, fees, dt.date.today())
+    tr_at = NAV_COLS.index("equity_auction_tr")
+    tr_unknown = {b: [str(r[0]) for r in rows if r[1] == b and r[tr_at] is None] for b in sorted({r[1] for r in rows})}
+    tr_unknown = {b: v for b, v in tr_unknown.items() if v}                   # the days left NULL, per book
+    known = dinfo["status"] != "unknown"
     out = {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "books": by_book,
            "fills": {"n": int(len(fills)), "with_cross": int(fills["cross"].notna().sum()) if len(fills) else 0,
                      "n_gap_fills": int(fills["gap_fill"].sum()) if len(fills) else 0,
@@ -314,9 +380,10 @@ def main(argv: list[str] | None = None) -> int:
            "missed": miss_rows,
            "fees": {"sec_rate": SEC_RATE, "taf_per_share": TAF_PER_SHARE, "taf_cap": TAF_CAP, "cat_per_share": CAT_PER_SHARE,
                     "total": float(sum(fees.values())) if fees else 0.0, **fee_cmp},
-           "dividends": {"n": int((div["kind"] == "dividend").sum()) if len(div) else 0,
-                         "usd": float(div.loc[div["kind"] == "dividend", "usd"].sum()) if len(div) else 0.0,
-                         "to_check": div.attrs.get("to_check") or [], "error": div_error,
+           "dividends": {"n": (int((div["kind"] == "dividend").sum()) if len(div) else 0) if known else None,
+                         "usd": (float(div.loc[div["kind"] == "dividend", "usd"].sum()) if len(div) else 0.0) if known else None,
+                         "to_check": div.attrs.get("to_check") or [], "error": dinfo["error"], "status": dinfo["status"],
+                         "computed_at": dinfo["computed_at"], "tr_unknown_days": tr_unknown,
                          "fetch_error": div.attrs.get("fetch_error"), "factor_error": div.attrs.get("factor_error"), **div_cmp},
            "missed_summary": {"n": len(miss_rows) - sum(m["retried_filled"] for m in miss_rows), "closed": len(closed),
                               "n_retried_filled": sum(m["retried_filled"] for m in miss_rows),
@@ -327,9 +394,12 @@ def main(argv: list[str] | None = None) -> int:
     with open(args.out, "w") as f:
         json.dump(out, f, ensure_ascii=False, indent=1, default=str)
     for b, v in by_book.items():
+        tr = (f"  + dividends {v['div_cum']:,.2f} = ${v['equity_auction_tr']:,.0f}" if v["div_cum"] is not None
+              else "  + dividends unknown: with-dividends NAV not written")
         print(f"{b:8s} sim ${v['equity_sim']:,.0f} (broker DIV {v['div_cash_cum']:,.2f}, FEE {v['fee_cash_cum']:,.2f})  auction "
-              f"${v['equity_auction']:,.0f}  (adj {v['adj_cum']:+,.0f}, fees {v['fees_cum']:,.2f}, {v['n_fills']} fills)"
-              f"  + dividends {v['div_cum']:,.2f} = ${v['equity_auction_tr']:,.0f}")
+              f"${v['equity_auction']:,.0f}  (adj {v['adj_cum']:+,.0f}, fees {v['fees_cum']:,.2f}, {v['n_fills']} fills){tr}")
+    if tr_unknown:
+        print("with-dividends NAV left unknown (NULL):", tr_unknown)
     print("fills vs cross:", out["fills"])
     print("missed:", out["missed_summary"])
     return 0

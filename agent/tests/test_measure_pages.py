@@ -36,6 +36,9 @@ def test_cards_fall_back_to_the_simulator_basis_and_say_so():
     base["books"]["long"]["ret"]["auction_tr"] = None
     html = dashboard.book_cards(base, {"long": 0})
     assert "竞价口径暂缺" in html and f">{base['books']['long']['ret']['sim_tr']:+.2f}%<" in html
+    base["books"]["long"]["ret"]["sim_tr"] = None                     # dividends unknown (2026-10-21): no card crashes on None
+    html = dashboard.book_cards(base, {"long": 0})
+    assert "分红不知道" in html and f">{base['books']['long']['ret']['sim']:+.2f}%<" in html
 
 
 def test_paper_block_carries_spy_and_qqq_from_the_first_start():

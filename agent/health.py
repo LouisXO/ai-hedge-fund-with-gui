@@ -27,6 +27,9 @@ past its pay date and a failed corporate-actions fetch warn.
 without an error (check_insider_shadow: warn, never bad: no book reads it), and the factor ETFs the long alarm needs
 must be fresh (DATA); the long alarm itself is a drift check (agent/drift.py).
 
+2026-10-21 (S54 investigation): a failed dividends update is named as what auction_basis used instead, and a newest
+auction row without its with-dividends NAV is bad (check_cash_events): unknown dividends are never $0 any more.
+
 Usage: python -m agent.health [--no-notify] [--no-llm-probe]
 """
 from __future__ import annotations
@@ -482,7 +485,12 @@ def check_cash_events(now: dt.datetime, out_dir: str = f"{OUT}/agent", db: str =
     other than executed / canceled) is bad, since the books' cash then differs from the broker's; an activity type
     nothing handles, a booked activity the broker has since canceled, or a sync that failed, warns. From the ledger (read-only): an entitled dividend more than UNPAID_GRACE_DAYS past its pay date with no
     broker DIV of that ticker warns, with names and amounts (a note: the paper broker does not pay every dividend).
-    From auction_basis.json: a corporate-actions fetch that failed warns (the dividends come from the cache)."""
+    From auction_basis.json: a corporate-actions fetch that failed warns (the dividends come from the cache). Since
+    2026-10-21 (dividends.status): a dividends update that failed warns and names what was used instead (the rows stored
+    at <time>, or none: before, it read "from the cache" while every div_cum had been written as 0), with the days whose
+    with-dividends NAV was left unknown; a book whose newest auction row has no equity_auction_tr is bad, since the S54
+    long alarm and the evaluation cannot read that day (the next run whose update succeeds fills it in, so nothing is
+    lost, but the registered alarm skipped a day and the notification should say so)."""
     r = {"name": "券商分红和费用入账", "label": "cash_events", "level": "ok", "detail": ""}
     bad, warn, ok = [], [], []
     name, j = _latest_run_json(out_dir)
@@ -535,9 +543,25 @@ def check_cash_events(now: dt.datetime, out_dir: str = f"{OUT}/agent", db: str =
         lock = "lock" in str(exc).lower()
         warn.append("optradar.db 正在写入,稍后再查" if lock else f"读不出分红和流水:{str(exc)[:60]}")
     a = _load_json(auction or os.path.join(OUT, "agent", "auction_basis.json"))
-    err = ((a or {}).get("dividends") or {}).get("error")
-    if err:
+    dv = (a or {}).get("dividends") or {}
+    err, status = dv.get("error"), dv.get("status")
+    if status == "fallback" and dv.get("computed_at"):
+        warn.append(f"分红更新失败,用的是 {str(dv['computed_at'])[:16].replace('T', ' ')} 存下的结果(之后的除息日要等下次更新成功):"
+                    f"{str(err)[:80]}")
+    elif status == "fallback":
+        warn.append(f"分红更新失败,但模拟盘没有持仓,不欠分红:{str(err)[:80]}")
+    elif status == "unknown":
+        warn.append(f"分红更新失败,存下的结果也用不了:已有的日子保留上次的含分红净值,其余的日子不算(不按 0 计):{str(err)[:80]}")
+    elif err:                                             # status "cache", or a json from before 2026-10-21
         warn.append(f"分红数据有问题(按缓存的公司行动计算):{str(err)[:80]}")
+    gaps = dv.get("tr_unknown_days") or {}
+    if gaps:
+        warn.append("这些天的含分红竞价净值没算(分红不知道):" + ";".join(
+            f"{b} {', '.join(d[-3:])}" + (f" 等 {len(d)} 天" if len(d) > 3 else "") for b, d in sorted(gaps.items())))
+    newest = [(b, v.get("as_of")) for b, v in sorted(((a or {}).get("books") or {}).items())
+              if isinstance(v, dict) and "equity_auction_tr" in v and v["equity_auction_tr"] is None]
+    if newest:
+        bad.append("最新一天的含分红竞价净值没算,长线冻结基准报警和评估这一天都不算:" + "、".join(f"{b} {d}" for b, d in newest))
     if bad or warn:
         r.update(level="bad" if bad else "warn", detail=";".join(bad + warn))
     else:

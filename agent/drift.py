@@ -35,8 +35,14 @@ strategy: (1) an implementation error, (2) execution, (3) the rules not working.
 The replay and the backtest are total return (adjusted prices), so the paper side is the auction
 basis plus the dividends the lots were entitled to (agent_auction_nav.equity_auction_tr, S48).
 The replay's NAV goes into drift.json ("replay") every day, for agent/evaluate.py.
+A day the long book has a NAV row but no equity_auction_tr (dividends unknown, agent/auction_basis.py, or no
+auction row yet) is missing, never filled with the price NAV (until 2026-10-21 it was): the nav, week and
+long-alarm checks that need it warn and are not computed.
 
-Output: out/agent/drift.json, shown by agent.health. Usage: python -m agent.drift [--db PATH] [--out PATH]
+Output: out/agent/drift.json, shown by agent.health, and one line per run appended to long_alarm_log.jsonl
+next to it (ALARM_LOG; never rewritten, so a past alarm reading and its inputs stay reproducible after drift.json
+and agent_auction_nav are rewritten; out/agent is in the daily backup).
+Usage: python -m agent.drift [--db PATH] [--out PATH] [--alarm-log PATH]   (the log defaults to --out's directory)
   python -m agent.drift --build-alarm-thresholds [--panel PATH]   once, at the S54 registration: writes the frozen table
 """
 from __future__ import annotations
@@ -46,6 +52,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import subprocess
 
 import duckdb
 import numpy as np
@@ -59,6 +66,7 @@ from hedge_fund.features.panel import PanelStore
 
 DB = "/Users/louis/optradar/optradar.db"
 OUT = "/Users/louis/optradar/out/agent/drift.json"
+ALARM_LOG = os.path.join(os.path.dirname(OUT), "long_alarm_log.jsonl")   # S54 readings, append only (2026-10-21)
 NAV_REF = "/Users/louis/hedge-fund/site-data/validation/s47_base_nav.csv"   # the long book restated on the corrected data (S47)
 AUCTION = "/Users/louis/optradar/out/agent/auction_basis.json"
 PAPER_START = "2026-09-21"           # the first traded list; fills at the 09-22 open
@@ -72,6 +80,8 @@ GAP_BAD_PCT = 2.0            # far above any 10-fill mean since 2026-09-22 (max 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG = os.path.join(os.path.dirname(__file__), "config.yaml")
 FIT_ZH = {"alpha2_fit": "alpha2 拟合(SPY、IWM−SPY)", "etf_replica": "因子 ETF 复制(+ MTUM/VLUE/QUAL/USMV)"}
+REGRESSORS = ["SPY", "IWM", "MTUM", "VLUE", "QUAL", "USMV"]           # the frozen fits' symbols in index_daily
+TR_GAP = "(agent_auction_nav.equity_auction_tr:分红不知道,或竞价净值还没算)"
 
 
 def chk(name: str, level: str, detail: str, **kw) -> dict:
@@ -175,7 +185,7 @@ def factor_returns(store, open_to_close: bool = False) -> pd.DataFrame:
     """Daily returns of the frozen fits' regressors from index_daily: SPY, and IWM / MTUM / VLUE / QUAL / USMV in excess
     of SPY (the S53a regression's columns, S45 D3's construction). Close to close from adj_close; open_to_close: the
     same day's close / open - 1 (the adjustment factor cancels within a day), for the alarm's first-fill session."""
-    syms = ["SPY", "IWM", "MTUM", "VLUE", "QUAL", "USMV"]
+    syms = REGRESSORS
     px = store.con.execute(f"SELECT symbol, trade_date, open, close, adj_close FROM index_daily "
                            f"WHERE symbol IN ({', '.join('?' * len(syms))})", syms).df()
     if open_to_close:
@@ -240,11 +250,15 @@ def long_alarm(tr: pd.Series, first_fill: dt.date, factors: pd.DataFrame, table:
     """One check per frozen fit: book - fit, compounded over the last min(window, sessions since the first fill) sessions.
 
     tr: the long book's auction-basis NAV with dividends by day (agent_auction_nav.equity_auction_tr), from the close
-    before the first fill. factors: the regressors close to close; oc: open to close (factor_returns). While the window
-    still starts at the first-fill session, that session's fit is open to close (module doc). Each NAV step is compared
-    with the fit compounded over the same sessions, so a day the NAV skipped is not lost. Below the table's threshold
-    for that window length: bad. A regressor missing on a day of the window: warn, nothing compared."""
-    tr = tr.dropna().sort_index()
+    before the first fill: a day without a NAV row is absent, a NaN is a NAV day whose equity_auction_tr is unknown.
+    factors: the regressors close to close; oc: open to close (factor_returns). While the window still starts at the
+    first-fill session, that session's fit is open to close (module doc). Each NAV step is compared with the fit
+    compounded over the same sessions, so a day the NAV skipped is not lost. Below the table's threshold for that window
+    length: bad. A regressor missing on a day of the window, or the NAV unknown on a day of it (its base, the close
+    before its first session, included; 2026-10-21: before, such a day was dropped or took the price NAV): warn, nothing
+    compared. A computed check also carries its window_start, base_day / base_nav, end_day / end_nav and first_session
+    (open_to_close or close_to_close), for the append-only log."""
+    tr = tr.sort_index()
     before = tr.index[tr.index < pd.Timestamp(first_fill)]
     if not len(before):
         return []
@@ -258,7 +272,13 @@ def long_alarm(tr: pd.Series, first_fill: dt.date, factors: pd.DataFrame, table:
     L = min(int(cfg["window"]), len(sess))
     start = sess[-L]
     nav = tr.loc[tr.index[tr.index < start][-1]:]           # from the close before the window's first session
+    if nav.isna().any():                                     # unknown dividends are not the price NAV and not $0
+        gap = [str(d.date()) for d in nav.index[nav.isna()]]
+        return [chk(f"长线冻结基准报警 · {FIT_ZH.get(n, n)}", "warn",
+                    f"竞价口径含分红的净值缺 {', '.join(gap[:3])} 等 {len(gap)} 天{TR_GAP},这一条没算",
+                    fit=n, window=L, window_start=str(start.date()), flagged=None) for n in cfg["fits"]]
     book = nav.to_numpy()[1:] / nav.to_numpy()[:-1] - 1
+    first_session = "open_to_close" if start == sess[0] else "close_to_close"
     out = []
     for name, betas in cfg["fits"].items():
         cname = f"长线冻结基准报警 · {FIT_ZH.get(name, name)}"
@@ -268,7 +288,7 @@ def long_alarm(tr: pd.Series, first_fill: dt.date, factors: pd.DataFrame, table:
         if win.isna().any():
             gap = [str(d.date()) for d in win.index[win.isna()]]
             out.append(chk(cname, "warn", f"因子数据缺 {', '.join(gap[:3])} 等 {len(gap)} 天(index_daily),这一条没算",
-                           fit=name, window=L, flagged=None))
+                           fit=name, window=L, window_start=str(start.date()), flagged=None))
             continue
         fv = np.r_[1.0, (1 + win).cumprod().reindex(nav.index[1:], method="pad").to_numpy()]
         diff = book - (fv[1:] / fv[:-1] - 1)
@@ -282,8 +302,57 @@ def long_alarm(tr: pd.Series, first_fill: dt.date, factors: pd.DataFrame, table:
                        f"最近 {L} 个交易日({start.date()} 起{short}):竞价口径含分红 {bk:+.2f}%,冻结基准 {ft:+.2f}%,"
                        f"逐日差累计 {cum:+.2f}%;门槛 {thr:+.2f}%(回测同长度窗口的第 {float(cfg['percentile']):g} 百分位)"
                        + (";低于门槛:实盘落在回测分布之外,只开数据和实现排查,模拟盘不改" if level == "bad" else ""),
-                       fit=name, window=L, cum_diff_pct=cum, threshold_pct=thr, book_pct=bk, fit_pct=ft, flagged=level == "bad"))
+                       fit=name, window=L, cum_diff_pct=cum, threshold_pct=thr, book_pct=bk, fit_pct=ft, flagged=level == "bad",
+                       window_start=str(start.date()), base_day=str(nav.index[0].date()), base_nav=float(nav.iloc[0]),
+                       end_day=str(nav.index[-1].date()), end_nav=float(nav.iloc[-1]), first_session=first_session))
     return out
+
+
+def index_last(store) -> dict:
+    """{symbol: {'last': last trade_date, 'fetched_at': when that row was written}} of the regressors in index_daily."""
+    got = store.con.execute(f"SELECT symbol, max(trade_date), arg_max(fetched_at, trade_date) FROM index_daily "
+                            f"WHERE symbol IN ({', '.join('?' * len(REGRESSORS))}) GROUP BY 1", REGRESSORS).fetchall()
+    return {s: {"last": str(pd.Timestamp(d).date()), "fetched_at": None if f is None else str(f)} for s, d, f in sorted(got)}
+
+
+def code_commit() -> str | None:
+    """The checked-out commit of this code, best effort (None when git cannot tell)."""
+    try:
+        r = subprocess.run(["git", "-C", ROOT, "rev-parse", "--short=12", "HEAD"], capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() or None
+    except Exception:                                                 # noqa: BLE001 — never fails the run
+        return None
+
+
+def alarm_record(run_at: str, first_fill, auct: pd.DataFrame, alarm: list[dict], dividends: dict | None,
+                 index: dict | None, commit: str | None) -> dict:
+    """One line of the append-only alarm log: the reading per fit and what reproduces it (the window's base and end NAV,
+    div_cum at the end, the first session's mode, the dividends' status, the regressors' last index_daily rows, the code).
+    auct: the long book's rows as main() reads them (one per NAV day, equity_auction_tr NaN where unknown)."""
+    comp = next((c for c in alarm if c.get("base_day")), {})              # base and end are the same for both fits
+    last = auct.iloc[-1] if len(auct) else None
+    num = (lambda v: None if v is None or pd.isna(v) else float(v))
+    return {"run_at": run_at, "as_of": str(pd.Timestamp(last["as_of"]).date()) if last is not None else None,
+            "first_fill": str(first_fill) if first_fill else None,
+            "checks": [{k: c.get(k) for k in ("fit", "level", "window", "window_start", "cum_diff_pct", "threshold_pct", "book_pct",
+                                               "fit_pct", "flagged", "detail")} for c in alarm],
+            "inputs": {"base_day": comp.get("base_day"), "base_nav": comp.get("base_nav"),
+                       "end_day": comp.get("end_day"), "end_nav": comp.get("end_nav"),
+                       "end_div_cum": num(last.get("div_cum")) if last is not None else None,
+                       "first_session": comp.get("first_session"),
+                       "dividends": dividends, "index_daily": index},
+            "commit": commit}
+
+
+def append_alarm_log(path: str, entry: dict) -> None:
+    """Append one JSON line to the alarm log, never rewriting earlier lines. A failure is printed, never raised: the log
+    must not stop drift."""
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        with open(path, "a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+    except Exception as exc:                                           # noqa: BLE001
+        print(f"long alarm log not written ({path}): {exc}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -291,6 +360,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--db", default=DB, help="the ledger (a copy, for a test run)")
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--auction", default=AUCTION)
+    ap.add_argument("--alarm-log", default=None, help=f"the append-only S54 log (default: {os.path.basename(ALARM_LOG)} next to --out)")
     ap.add_argument("--build-alarm-thresholds", action="store_true", help="S54, once: write the frozen threshold table")
     ap.add_argument("--panel", default=None, help="with --build-alarm-thresholds: the panel to read index_daily from")
     args = ap.parse_args(argv)
@@ -313,19 +383,31 @@ def main(argv: list[str] | None = None) -> int:
     orders = con.execute("""SELECT as_of, book, coalesce(filled_qty, 0) > 0 AS filled, status FROM agent_orders
                             WHERE dry_run = FALSE AND as_of >= current_date - 9 AND alpaca_id IS NOT NULL""").df()   # broker had it
     auct = con.execute("SELECT * FROM agent_auction_nav WHERE book = 'long' ORDER BY as_of").df()
+    nav_days = con.execute("SELECT as_of FROM agent_book_nav WHERE book = 'long' ORDER BY as_of").df()
     capital = float(con.execute("SELECT alloc_usd FROM agent_books WHERE book = 'long'").fetchone()[0])   # S48: not a constant
     first_fill = con.execute("SELECT min(entry_day) FROM agent_lots WHERE book = 'long'").fetchone()[0]          # S54 alarm window
     con.close()                                  # no ledger lock held through the replay and the list recomputation
-    if "equity_auction_tr" not in auct:                                  # before the S48 columns: price NAV only
-        auct["equity_auction_tr"] = auct["equity_auction"]
-    auct["equity_auction_tr"] = auct["equity_auction_tr"].fillna(auct["equity_auction"])
+    # Never the price NAV in place of the total return (2026-10-21): a row without equity_auction_tr (dividends unknown,
+    # agent/auction_basis.py) stays NaN, and so does a NAV day with no auction row yet (auction_basis did not run after it);
+    # the checks that need such a day warn. A ledger from before the S48 columns has no total return at all.
+    if "equity_auction_tr" not in auct:
+        auct["equity_auction_tr"] = np.nan
+    if len(nav_days):
+        nav_days["as_of"] = pd.to_datetime(nav_days["as_of"])
+        auct["as_of"] = pd.to_datetime(auct["as_of"])
+        auct = nav_days.merge(auct, on="as_of", how="left")
     lists = {pd.Timestamp(d): g["ticker"].tolist() for d, g in picks.groupby("as_of")}
+    index_rows = None
     with PanelStore(read_only=True) as store:
         market = load_market(store, PAPER_START)
         try:
             factors, factors_oc, factor_err = factor_returns(store), factor_returns(store, True), None   # S54, store open
         except Exception as exc:
             factors, factors_oc, factor_err = None, None, str(exc)[:120]
+        try:
+            index_rows = index_last(store)                   # for the alarm log
+        except Exception as exc:                             # noqa: BLE001 — the log says so, the checks go on
+            index_rows = {"error": str(exc)[:120]}
         last = market.adj.index[-1]
         # 1) + 2) replay
         from agent.s44_v2_bundle import entry_zone
@@ -355,7 +437,9 @@ def main(argv: list[str] | None = None) -> int:
         if len(auct):
             a = auct.set_index(pd.to_datetime(auct["as_of"]))["equity_auction_tr"]
             d0 = a.index[-1]
-            if d0 in res.nav.index:
+            if pd.isna(a.iloc[-1]):
+                out.append(chk("净值:竞价口径含分红 对 规则重放", "warn", f"竞价口径含分红的净值缺 {d0.date()}{TR_GAP},这一条没算"))
+            elif d0 in res.nav.index:
                 gap = (float(a.iloc[-1]) / float(res.nav.loc[d0]) - 1) * 100
                 out.append(chk("净值:竞价口径含分红 对 规则重放", "ok" if abs(gap) <= 0.5 else "warn" if abs(gap) <= 1.5 else "bad",
                                f"模拟盘 ${a.iloc[-1]:,.0f},重放 ${res.nav.loc[d0]:,.0f},差 {gap:+.2f}%(两边都含分红)", gap_pct=gap))
@@ -397,19 +481,27 @@ def main(argv: list[str] | None = None) -> int:
     out += fill_checks(orders)
     # 5) execution gap, per book
     try:
-        out += gap_checks(json.load(open(args.auction)).get("fill_rows", []))
+        auction_json = json.load(open(args.auction))
+    except Exception:
+        auction_json = {}
+    try:
+        out += gap_checks(auction_json.get("fill_rows", []))
     except Exception:
         pass
     # 6) the week inside the backtest's distribution (both total return)
     if os.path.exists(NAV_REF) and len(auct) >= 6:
-        ref = pd.read_csv(NAV_REF, index_col=0, parse_dates=True)["v1c"]
-        r5 = (ref / ref.shift(5) - 1).dropna() * 100
         a = auct["equity_auction_tr"].to_numpy(dtype=float)
-        mine = (a[-1] / a[-6] - 1) * 100
-        pct = float((r5 < mine).mean() * 100)
-        out.append(chk("最近 5 日收益 在 回测分布里的位置", "ok" if 2.5 <= pct <= 97.5 else "warn",
-                       f"{mine:+.2f}%,回测第 {pct:.0f} 百分位(回测 5 日收益中位数 {r5.median():+.2f}%,2.5%–97.5% 区间 {r5.quantile(.025):+.1f}% 到 {r5.quantile(.975):+.1f}%)",
-                       ret5_pct=mine, percentile=pct))
+        if np.isnan(a[-1]) or np.isnan(a[-6]):                       # the two ends are all it reads
+            gap = [str(pd.Timestamp(auct["as_of"].iloc[i]).date()) for i in (-6, -1) if np.isnan(a[i])]
+            out.append(chk("最近 5 日收益 在 回测分布里的位置", "warn", f"竞价口径含分红的净值缺 {', '.join(gap)}{TR_GAP},这一条没算"))
+        else:
+            ref = pd.read_csv(NAV_REF, index_col=0, parse_dates=True)["v1c"]
+            r5 = (ref / ref.shift(5) - 1).dropna() * 100
+            mine = (a[-1] / a[-6] - 1) * 100
+            pct = float((r5 < mine).mean() * 100)
+            out.append(chk("最近 5 日收益 在 回测分布里的位置", "ok" if 2.5 <= pct <= 97.5 else "warn",
+                           f"{mine:+.2f}%,回测第 {pct:.0f} 百分位(回测 5 日收益中位数 {r5.median():+.2f}%,2.5%–97.5% 区间 {r5.quantile(.025):+.1f}% 到 {r5.quantile(.975):+.1f}%)",
+                           ret5_pct=mine, percentile=pct))
     # 7) S54: the long book against the two frozen S53a benchmarks
     alarm = []
     try:
@@ -430,6 +522,15 @@ def main(argv: list[str] | None = None) -> int:
            "level": "bad" if any(c["level"] == "bad" for c in out) else "warn" if any(c["level"] == "warn" for c in out) else "ok"}
     with open(args.out, "w") as f:
         json.dump(rep, f, ensure_ascii=False, indent=1, default=float)
+    # the reading and its inputs, one appended line per run (drift.json and agent_auction_nav are rewritten every run)
+    try:
+        dv = auction_json.get("dividends") if isinstance(auction_json, dict) else None
+        entry = alarm_record(rep["generated_at"], first_fill, auct, alarm,
+                             {k: dv.get(k) for k in ("status", "error", "computed_at", "tr_unknown_days")} if isinstance(dv, dict) else None,
+                             index_rows, code_commit())
+    except Exception as exc:                                         # noqa: BLE001 — a line saying so, never a stop
+        entry = {"run_at": rep["generated_at"], "error": f"record not built: {str(exc)[:160]}"}
+    append_alarm_log(args.alarm_log or os.path.join(os.path.dirname(os.path.abspath(args.out)), os.path.basename(ALARM_LOG)), entry)
     for c in out:
         print(f"[{c['level']:4s}] {c['name']}: {c['detail']}")
     return 0

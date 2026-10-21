@@ -19,6 +19,9 @@ Two parts, kept apart on purpose.
                  dividends (agent_auction_nav.equity_auction_tr): the basis the evaluation reads
    Next to every return: the average invested share (market value / NAV since the first fill),
    because idle cash earns nothing on paper while the backtests park it in SPY.
+   A day whose dividends are unknown (no auction row yet, or div_cum NULL: agent/auction_basis.py) has
+   sim_tr and auction_tr NaN, never the dividends counted as $0 (until 2026-10-21 they were): a return
+   or index point that needs it is None, and the book lists the day under tr_unknown_days.
 
 2. evaluate() — the pre-registered evaluation's inputs (agent/config.yaml), computed from the
    record every day and written to out/agent/evaluate.json ONLY. config.yaml: no verdict before
@@ -33,6 +36,9 @@ Two parts, kept apart on purpose.
      fill_rate     orders planned from evaluate_from that reached a final state: share filled
      insider       entry kinds (on_time / late / retry) of the orders and lots
      closed_lots   per book: count, mean, sd, and for each lot the SPY return over the same opens
+   A day without auction_tr: alpha2 leaves out both returns that touch it, tracking compares paper and
+   replay over the days around it, and the day is named under the book's tr_unknown_days and in
+   tr_unknown; on a normal day neither key is written.
 
 Usage: python -m agent.evaluate [--db PATH] [--out PATH] [--drift PATH] [--auction PATH]
 """
@@ -79,12 +85,13 @@ def load_books(con) -> tuple[pd.DataFrame, dict, dict]:
     if len(auc):
         auc["as_of"] = pd.to_datetime(auc["as_of"]).dt.date
     df = nav.merge(auc[["as_of", "book", "equity_auction", "div_cum", "equity_auction_tr"]], on=["as_of", "book"], how="left")
-    df["div_cum"] = df["div_cum"].fillna(0.0)
+    df["div_cum"] = df["div_cum"].astype(float)                 # NaN: unknown (no auction row, or NULL), never filled with 0
     ev = cash_events.load(con)                                   # the DIV cash equity_usd holds now (empty before cash_events)
     df["div_cash_cum"] = [cash_events.cumulative(ev, d, b, "DIV") for d, b in zip(df["as_of"], df["book"])]
     df["sim"] = df["equity_usd"]
     df["sim_tr"] = df["equity_usd"] - df["div_cash_cum"] + df["div_cum"]
-    df["auction_tr"] = df["equity_auction_tr"].fillna(df["equity_auction"].fillna(df["equity_usd"]) + df["div_cum"])
+    # with the dividends known, an auction row has equity_auction_tr (auction_basis writes both); NaN stays NaN
+    df["auction_tr"] = df["equity_auction_tr"].astype(float)
     first = {b: pd.Timestamp(d).date() for b, d in con.execute(
         """SELECT book, min(CAST(filled_at AS DATE)) FROM agent_orders
            WHERE dry_run = FALSE AND filled_qty > 0 GROUP BY 1""").fetchall() if d is not None}
@@ -112,14 +119,25 @@ def _at_or_before(series: dict, day: dt.date) -> float | None:
 
 
 def _pct(a, b) -> float | None:
-    return None if a is None or b is None or not b else (a / b - 1) * 100
+    return None if a is None or b is None or pd.isna(a) or pd.isna(b) or not b else (a / b - 1) * 100
+
+
+def _num(v) -> float | None:
+    return None if v is None or pd.isna(v) else float(v)
+
+
+def _level(v, base) -> float | None:
+    """v as an index level on base = 100 (3 decimals); None when either is unknown."""
+    return None if pd.isna(v) or pd.isna(base) else round(float(v) / float(base) * 100, 3)
 
 
 def baselines(nav: pd.DataFrame, first_fill: dict, bench: dict, end: dt.date | None = None) -> dict:
     """Per book and combined: returns since the close before the first fill, on every basis, with SPY / QQQ.
 
     nav: load_books()'s frame; first_fill: {book: first fill day}; bench: {symbol: {day: adj_close}}.
-    Books without a fill are left out (they have no record yet).
+    Books without a fill are left out (they have no record yet). A total-return basis unknown on a day (NaN) gives
+    None for a return that ends there and for the combined index from that day on (it cannot be chained through), and
+    the book's tr_unknown_days lists the days; the key is there only when there is one.
     """
     if end is not None:
         nav = nav[nav["as_of"] <= end]
@@ -139,7 +157,10 @@ def baselines(nav: pd.DataFrame, first_fill: dict, bench: dict, end: dt.date | N
                     "ret": {k: _pct(float(g[k].iloc[-1]), float(g[k].iloc[0])) for k in BASES},
                     "bench": {s: _pct(_at_or_before(bench.get(s, {}), last), _at_or_before(bench.get(s, {}), base)) for s in BENCH},
                     "exposure_avg_pct": None if expo is None or pd.isna(expo) else float(expo),
-                    "div_cum": float(g["div_cum"].iloc[-1] - g["div_cum"].iloc[0])}
+                    "div_cum": _num(g["div_cum"].iloc[-1] - g["div_cum"].iloc[0])}
+        unknown = [str(d) for d in g.index[g["sim_tr"].isna() | g["auction_tr"].isna()]]
+        if unknown:                                              # dividends not known on these days: not counted as $0
+            books[b]["tr_unknown_days"] = unknown
         series[b] = g
     if not books:
         return {"books": {}, "combined": None, "bases": BASIS_LABEL}
@@ -152,20 +173,21 @@ def baselines(nav: pd.DataFrame, first_fill: dict, bench: dict, end: dt.date | N
         for k in BASES:
             e0 = sum(float(series[b].at[p, k]) for b in live)
             e1 = sum(float(series[b].at[t, k]) for b in live)
-            idx[k].append(idx[k][-1] * (e1 / e0 if e0 else 1.0))
+            prev = idx[k][-1]                                    # None from the first day a book's value is unknown
+            idx[k].append(None if prev is None or math.isnan(e0) or math.isnan(e1) else prev * (e1 / e0 if e0 else 1.0))
         inv = [b for b in live if t >= pd.Timestamp(books[b]["first_fill"]).date()]      # invested share since the first fill
         eq = sum(float(series[b].at[t, "equity_usd"]) for b in inv)
         if eq:
             expo.append(sum(float(series[b].at[t, "market_value_usd"]) for b in inv) / eq * 100)
     b0 = {s: _at_or_before(bench.get(s, {}), start) for s in BENCH}
     comb = {"base_day": str(start), "last_day": str(days[-1]), "days": [str(d) for d in days], "books": list(books),
-            "index": {k: [round(v, 3) for v in idx[k]] for k in BASES},
+            "index": {k: [None if v is None else round(v, 3) for v in idx[k]] for k in BASES},
             "bench": {s: [None if b0[s] is None or _at_or_before(bench.get(s, {}), d) is None
                           else round(_at_or_before(bench[s], d) / b0[s] * 100, 3) for d in days] for s in BENCH},
-            "ret": {k: idx[k][-1] - 100 for k in BASES},
+            "ret": {k: None if idx[k][-1] is None else idx[k][-1] - 100 for k in BASES},
             "bench_ret": {s: _pct(_at_or_before(bench.get(s, {}), days[-1]), b0[s]) for s in BENCH},
             "exposure_avg_pct": float(np.mean(expo)) if expo else None,
-            "series": {b: {k: [round(float(g.at[d, k]) / float(g[k].iloc[0]) * 100, 3) if d in g.index else None for d in days]
+            "series": {b: {k: [_level(g.at[d, k], g[k].iloc[0]) if d in g.index else None for d in days]
                            for k in BASES} for b, g in series.items()}}
     return {"books": books, "combined": comb, "bases": BASIS_LABEL}
 
@@ -336,7 +358,11 @@ def evaluate(con, store, since: dt.date, replay: dict | None, fill_rows: list[di
         g = nav[nav["book"] == b].set_index("as_of").sort_index()
         paper = pd.Series(g["auction_tr"].to_numpy(dtype=float), index=pd.to_datetime(g.index))
         rec = {"alloc_usd": alloc.get(b), "first_fill": str(first.get(b)) if b in first else None}
-        pr = paper[paper.index >= pd.Timestamp(since)].pct_change().dropna()
+        unknown = [str(d.date()) for d in paper.index[paper.isna()]]
+        if unknown:                                              # dividends unknown: no return touches these days
+            rec["tr_unknown_days"] = unknown
+        p = paper[paper.index >= pd.Timestamp(since)]
+        pr = (p / p.shift(1) - 1).dropna()                       # pct_change's arithmetic, never padded across an unknown day
         if len(mret):
             rec["alpha2_paper"] = alpha2(pr, mret.get("SPY", pd.Series(dtype=float)), mret.get("IWM", pd.Series(dtype=float)))
         rp = (replay or {}).get(b)
@@ -346,6 +372,10 @@ def evaluate(con, store, since: dt.date, replay: dict | None, fill_rows: list[di
             rec["alpha2_replay"] = alpha2(rs[rs.index >= pd.Timestamp(since)].pct_change().dropna(),
                                           mret.get("SPY", pd.Series(dtype=float)), mret.get("IWM", pd.Series(dtype=float)))
         out["books"][b] = rec
+    gaps = {b: r["tr_unknown_days"] for b, r in out["books"].items() if r.get("tr_unknown_days")}
+    if gaps:
+        out["tr_unknown"] = {"note": "这些天竞价口径含分红的净值没有(分红不知道,或竞价净值还没算):alpha2 不含碰到它们的日收益,"
+                                     "跟踪差跳过它们,不按分红 0 计;下一次竞价净值重建、分红也算出来以后补上", "books": gaps}
     out["execution"] = execution(fill_rows, since)
     out["fill_rate"] = fill_rate(orders, since)
     ins = orders[(orders["book"] == "insider") & (orders["side"] == "buy") & (orders["as_of"] >= since)]

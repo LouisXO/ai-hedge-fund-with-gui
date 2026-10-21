@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 import os
 import sys
 
@@ -116,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with PanelStore(read_only=True) as store:
             base = evaluate.page_baselines(lcon, store, end=end)
-        nav, _, _ = evaluate.load_books(lcon)                   # auction_tr falls back to the simulator NAV where it is missing
+        nav, _, _ = evaluate.load_books(lcon)                   # auction_tr is NaN where missing (2026-10-21); see below
         nav_end = {r.book: (r.sim, r.auction_tr) for r in nav[nav["as_of"] == end].itertuples()}
     finally:
         lcon.close()
@@ -129,7 +130,8 @@ def main(argv: list[str] | None = None) -> int:
     tot_sim = tot_auc = 0.0
     total_alloc = sum(alloc[b] for b in ("long", "insider", "core") if b in alloc)
     for b in ("long", "insider", "core"):
-        sim, auc = nav_end[b][0], nav_end[b][1] if nav_end[b][1] is not None else nav_end[b][0]
+        # this week-1 page (fixed END) keeps its old reading: the simulator NAV where the auction basis is missing
+        sim, auc = nav_end[b][0], nav_end[b][1] if not math.isnan(nav_end[b][1]) else nav_end[b][0]
         tot_sim += sim
         tot_auc += auc
         x = base["books"].get(b)

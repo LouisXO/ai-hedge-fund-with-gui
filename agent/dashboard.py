@@ -239,7 +239,9 @@ def _headline(r: dict) -> tuple[float, str]:
     """The auction basis is what the books are judged on (S27 / 2026-10-06); the simulator basis only when it is missing."""
     if r.get("auction_tr") is not None:
         return r["auction_tr"], f"竞价口径含分红(评估口径);模拟器口径含分红 {_p(r.get('sim_tr'))}"
-    return r["sim_tr"], "模拟器口径含分红(竞价口径暂缺)"
+    if r.get("sim_tr") is not None:
+        return r["sim_tr"], "模拟器口径含分红(竞价口径暂缺)"
+    return r.get("sim"), "模拟器口径,不含分红(分红不知道,两个含分红口径都暂缺,不按 0 计)"     # agent/evaluate.py, 2026-10-21
 
 
 def book_cards(base: dict, closed: dict) -> str:

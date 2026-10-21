@@ -11,6 +11,10 @@ last membership end + TAIL_DAYS], so a reused symbol cannot contribute an
 unrelated company's prices. Every symbol gets a fetch_log row
 (ok / partial / missing / reused) — the coverage report reads it.
 
+index_daily (SPY / ^VIX / IWM / QQQ, and the factor ETFs) is downloaded whole every time, stops at yesterday
+while the session is open, and goes through basis_guard before the upsert (2026-10-21, S54 investigation): a
+response that leaves stored days out while its adjustment basis moved is not written for that symbol.
+
 Usage:
   python -m agent.backfill bars [--start 2013-01-01] [--chunk 50]
   python -m agent.backfill bars --incremental
@@ -33,6 +37,9 @@ LOOKBACK_DAYS = 400   # 12-1 momentum needs 252 trading days before the first me
 TAIL_DAYS = 45        # forward returns up to 20 trading days after the last member date
 INDEX_SYMBOLS = ("SPY", "^VIX", "IWM", "QQQ")
 SOURCE = "yfinance"
+# adj_close / close of one stored day may move by float noise between two downloads (~1e-7 at most); a distribution
+# moves it by its yield (a tenth of a percent and more): beyond this, the response is on a new adjustment basis
+BASIS_TOL = 1e-6
 
 
 def _windows(ivs: list[Interval], start: pd.Timestamp, today: pd.Timestamp) -> dict[str, tuple]:
@@ -140,11 +147,52 @@ def backfill_bars(store: PanelStore, start: str = "2014-01-01", chunk: int = 50,
     return stats
 
 
-def backfill_index(store: PanelStore, start: str = "2012-01-01") -> int:
-    raw = _download(list(INDEX_SYMBOLS), start, (dt.date.today() + dt.timedelta(days=1)).isoformat())
+def basis_guard(store: PanelStore, df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, str]]:
+    """(the rows of `df` to upsert into index_daily, {symbol: why it was not written}).
+
+    Yahoo rescales Adj Close back to the start at every distribution, and the upsert replaces only the days a
+    response has. A response that leaves stored days out (it starts after the stored first day, ends before the
+    stored last one, or misses days in between: _frame drops rows with a NaN close) keeps those days on the stored
+    basis; if its own basis moved (adj_close / close differs from the stored ratio by more than BASIS_TOL on a day
+    both have), writing it would put a spurious return about the size of the distribution's yield at each junction.
+    Such a symbol keeps all its stored rows (a missing day then shows in the drift alarm and the health page). A
+    partial response on the stored basis is written; one that shares no day with the stored rows cannot be checked
+    and is not written either."""
+    keep, refused = [], {}
+    for sym, new in df.groupby("symbol", sort=False):
+        old = store.con.execute("SELECT trade_date, close, adj_close FROM index_daily WHERE symbol = ?", [sym]).df()
+        old["trade_date"] = pd.to_datetime(old["trade_date"]).dt.date
+        gone = sorted(set(old["trade_date"]) - set(new["trade_date"]))
+        if not gone:                                   # every stored day is rewritten: no junction is left
+            keep.append(new)
+            continue
+        both = new.merge(old, on="trade_date", suffixes=("", "_stored"))
+        moved = float(((both["adj_close"] / both["close"]) / (both["adj_close_stored"] / both["close_stored"]) - 1).abs().max()) \
+            if len(both) else None
+        if moved is not None and moved <= BASIS_TOL:
+            keep.append(new)
+            continue
+        refused[sym] = (f"the response leaves out {len(gone)} stored day(s) ({gone[0]}" + (f" .. {gone[-1]}" if len(gone) > 1 else "")
+                        + (f") and its adj_close / close differs from the stored one by up to {moved:.4%}" if moved is not None
+                           else ") and shares no day with them") + ": a new adjustment basis, stored rows kept")
+    return (pd.concat(keep, ignore_index=True) if keep else df.iloc[0:0]), refused
+
+
+def backfill_index(store: PanelStore, start: str = "2012-01-01", download=None) -> int:
+    """SPY / ^VIX / IWM / QQQ into index_daily; agent.execute (13:25 and 16:10 PT, on the order path) and agent.daily
+    (08:41 PT) call it. The whole history every time (Adj Close is rescaled at every distribution, see FACTOR_ETFS),
+    through basis_guard. Returns the rows written; a symbol that returned nothing or was refused keeps its stored rows
+    and is printed, never raised."""
+    download = download or _download
+    # Same cut as backfill_bars and backfill_factor_etfs: while the session is open yfinance returns today's
+    # in-progress bar as a daily row, and a manual intraday agent.execute or agent.daily would store it as a close
+    # (2026-10-21). Stop at yesterday (yf's end is exclusive) unless today's session is over; the scheduled runs are
+    # all after 16:15 ET (13:25 PT = 16:25 ET, 16:10 PT = 19:10 ET) and still get today's bar.
+    end = (dt.date.today() + dt.timedelta(days=1 if session_closed() else 0)).isoformat()
+    raw = download(list(INDEX_SYMBOLS), start, end)
     frames = []
     for sym in INDEX_SYMBOLS:
-        sub = _frame(raw, sym)
+        sub = _frame(raw, sym) if raw is not None and not raw.empty else pd.DataFrame()
         if sub.empty:                              # a failed download must not become a KeyError
             print(f"  index {sym}: no rows returned, kept existing")
             continue
@@ -155,7 +203,12 @@ def backfill_index(store: PanelStore, start: str = "2012-01-01") -> int:
         sub["fetched_at"] = pd.Timestamp.now()
         frames.append(sub[["symbol", "trade_date", "open", "high", "low", "close", "adj_close",
                            "source", "fetched_at"]])
-    return store.upsert_index(pd.concat(frames, ignore_index=True))
+    if not frames:
+        return 0
+    df, refused = basis_guard(store, pd.concat(frames, ignore_index=True))
+    for sym, why in refused.items():
+        print(f"  index {sym}: not written, {why}")
+    return store.upsert_index(df)
 
 
 # Research-only factor ETFs for the S45 D3 attribution (momentum MTUM/SPMO, value VLUE, quality QUAL,
@@ -168,7 +221,8 @@ def backfill_index(store: PanelStore, start: str = "2012-01-01") -> int:
 # benchmark (agent/drift.py) needs MTUM/VLUE/QUAL/USMV every day: agent/bin/postclose.sh now runs
 # `python -m agent.backfill factors` after the close, as a step of its own (non-fatal, off the order path). The
 # whole history is downloaded each time, as backfill_index does: Yahoo's Adj Close is rescaled back to the start
-# at every distribution, and rows written from a short window would not match the older ones.
+# at every distribution, and rows written from a short window would not match the older ones. Nothing checked that a
+# response did cover the stored history; basis_guard does since 2026-10-21.
 FACTOR_ETFS = ("MTUM", "VLUE", "QUAL", "USMV", "AVUV", "IJS", "VBR", "IWN", "IWO", "SPMO")
 
 
@@ -178,7 +232,8 @@ def backfill_factor_etfs(store: PanelStore | None = None, start: str = "2012-01-
 
     Downloads first, then opens the panel only for the write (when no store is passed), so the
     write lock is held for seconds, not for the download. A symbol with no rows keeps whatever
-    is stored. Returns {"rows": n, "symbols": {sym: n_rows}, "missing": [...]}.
+    is stored; so does one basis_guard refuses. Returns {"rows": n, "symbols": {sym: n_rows returned},
+    "missing": [...], "refused": {sym: why}}.
     Manual use:
       python -c "from agent.backfill import backfill_factor_etfs; print(backfill_factor_etfs())"
     """
@@ -204,14 +259,16 @@ def backfill_factor_etfs(store: PanelStore | None = None, start: str = "2012-01-
         frames.append(sub[["symbol", "trade_date", "open", "high", "low", "close", "adj_close",
                            "source", "fetched_at"]])
     if not frames:
-        return {"rows": 0, "symbols": {}, "missing": missing}
+        return {"rows": 0, "symbols": {}, "missing": missing, "refused": {}}
     df = pd.concat(frames, ignore_index=True)
     if store is not None:
+        df, refused = basis_guard(store, df)
         n = store.upsert_index(df)
     else:
-        with PanelStore() as st:
+        with PanelStore() as st:                   # the stored rows are read inside the write's short lock
+            df, refused = basis_guard(st, df)
             n = st.upsert_index(df)
-    return {"rows": n, "symbols": per_symbol, "missing": missing}
+    return {"rows": n, "symbols": per_symbol, "missing": missing, "refused": refused}
 
 
 def main() -> int:
@@ -224,7 +281,7 @@ def main() -> int:
     if args.cmd == "factors":                      # downloads first; the panel is opened only for the write
         out = backfill_factor_etfs()
         print({"factor_etfs": out})
-        return 1 if not out["rows"] else 0
+        return 1 if not out["rows"] or out.get("refused") else 0     # a refused ETF needs a look: the step says so
     with PanelStore() as store:
         if args.cmd == "bars":
             print(backfill_bars(store, args.start, args.chunk, args.incremental))

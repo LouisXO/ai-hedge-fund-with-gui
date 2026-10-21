@@ -82,7 +82,7 @@ def test_the_alarm_compounds_book_minus_fit_since_the_first_fill():
     first_fill = days[10].date()
     nav = pd.Series(1.0, index=days)
     nav.iloc[10:] = (1 + fit.iloc[10:]).cumprod().to_numpy()                          # the book is the fit from the first fill
-    nav.iloc[25] = np.nan                                                              # a day the NAV skipped
+    nav = nav.drop(days[25])                                                           # a day the NAV skipped (no row)
     c = {x["fit"]: x for x in drift.long_alarm(nav * 60000, first_fill, f, _table(), CFG, oc=oc)}
     a = c["alpha2_fit"]
     assert a["window"] == 30 and a["level"] == "ok" and a["cum_diff_pct"] == pytest.approx(0.0, abs=1e-9)
@@ -136,3 +136,112 @@ def test_the_first_fill_session_is_open_to_close_on_both_sides():
     assert all("首日" not in x["detail"] and x["window"] == 3 for x in later)
     oc.loc[days[5], "IWM-SPY"] = np.nan                                                # no open for that day: nothing compared
     assert {x["level"] for x in drift.long_alarm(nav, days[5].date(), f, _table(), CFG, oc=oc)} == {"warn"}
+
+
+# ---------------------------------------------------------------- 2026-10-21: no price-NAV fill-in, the append-only log ----
+def test_an_unknown_nav_in_the_window_warns_and_one_before_it_is_not_needed():
+    days = pd.bdate_range("2026-09-01", periods=40)
+    f = _factors(days, 6)
+    nav = pd.Series(np.linspace(60000, 61000, 40), index=days)
+    cfg = {**CFG, "window": 10}
+    table = {"thresholds_pct": {k: [-5.0] * 10 for k in CFG["fits"]}}
+    ok = {x["fit"]: x for x in drift.long_alarm(nav, days[5].date(), f, table, cfg, oc=f)}
+    a = ok["alpha2_fit"]
+    assert a["level"] in ("ok", "bad") and a["window_start"] == str(days[-10].date()) and a["first_session"] == "close_to_close"
+    assert (a["base_day"], a["end_day"]) == (str(days[-11].date()), str(days[-1].date()))
+    assert (a["base_nav"], a["end_nav"]) == (pytest.approx(nav.iloc[-11]), pytest.approx(nav.iloc[-1]))
+    early = nav.copy()
+    early.iloc[20] = np.nan                                                            # before the window's base: not read
+    assert {x["fit"]: x["cum_diff_pct"] for x in drift.long_alarm(early, days[5].date(), f, table, cfg, oc=f)} == \
+        {k: x["cum_diff_pct"] for k, x in ok.items()}
+    for i in (-11, -4, -1):                                                            # the base, inside, the last day
+        gap = nav.copy()
+        gap.iloc[i] = np.nan                                                           # equity_auction_tr unknown that day
+        c = drift.long_alarm(gap, days[5].date(), f, table, cfg, oc=f)
+        assert [x["level"] for x in c] == ["warn", "warn"] and all(x.get("cum_diff_pct") is None for x in c)
+        assert all(f"竞价口径含分红的净值缺 {days[i].date()}" in x["detail"] and "这一条没算" in x["detail"] for x in c)
+
+
+def test_the_log_appends_one_line_per_run_and_a_failure_to_write_it_is_only_printed(tmp_path, capsys):
+    import json
+    path = tmp_path / "agent" / "long_alarm_log.jsonl"
+    drift.append_alarm_log(str(path), {"run_at": "a", "x": 1.5})
+    first = path.read_text()
+    drift.append_alarm_log(str(path), {"run_at": "b", "x": float("nan")})
+    lines = path.read_text().splitlines()
+    assert path.read_text().startswith(first) and [json.loads(x)["run_at"] for x in lines] == ["a", "b"]
+    drift.append_alarm_log(str(tmp_path), {"run_at": "c"})                             # a directory: cannot be opened
+    assert "long alarm log not written" in capsys.readouterr().out and len(path.read_text().splitlines()) == 2
+
+
+def _drift_world(tmp_path, monkeypatch, n=30, last_auction=True):
+    """A ledger and a panel for drift.main with the replay and the market stubbed: the long book first filled on day 5,
+    NAV on every day, auction rows on every day (or all but the last: auction_basis has not run after it)."""
+    import types
+
+    from agent import ledger
+    days = pd.bdate_range("2026-09-14", periods=n)
+    f = _factors(days, 7)
+    px = (1 + pd.DataFrame({s: f[s if s == "SPY" else f"{s}-SPY"] + (0 if s == "SPY" else f["SPY"]) for s in SYMS})).cumprod() * 100
+    with PanelStore(tmp_path / "p.db") as s:
+        s.upsert_index(pd.DataFrame([{"symbol": c, "trade_date": d.date(), "open": v, "high": v, "low": v, "close": v,
+                                      "adj_close": v, "source": "t", "fetched_at": pd.Timestamp("2026-10-21 13:30")}
+                                     for c in SYMS for d, v in px[c].items()]))
+    db = str(tmp_path / "o.db")
+    con = ledger.connect(db)
+    ledger.ensure_schema(con)
+    from agent import auction_basis
+    auction_basis.ensure_table(con)
+    con.execute("INSERT INTO agent_books VALUES ('long', 60000, 60000, 30, '2026-09-14', now())")
+    con.execute("INSERT INTO agent_lots (lot_id, book, ticker, qty, entry_day, status) VALUES ('L', 'long', 'X', 1, ?, 'open')", [days[5].date()])
+    for i, d in enumerate(days):
+        eq = 60000.0 * (1 + 0.001 * i)
+        con.execute("INSERT INTO agent_book_nav VALUES (?, 'long', 0, ?, ?, 1, NULL)", [d.date(), eq, eq])
+        if last_auction or i < n - 1:
+            con.execute(f"INSERT INTO agent_auction_nav ({', '.join(auction_basis.NAV_COLS)}) VALUES (?, 'long', ?, 0, ?, 0, 0, 1.5, ?, 0, 0)",
+                        [d.date(), eq, eq, eq + 1.5])
+    con.close()
+    market = types.SimpleNamespace(adj=pd.DataFrame(index=days), adj_open=pd.DataFrame(index=days))
+    monkeypatch.setattr(drift, "PanelStore", lambda read_only=True: PanelStore(tmp_path / "p.db", read_only=True))
+    monkeypatch.setattr(drift, "load_market", lambda store, start: market)
+    monkeypatch.setattr(drift, "simulate", lambda *a, **k: types.SimpleNamespace(nav=pd.Series(60000.0, index=days)))
+    monkeypatch.setattr(drift, "NAV_REF", os.path.join(ROOT, "site-data/validation/s47_base_nav.csv"))
+    return db, days
+
+
+def test_drift_main_appends_the_reading_and_its_inputs_next_to_its_output(tmp_path, monkeypatch):
+    import json
+    db, days = _drift_world(tmp_path, monkeypatch)
+    args = ["--db", db, "--out", str(tmp_path / "drift.json"), "--auction", str(tmp_path / "none.json")]
+    assert drift.main(args) == 0
+    log = tmp_path / "long_alarm_log.jsonl"                                           # next to --out, not the live path
+    e = json.loads(log.read_text())
+    assert e["as_of"] == str(days[-1].date()) and e["first_fill"] == str(days[5].date())
+    assert [c["fit"] for c in e["checks"]] == list(CFG["fits"]) and e["checks"][0]["window"] == len(days) - 5
+    rep = {c["fit"]: c for c in json.load(open(tmp_path / "drift.json"))["long_alarm"]["checks"]}
+    assert all(c["cum_diff_pct"] == rep[c["fit"]]["cum_diff_pct"] and c["window_start"] == str(days[5].date()) for c in e["checks"])
+    i = e["inputs"]
+    assert (i["base_day"], i["end_day"], i["first_session"]) == (str(days[4].date()), str(days[-1].date()), "open_to_close")
+    assert i["end_nav"] == pytest.approx(60000 * (1 + 0.001 * (len(days) - 1)) + 1.5) and i["end_div_cum"] == 1.5
+    assert set(i["index_daily"]) == set(SYMS) and i["index_daily"]["SPY"]["last"] == str(days[-1].date())
+    assert i["dividends"] is None and "commit" in e
+    assert drift.main(args) == 0                                                      # a second run: a second line, the first kept
+    lines = log.read_text().splitlines()
+    assert len(lines) == 2 and json.loads(lines[0]) == e
+
+
+def test_drift_main_never_reads_the_price_nav_for_a_missing_total_return(tmp_path, monkeypatch):
+    import json
+    db, days = _drift_world(tmp_path, monkeypatch, last_auction=False)                # the newest NAV day has no auction row
+    (tmp_path / "ab.json").write_text(json.dumps({"dividends": {"status": "unknown", "error": "x", "computed_at": None,
+                                                                "tr_unknown_days": {"long": [str(days[-1].date())]}}}))
+    assert drift.main(["--db", db, "--out", str(tmp_path / "drift.json"), "--auction", str(tmp_path / "ab.json"),
+                       "--alarm-log", str(tmp_path)]) == 0                             # the log cannot be written: drift goes on
+    c = {x["name"]: x for x in json.load(open(tmp_path / "drift.json"))["checks"]}
+    for name in ("净值:竞价口径含分红 对 规则重放", "最近 5 日收益 在 回测分布里的位置",
+                 "长线冻结基准报警 · alpha2 拟合(SPY、IWM−SPY)", "长线冻结基准报警 · 因子 ETF 复制(+ MTUM/VLUE/QUAL/USMV)"):
+        assert c[name]["level"] == "warn" and f"竞价口径含分红的净值缺 {days[-1].date()}" in c[name]["detail"], name
+    assert drift.main(["--db", db, "--out", str(tmp_path / "drift.json"), "--auction", str(tmp_path / "ab.json")]) == 0
+    e = json.loads((tmp_path / "long_alarm_log.jsonl").read_text())
+    assert [x["level"] for x in e["checks"]] == ["warn", "warn"] and e["inputs"]["dividends"]["status"] == "unknown"
+    assert e["as_of"] == str(days[-1].date()) and e["inputs"]["end_div_cum"] is None

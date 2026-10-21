@@ -131,9 +131,121 @@ def test_a_dividend_failure_does_not_stop_the_auction_basis(monkeypatch):
         raise RuntimeError("panel locked")
     monkeypatch.setattr(auction_basis, "PanelStore", Store)
     monkeypatch.setattr(auction_basis.dividends, "update", boom)
-    div, err = auction_basis.soft_dividends(None)
-    assert err == "RuntimeError: panel locked"
+    div, info = auction_basis.soft_dividends(None)                       # no ledger to fall back on either
+    assert info["status"] == "unknown" and "RuntimeError: panel locked" in info["error"]
     assert div.empty and list(div.columns) == auction_basis.DIV_COLS
     rows = auction_basis.nav_rows(pd.DataFrame([{"as_of": D(2026, 9, 25), "book": "long", "equity_usd": 100.0}]),
-                                  pd.DataFrame(columns=["book", "d", "adj"]), {}, div)
-    assert rows and rows[0][auction_basis.NAV_COLS.index("div_cum")] == 0.0
+                                  pd.DataFrame(columns=["book", "d", "adj"]), {}, div, None, info["known_before"], {})
+    r = dict(zip(auction_basis.NAV_COLS, rows[0]))
+    assert r["equity_auction"] == 100.0                                  # the price NAV is still written
+    assert r["div_cum"] is None and r["equity_auction_tr"] is None       # until 2026-10-21 this was div_cum 0
+
+
+# ---------------------------------------------------------------- unknown dividends are never $0 (2026-10-21) ----
+def _ledger_with_stored_dividends(path):
+    """A long lot; NAV on 10/19, 10/20, 10/21; auction rows for 10/19 (div_cum 5) and 10/20 (7) written by runs that knew
+    the dividends; agent_dividends as the 10/20 13:30 update stored it ($5 ex 10/19, $2 ex 10/20)."""
+    con = ledger.connect(path)
+    ledger.ensure_schema(con)
+    auction_basis.ensure_table(con)
+    dividends.ensure_tables(con)
+    con.execute("""INSERT INTO agent_lots (lot_id, book, ticker, qty, entry_day, status) VALUES ('L1', 'long', 'X', 10, '2026-09-22', 'open')""")
+    for d, eq in (("2026-10-19", 1000.0), ("2026-10-20", 1010.0), ("2026-10-21", 1020.0)):
+        con.execute("INSERT INTO agent_book_nav VALUES (?, 'long', 0, ?, ?, 1, NULL)", [d, eq, eq])
+    con.execute(f"""INSERT INTO agent_auction_nav ({', '.join(auction_basis.NAV_COLS)}) VALUES
+                    ('2026-10-19', 'long', 1000, 0, 1000, 0, 0, 5, 1005, 0, 0), ('2026-10-20', 'long', 1010, 0, 1010, 0, 0, 7, 1017, 0, 0)""")
+    con.execute("""INSERT INTO agent_dividends (lot_id, book, ticker, ex_date, per_share, qty, usd, kind, computed_at) VALUES
+                   ('L1', 'long', 'X', '2026-10-19', 0.5, 10, 5.0, 'dividend', '2026-10-20 13:30:00'),
+                   ('L1', 'long', 'X', '2026-10-20', 0.2, 10, 2.0, 'dividend', '2026-10-20 13:30:00')""")
+    return con
+
+
+def _boom(con, store):
+    raise RuntimeError("compute broke")
+
+
+class _NoPanel:
+    def __init__(self, read_only=True):
+        pass
+
+    def __enter__(self):
+        return None
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_a_failed_update_falls_back_to_the_stored_rows_for_the_days_before_they_were_computed(tmp_path, monkeypatch):
+    con = _ledger_with_stored_dividends(str(tmp_path / "t.db"))
+    monkeypatch.setattr(auction_basis, "PanelStore", _NoPanel)
+    monkeypatch.setattr(auction_basis.dividends, "update", _boom)
+    div, info = auction_basis.soft_dividends(con)
+    assert info["status"] == "fallback" and info["known_before"] == D(2026, 10, 20)
+    assert "compute broke" in info["error"] and "fell back to the rows stored at 2026-10-20 13:30" in info["error"]
+    assert sorted(div["usd"]) == [2.0, 5.0]
+    nav = pd.DataFrame([{"as_of": D(2026, 10, d), "book": "long", "equity_usd": 1000.0 + 10 * (d - 19)} for d in (19, 20, 21)])
+    rows = auction_basis.nav_rows(nav, pd.DataFrame(columns=["book", "d", "adj"]), {}, div, None, info["known_before"],
+                                  auction_basis.stored_div_cum(con))
+    got = {r[0]: (r[auction_basis.NAV_COLS.index("div_cum")], r[auction_basis.NAV_COLS.index("equity_auction_tr")]) for r in rows}
+    assert got[D(2026, 10, 19)] == (5.0, 1005.0)                          # before the rows' day: from the stored rows
+    assert got[D(2026, 10, 20)] == (7.0, 1017.0)                          # their day: what a run that knew it stored
+    assert got[D(2026, 10, 21)] == (None, None)                           # after: an ex-date may be missing, unknown
+    con.close()
+
+
+def test_no_usable_stored_rows_keep_every_stored_div_cum_and_leave_new_days_unknown(tmp_path, monkeypatch):
+    con = _ledger_with_stored_dividends(str(tmp_path / "t.db"))
+    con.execute("DROP TABLE agent_dividends")                            # nothing to fall back on
+    monkeypatch.setattr(auction_basis, "PanelStore", _NoPanel)
+    monkeypatch.setattr(auction_basis.dividends, "update", _boom)
+    div, info = auction_basis.soft_dividends(con)
+    assert info["status"] == "unknown" and info["known_before"] == dt.date.min and div.empty and "never $0" in info["error"]
+    nav = pd.DataFrame([{"as_of": D(2026, 10, d), "book": "long", "equity_usd": 1000.0} for d in (19, 20, 21)])
+    rows = auction_basis.nav_rows(nav, pd.DataFrame(columns=["book", "d", "adj"]), {}, div, None, info["known_before"],
+                                  auction_basis.stored_div_cum(con))
+    assert [r[auction_basis.NAV_COLS.index("div_cum")] for r in rows] == [5.0, 7.0, None]
+    con.execute("DELETE FROM agent_lots")                                # no paper lot at all: nothing is owed, $0 is known
+    con.execute(dividends.DDL)
+    div, info = auction_basis.soft_dividends(con)
+    assert info["status"] == "fallback" and info["known_before"] is None and div.empty
+    con.close()
+
+
+def test_a_failed_compute_leaves_the_stored_rows_as_they_were(tmp_path, monkeypatch):
+    # dividends.update builds the rows before its transaction and swaps them in one: a failure on either side keeps the table
+    con = _ledger_with_stored_dividends(str(tmp_path / "t.db"))
+    monkeypatch.setattr(dividends, "compute", _boom)
+    with pytest.raises(RuntimeError):
+        dividends.update(con, None, fetch=lambda *a: [])
+    assert con.execute("SELECT count(*), min(computed_at) FROM agent_dividends").fetchone() == (2, pd.Timestamp("2026-10-20 13:30").to_pydatetime())
+    con.close()
+
+
+@pytest.mark.parametrize("drop", [False, True])
+def test_the_auction_basis_run_never_writes_unknown_dividends_as_zero(tmp_path, monkeypatch, drop):
+    """End to end (agent.auction_basis main, no network): a failed update keeps the history's with-dividends NAV and
+    leaves the new day NULL, and the json says which (status, tr_unknown_days, the newest row without it)."""
+    import json
+
+    from hedge_fund.features.panel import PanelStore
+    db = str(tmp_path / "t.db")
+    con = _ledger_with_stored_dividends(db)
+    if drop:
+        con.execute("DROP TABLE agent_dividends")
+    con.close()
+    with PanelStore(tmp_path / "p.db"):
+        pass
+    monkeypatch.setattr(auction_basis, "PanelStore", lambda read_only=True: PanelStore(tmp_path / "p.db", read_only=True))
+    monkeypatch.setattr(auction_basis, "sessions", lambda: [D(2026, 10, 19), D(2026, 10, 20), D(2026, 10, 21)])
+    monkeypatch.setattr(auction_basis, "cross_prices", lambda pairs: {})
+    monkeypatch.setattr(auction_basis.dividends, "update", _boom)
+    assert auction_basis.main(["--db", db, "--out", str(tmp_path / "ab.json")]) == 0
+    con = ledger.connect(db, read_only=True)
+    got = con.execute("SELECT as_of, equity_auction, div_cum, equity_auction_tr FROM agent_auction_nav ORDER BY as_of").fetchall()
+    con.close()
+    assert [(r[2], r[3]) for r in got] == [(5.0, 1005.0), (7.0, 1017.0), (None, None)]
+    assert got[2][1] == 1020.0                                            # the price NAV is written all the same
+    j = json.load(open(tmp_path / "ab.json"))["dividends"]
+    assert j["status"] == ("unknown" if drop else "fallback") and j["tr_unknown_days"] == {"long": ["2026-10-21"]}
+    assert (j["n"], j["usd"]) == ((None, None) if drop else (2, 7.0))
+    assert json.load(open(tmp_path / "ab.json"))["books"]["long"]["equity_auction_tr"] is None
