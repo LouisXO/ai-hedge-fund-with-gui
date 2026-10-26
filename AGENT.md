@@ -122,6 +122,7 @@ site-data/validation/   每个实验的 .md/.json 报告 + family_log.md/.jsonl
 docs/AGENT_PLAN.md      计划 + §9 执行记录(S1–S32)+ §10 待办
 docs/notes/<TICKER>.md  个股分析结论(NEOV、RKLB、IONQ…),下次问到先读
 docs/RUNBOOK.md         应急手册(下单失败、对账不符、券商故障、坏数据日、全部平仓、电脑丢失、恢复备份)
+docs/ERRORS.md          报错 → 原因 → 修法清单(按报错原文搜;私有部分在 optradar/docs/ERRORS.md)
 docs/LIVE_MIGRATION.md  上实盘的设计(公开部分;涉及真实账户的决策框架在 optradar/docs/LIVE_MIGRATION_PRIVATE.md)
 ```
 
@@ -155,7 +156,7 @@ tail -50 ~/optradar/out/agent/execute.log
 4. 涉及个股就读 `docs/notes/<TICKER>.md` 和 `agent/watchlist.yaml`。
 5. 涉及模拟盘就 `tail ~/optradar/out/agent/execute.log`。
 
-**进行中**:每完成一个实验或修复 → §9 加一条 → commit。不留在聊天里。
+**进行中**:每完成一个实验或修复 → §9 加一条 → commit。不留在聊天里。遇到报错先按原文搜 `docs/ERRORS.md`;踩了新坑,修完在那里按同一格式加一条。
 
 **结束**:未完成的事写进 §10 待办;规则变了就改这份文件和记忆目录;两个仓库都 commit。
 
