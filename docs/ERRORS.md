@@ -6,7 +6,7 @@
 ## 目录
 
 - DuckDB 与数据库(9 条)
-- Shell、zsh 与 git(11 条)
+- Shell、zsh 与 git(12 条)
 - Alpaca 模拟盘下单与对账(7 条)
 - 行情与数据源:Alpaca、AV、yfinance、EDGAR、XBRL(12 条)
 - 定时任务、健康检查与通知(6 条)
@@ -110,6 +110,12 @@
 - **修法**: 作者用 AGENT.md §1 写明的 LouisXO 和邮箱,不加 Co-Authored-By,保留 `Claude-Session:` 尾行。新机器在每个仓库设 user.name/user.email,未推送的提交 `git commit --amend --no-edit --reset-author`。两个仓库的本地配置现在都有身份。
 - **预防**: AGENT.md 里的用户规则优先于 harness 默认署名。身份用文档里的,或者问;不从历史推断。
 - **已记录**: AGENT.md §1 提交规则;`optradar/AGENT.md` §1 铁律 4。
+
+### `remote: Permission to LouisXO/ai-hedge-fund-with-gui.git denied to <另一个账号>.` / `site publish failed (non-fatal)`
+- **在哪**: `site/publish.sh` 的 `git push`(08:41、13:25 任务)和手动推送;health 显示 `site publish failed (non-fatal)`。
+- **原因**: git 走系统的 osxkeychain 凭据,钥匙串里 github.com 那条换成了另一个 GitHub 账号(2026-10-26 当天两次发布都失败)。`gh auth switch` 只改 gh 的当前账号,不影响 git。
+- **修法**: 已修:两个仓库的本地配置固定用 gh 里 LouisXO 的凭据:`git config credential.https://github.com.helper ''`,`git config --add credential.https://github.com.helper '!/opt/homebrew/bin/gh auth git-credential'`,`git config credential.https://github.com.username LouisXO`(gh 写绝对路径,launchd 的 PATH 里没有 Homebrew)。之后 `git push --dry-run origin v2-rebuild` 验证。
+- **预防**: 推送失败先 `git push --dry-run` 看报的是哪个账号;别改全局钥匙串。
 
 ### `(eval):1: command not found: sec_xbrl`(用 heredoc 编辑文档之后)
 - **在哪**: 用未加引号分隔符的 `python3 - <<EOF`(为了让 $W 展开)编辑含 markdown 代码片段的 `docs/AGENT_PLAN.md`。同时报 `weekly_fundamentals.sh`、`health.py` command not found。
