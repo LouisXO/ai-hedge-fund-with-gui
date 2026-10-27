@@ -11,7 +11,9 @@ What counts as a view (pre-registered in docs/AGENT_PLAN.md S52):
     that already happened, a mention with no direction, a sector or a private company with no listed name;
   - index tickers (INDEX_TICKERS) are dropped: the range posts are their own product;
   - the LLM must quote the words that carry the view; a quote not found in the post drops the view;
-  - the same ticker and stance within REPEAT_DAYS is one view (the first post).
+  - the same ticker and stance within REPEAT_DAYS is one view (the first post);
+  - a supplement (the full text read after the post was first saved, agent/balder_x_save, 2026-10-27) is read after
+    the post's own file and adds only tickers the post's earlier files did not yield.
 Scoring: from the next session's open after the post, 5 and 20 sessions, SPY the same way. A bull view is right
 when it beats SPY, a bear view when it trails SPY.
 
@@ -31,7 +33,7 @@ import re
 import pandas as pd
 
 from agent import ledger
-from agent.balder_log import DROP, posted_date
+from agent.balder_log import DROP, drop_order, is_supplement, posted_date, same_post_files
 from hedge_fund.features.panel import PanelStore
 from hedge_fund.paths import AGENT_DIR
 
@@ -94,7 +96,7 @@ def collect(drop: str = DROP, seen: dict | None = None, transport=None) -> tuple
     views = []
     if not os.path.isdir(drop):
         return views, seen
-    for f in sorted(os.listdir(drop)):
+    for f in drop_order(os.listdir(drop)):
         p = os.path.join(drop, f)
         if not f.lower().endswith((".txt", ".md")) or f in seen:
             continue
@@ -114,9 +116,15 @@ def collect(drop: str = DROP, seen: dict | None = None, transport=None) -> tuple
 
 
 def record(con, views: list[dict]) -> int:
-    """Insert the views in posting order; the same ticker and stance within REPEAT_DAYS of a recorded view is a repeat."""
+    """Insert the views in posting order; the same ticker and stance within REPEAT_DAYS of a recorded view is a repeat,
+    and a supplement's ticker already recorded from its post is the post's view."""
     n = 0
-    for v in sorted(views, key=lambda v: (v["posted"], v["source_file"])):
+    for v in sorted(views, key=lambda v: (v["posted"], is_supplement(v["source_file"]), v["source_file"])):
+        before = same_post_files(con, "balder_views", v["source_file"]) if is_supplement(v["source_file"]) else []
+        if before and con.execute(f"SELECT 1 FROM balder_views WHERE ticker = ? AND source_file IN ({','.join('?' * len(before))})",
+                                  [v["ticker"]] + before).fetchone():
+            print(f"  {v['posted']} {v['ticker']} in supplement {v['source_file']}: already recorded from the post")
+            continue
         prev = con.execute("SELECT 1 FROM balder_views WHERE ticker = ? AND stance = ? AND posted BETWEEN ? AND ?",
                            [v["ticker"], v["stance"], v["posted"] - dt.timedelta(days=REPEAT_DAYS), v["posted"]]).fetchone()
         if prev:

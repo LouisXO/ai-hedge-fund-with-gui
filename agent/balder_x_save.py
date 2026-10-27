@@ -4,8 +4,10 @@ stdin: JSON list of {"id": status id, "time": "...", "text": "...", "tab": "subs
   "media":   what the post's images say, read from the photo page (chart levels, the "THE READ" box)
   "replies": Balder's own replies under the post, as shown on the post page
   "enrich":  true for a post saved before: the full text / images / replies are added to the private
-             feed log only, never as a second file in the drop folder (balder_log would read it as a
-             second post and count its trades twice)
+             feed log and written to the drop folder as a supplement (<day>-x-<id>-full-<hhmmss>.txt).
+             balder_log and balder_views read a supplement after the post's own file and keep only the
+             tickers the post's earlier files did not yield, so a trade or view is never counted twice
+             (2026-10-27: before this, a full text read after the first save never reached the scoring)
   "todo":    "fulltext" / "image" / "fulltext,image" when the timeline shows a "Show more" or pictures still
              to be read: kept in the state file until an enrichment of the post arrives
 A post not saved before is written to the balder_log drop folder (one .txt per post, picked up at 13:25)
@@ -20,12 +22,15 @@ to the newest post it read); `todo`, posts whose full text or images are still t
 Usage: echo '[...]' | python -m agent.balder_x_save
        python -m agent.balder_x_save --state                 # read_through, recent ids, todo (for the reader)
        python -m agent.balder_x_save --read-through subs=2026-10-06T18:29:20Z
+       python -m agent.balder_x_save --drop-todo ID [ID ...]  # not worth reading (range charts, superseded cards)
+       python -m agent.balder_x_save --backfill-full          # supplements for enrichments saved before 2026-10-27
 """
 from __future__ import annotations
 
 import datetime as dt
 import json
 import os
+import re
 import sys
 
 DROP = os.path.expanduser("~/Library/Mobile Documents/com~apple~CloudDocs/Balder")
@@ -77,13 +82,25 @@ def body(p: dict) -> str:
     return text
 
 
+def write_supplement(drop: str, day: str, rec: dict) -> str:
+    """The enrichment as a drop file named after the post; its header carries the post time, so it is scored from the
+    session after the post, not after the day it was read."""
+    name = f"{day}-x-{rec['id']}-full-{dt.datetime.now().strftime('%H%M%S')}.txt"
+    with open(os.path.join(drop, name), "w") as f:
+        f.write(f"{day} Balder X {rec.get('tab', '')} 帖子({rec.get('time', '')})(补全):{rec['text']}\n")
+    return name
+
+
 def save(posts: list[dict], drop: str = DROP, feed: str = FEED, today: dt.date | None = None) -> list[dict]:
     """The records written (new posts and enrichments), in input order."""
     os.makedirs(drop, exist_ok=True)
     os.makedirs(os.path.dirname(feed), exist_ok=True)
-    seen = set()
+    seen = {}                                                   # id -> post time, from the post's first save
     if os.path.exists(feed):
-        seen = {json.loads(line)["id"] for line in open(feed) if line.strip() and not json.loads(line).get("enrich")}
+        for line in open(feed):
+            r = json.loads(line) if line.strip() else {}
+            if r and not r.get("enrich"):
+                seen.setdefault(r["id"], r.get("time", ""))
     today = (today or dt.date.today()).isoformat()
     out = []
     for p in posts:
@@ -95,15 +112,35 @@ def save(posts: list[dict], drop: str = DROP, feed: str = FEED, today: dt.date |
         if pid in seen:
             if not p.get("enrich"):
                 continue
-            rec = {"id": pid, "enrich": True, "saved_at": stamp, "time": p.get("time", ""), "tab": p.get("tab", ""), "text": text}
+            rec = {"id": pid, "enrich": True, "saved_at": stamp, "time": p.get("time") or seen[pid], "tab": p.get("tab", ""), "text": text}
+            rec["supplement"] = write_supplement(drop, today, rec)
         else:
             with open(os.path.join(drop, f"{today}-x-{pid}.txt"), "w") as f:
                 f.write(f"{today} Balder X {p.get('tab', '')} 帖子({p.get('time', '')}):{text}\n")
             rec = {"id": pid, "saved_at": stamp, **{k: v for k, v in p.items() if k not in ("id", "enrich")}, "text": text}
-            seen.add(pid)
+            seen[pid] = p.get("time", "")
         with open(feed, "a") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         out.append(rec)
+    return out
+
+
+def drop_todo(s: dict, ids: list[str]) -> tuple[dict, list[dict]]:
+    """(state without those posts in todo, the entries dropped)."""
+    gone = [t for t in s["todo"] if t["id"] in set(ids)]
+    return {**s, "todo": [t for t in s["todo"] if t["id"] not in set(ids)]}, gone
+
+
+def backfill_supplements(drop: str = DROP, feed: str = FEED, today: dt.date | None = None) -> list[str]:
+    """A supplement for every enrichment in the feed that has none in the drop folder yet (those saved before 2026-10-27)."""
+    have = {m.group(1) for f in (os.listdir(drop) if os.path.isdir(drop) else []) for m in [re.search(r"-x-(\d+)-full-", f)] if m}
+    day = (today or dt.date.today()).isoformat()
+    out = []
+    for line in (open(feed) if os.path.exists(feed) else []):
+        r = json.loads(line) if line.strip() else {}
+        if r.get("enrich") and r["id"] not in have and (r.get("text") or "").strip():
+            out.append(write_supplement(drop, day, r))
+            have.add(r["id"])
     return out
 
 
@@ -112,6 +149,19 @@ def main(argv: list[str] | None = None) -> int:
     s = load_state()
     if args and args[0] == "--state":
         print(json.dumps({**s, "recent_ids": recent_ids()}, ensure_ascii=False))
+        return 0
+    if args and args[0] == "--drop-todo":
+        s, gone = drop_todo(s, args[1:])
+        write_state(s)
+        for t in gone:
+            print(f"dropped {t['id']} ({t['why']}, {t['tab']} {t['time']})")
+        print(f"{len(gone)} dropped of {len(args) - 1}; todo {len(s['todo'])}")
+        return 0
+    if args and args[0] == "--backfill-full":
+        names = backfill_supplements()
+        for n in names:
+            print(f"supplement {n}")
+        print(f"{len(names)} supplements written")
         return 0
     if args and args[0] == "--read-through":
         for kv in args[1:]:

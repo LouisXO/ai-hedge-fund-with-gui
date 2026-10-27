@@ -68,3 +68,14 @@ def test_collect_reads_unseen_posts_only_and_takes_the_posting_day(tmp_path):
     views, seen = bv.collect(drop=str(tmp_path), seen={"old.txt": "2026-10-01"}, transport=llm)
     assert [(v["source_file"], v["posted"]) for v in views] == [("2026-10-07-x-1.txt", dt.date(2026, 10, 6))]   # 22:30 ET
     assert set(seen) == {"old.txt", "2026-10-07-x-1.txt"}
+
+
+def test_a_supplement_view_on_a_ticker_its_post_already_gave_is_not_a_second_view():
+    d = dt.date(2026, 10, 15)
+    v = lambda t, stance, f: {"posted": d, "ticker": t, "stance": stance, "horizon": "unknown", "claim": "", "quote": "", "source_file": f}
+    con = _con()
+    n = bv.record(con, [v("ABC", "bear", "2026-10-27-x-9-full-120000.txt"), v("XYZ", "bull", "2026-10-27-x-9-full-120000.txt"),
+                        v("ABC", "bull", "2026-10-27-x-9.txt")])
+    assert n == 2
+    assert con.execute("SELECT ticker, stance, source_file FROM balder_views ORDER BY ticker").fetchall() == [
+        ("ABC", "bull", "2026-10-27-x-9.txt"), ("XYZ", "bull", "2026-10-27-x-9-full-120000.txt")]

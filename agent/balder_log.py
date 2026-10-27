@@ -20,6 +20,9 @@ What counts as a trade (2026-10-06, after targets were recorded as prices and re
     (目标, 初步, 止损, 阻力, 支撑, 均线, target, stop ...) is dropped, whatever the LLM said;
   - the same move on the same ticker posted again within REPEAT_DAYS (a recap repeating the day's
     log) is one trade; a later post can only fill a missing price. A re-open after a close is new.
+  - a supplement (<day>-x-<id>-full-*.txt, the full text / images / replies read after the post was first
+    saved; 2026-10-27) is read after the post's own file and adds only tickers the post's earlier files
+    did not yield; for a ticker already recorded from the post it can only fill a missing price.
 
 Usage: python -m agent.balder_log [--dry-run] [--rebuild]
   --rebuild   back up the table and the seen file, empty the table and re-extract every saved post
@@ -131,6 +134,30 @@ def posted_date(path: str, text: str) -> dt.date:
     return dt.date.fromtimestamp(os.path.getmtime(path))
 
 
+def post_id(fname: str) -> str | None:
+    """The X status id of a file agent/balder_x_save wrote (the post's own file or a supplement); None for a hand drop."""
+    m = re.search(r"-x-(\d+)(?:-full-[^.]*)?\.txt$", fname)
+    return m.group(1) if m else None
+
+
+def is_supplement(fname: str) -> bool:
+    return bool(re.search(r"-x-\d+-full-[^.]*\.txt$", fname))
+
+
+def drop_order(names) -> list[str]:
+    """Posts first, supplements after them, so a supplement always finds what its post already yielded."""
+    return sorted(names, key=lambda f: (is_supplement(f), f))
+
+
+def same_post_files(con, table: str, fname: str) -> list[str]:
+    """The source files already recorded in `table` that belong to the same X post as `fname` (none for a hand drop)."""
+    pid = post_id(fname)
+    if pid is None:
+        return []
+    rows = con.execute(f"SELECT DISTINCT source_file FROM {table} WHERE source_file LIKE ?", [f"%-x-{pid}%"]).fetchall()
+    return [r[0] for r in rows if post_id(r[0]) == pid and r[0] != fname]
+
+
 def repeat_of(con, posted: dt.date, ticker: str, action: str, days: int = REPEAT_DAYS):
     """The earlier row (id, action, posted, price) when this move on this ticker was already recorded within `days`
     and nothing else happened to the ticker after it; None when the move is new."""
@@ -152,7 +179,7 @@ def ingest(con, dry_run: bool = False, rebuild: bool = False, drop: str = DROP, 
         return 0
     seen = {} if rebuild else _load_seen(seen_path)
     n = 0
-    for f in sorted(os.listdir(drop)):
+    for f in drop_order(os.listdir(drop)):
         p = os.path.join(drop, f)
         if not f.lower().endswith((".txt", ".md")) or f in seen:
             continue
@@ -166,7 +193,19 @@ def ingest(con, dry_run: bool = False, rebuild: bool = False, drop: str = DROP, 
             print(f"{f}: extract failed: {exc}")
             continue
         day = posted_date(p, text)
+        before = same_post_files(con, "balder_trades", f) if is_supplement(f) else []
         for x in rows:
+            if before:
+                had = con.execute(f"SELECT id, action, price FROM balder_trades WHERE ticker = ? AND source_file IN ({','.join('?' * len(before))})",
+                                  [x["ticker"]] + before).fetchall()
+                if had:
+                    gap = [r for r in had if r[1] == x["action"] and r[2] is None]
+                    if gap and x["price"] is not None:
+                        con.execute("UPDATE balder_trades SET price = ? WHERE id = ?", [x["price"], gap[0][0]])
+                        print(f"  {day} {x['ticker']} in supplement {f}: price {x['price']} filled in")
+                    else:
+                        print(f"  {day} {x['ticker']} in supplement {f}: already recorded from the post")
+                    continue
             prev = repeat_of(con, day, x["ticker"], x["action"])
             if prev is not None:
                 if prev[3] is None and x["price"] is not None:

@@ -2,6 +2,7 @@
 and a rebuild starts from an empty table (made-up posts, a fake LLM, no network)."""
 import datetime as dt
 import json
+import os
 
 import duckdb
 
@@ -89,3 +90,21 @@ def test_a_dry_run_rebuild_reads_every_post_again_and_saves_no_seen_file(tmp_pat
     assert bl.ingest(con, dry_run=True, rebuild=True, drop=str(drop), seen_path=str(seen), transport=llm) == 1
     assert _rows(con) == [("2026-10-01", "ABC", "open", 10.5)]
     assert json.load(open(seen)) == {"a.txt": "2026-10-01"}                    # untouched by a dry run
+
+
+def test_a_supplement_adds_only_new_tickers_and_can_fill_a_missing_price(tmp_path):
+    drop = tmp_path / "drop"
+    drop.mkdir()
+    (drop / "2026-10-27-x-5.txt").write_text("2026-10-27 Balder X subs 帖子(2026-10-01T20:00:00Z):截断 平仓 $ABC …", encoding="utf-8")
+    (drop / "2026-10-27-x-5-full-153000.txt").write_text(
+        "2026-10-27 Balder X subs 帖子(2026-10-01T20:00:00Z)(补全):全文 平仓 $ABC 10.00→10.50 平仓 DEF 20.00→19.00", encoding="utf-8")
+    (drop / "2026-10-27-x-55.txt").write_text("2026-10-27 Balder X subs 帖子(2026-10-01T19:00:00Z):别的帖 平仓 $DEF", encoding="utf-8")
+    llm = FakeLLM({"全文": [{"ticker": "ABC", "action": "close", "price": 10.5}, {"ticker": "DEF", "action": "close", "price": 19.0}],
+                   "截断": [{"ticker": "ABC", "action": "close", "price": None}],
+                   "别的帖": []})
+    assert bl.drop_order(os.listdir(drop))[-1] == "2026-10-27-x-5-full-153000.txt"     # read after its post even on the same day
+    con = _con()
+    assert bl.ingest(con, drop=str(drop), seen_path=str(tmp_path / "seen.json"), transport=llm) == 2
+    assert _rows(con) == [("2026-10-01", "ABC", "close", 10.5), ("2026-10-01", "DEF", "close", 19.0)]
+    assert con.execute("SELECT count(*) FROM balder_trades WHERE ticker = 'ABC'").fetchone()[0] == 1
+    assert bl.post_id("2026-10-27-x-5-full-153000.txt") == "5" and bl.post_id("2026-10-01-lmt-close.txt") is None
