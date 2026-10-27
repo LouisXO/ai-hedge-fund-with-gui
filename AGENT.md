@@ -96,7 +96,7 @@ agent/
   watch.py + watchlist.yaml   关注名单:申报/内部人/13D/新闻/价位/散户热度/分析师共识/期权大单 → 通知
   market_breadth.py     大盘体检(16:10 后):前 500 大市值加权 vs 等权、广度、拉动/拖累、前 15 大 + TSM/ASML、近期财报(AV 日历,3 天一取)
                         → out/agent/market_breadth.json → 私有站。只看,不进任何一本书(S37)
-  balder_log.py         Balder(X 订阅)帖子 → 跟单记分:用户把帖子文本放进 iCloud Drive/Balder,收盘后密封 LLM 提取交易、按次日开盘记 1/5/20 日收益。**不抓 X,不上公开站,不进信号**
+  balder_log.py         Balder(X 订阅)帖子 → 跟单记分:帖子在 iCloud Drive/Balder(用户手放,或主人在自己的浏览器里读后由 balder_x_save 存档;定时任务不抓 X),收盘后密封 LLM 提取交易、按次日开盘记 1/5/20 日收益。**不上公开站,不进信号;帖子内容不进本仓库**
                         只记写明的动作;观察名单、目标价不算;复盘里重复的同一笔只记一次(S51);`--rebuild [--dry-run]` 从存档重建
   balder_views.py       同一批帖子里的观点(点名个股的看多/看空,不是交易)→ 发帖后下一开盘起 5/20 日对 SPY 记分(S52):
                         必须逐字引用原文,指数和板块不算,同票同向 3 天内只记一次;LLM 调用跑完才开库写入。描述性,不进信号,不上公开站
