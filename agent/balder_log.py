@@ -114,8 +114,16 @@ def extract(text: str, transport=None) -> list[dict]:
                 p = None
         clean.append({"ticker": str(x["ticker"]).upper().lstrip("$"), "action": x["action"], "side": x.get("side") or "long",
                       "book": x.get("book") if x.get("book") in ("short", "long") else "short", "strategy": (x.get("strategy") or "")[:40],
-                      "price": p, "qty": x.get("qty"), "note": (x.get("note") or "")[:80]})
+                      "price": p, "qty": _qty(x.get("qty")), "note": (x.get("note") or "")[:80]})
     return clean
+
+
+def _qty(q):
+    """A number or None: the LLM sometimes answers in words ("一手", "half"), which the DOUBLE column rejects."""
+    try:
+        return float(str(q).replace(",", "").rstrip("%")) if q is not None and not isinstance(q, bool) else None
+    except ValueError:
+        return None
 
 
 def posted_date(path: str, text: str) -> dt.date:

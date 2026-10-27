@@ -108,3 +108,10 @@ def test_a_supplement_adds_only_new_tickers_and_can_fill_a_missing_price(tmp_pat
     assert _rows(con) == [("2026-10-01", "ABC", "close", 10.5), ("2026-10-01", "DEF", "close", 19.0)]
     assert con.execute("SELECT count(*) FROM balder_trades WHERE ticker = 'ABC'").fetchone()[0] == 1
     assert bl.post_id("2026-10-27-x-5-full-153000.txt") == "5" and bl.post_id("2026-10-01-lmt-close.txt") is None
+
+
+def test_a_quantity_in_words_is_dropped_not_a_crash():
+    llm = FakeLLM({"买入": [{"ticker": "ABC", "action": "open", "price": None, "qty": "一手"},
+                           {"ticker": "DEF", "action": "open", "price": None, "qty": "2,000"},
+                           {"ticker": "GHI", "action": "open", "price": None, "qty": "30%"}]})
+    assert [x["qty"] for x in bl.extract("买入 $ABC $DEF $GHI", llm)] == [None, 2000.0, 30.0]
