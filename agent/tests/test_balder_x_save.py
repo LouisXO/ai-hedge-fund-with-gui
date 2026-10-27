@@ -14,10 +14,10 @@ def _feed(path):
 
 def test_a_new_post_carries_its_chart_and_replies_and_is_saved_once(tmp_path):
     drop, feed = tmp_path / "drop", tmp_path / "feed.jsonl"
-    post = {"id": "1", "time": "2026-10-02T14:16Z", "tab": "subs", "text": "10月发财股票 $ASTS 初步60 目标72",
-            "media": "ASTS 阻力 66.12, 20日均线 60.84, 支撑 55.80", "replies": "可以"}
+    post = {"id": "1", "time": "2026-10-02T14:16Z", "tab": "subs", "text": "月度选股 $ABC 初步10 目标12",
+            "media": "ABC 阻力 11.50, 20日均线 10.20, 支撑 9.80", "replies": "可以"}
     recs = bx.save([post], str(drop), str(feed), DAY)
-    assert len(recs) == 1 and "[图] ASTS 阻力 66.12" in recs[0]["text"] and "[他的回复] 可以" in recs[0]["text"]
+    assert len(recs) == 1 and "[图] ABC 阻力 11.50" in recs[0]["text"] and "[他的回复] 可以" in recs[0]["text"]
     assert [p.name for p in drop.iterdir()] == ["2026-10-06-x-1.txt"]
     assert bx.save([post], str(drop), str(feed), DAY) == []                        # seen: nothing written again
     assert len(list(drop.iterdir())) == 1 and len(_feed(feed)) == 1
@@ -25,13 +25,13 @@ def test_a_new_post_carries_its_chart_and_replies_and_is_saved_once(tmp_path):
 
 def test_an_enrichment_is_a_supplement_dated_by_the_post_not_a_second_post(tmp_path):
     drop, feed = tmp_path / "drop", tmp_path / "feed.jsonl"
-    bx.save([{"id": "2", "time": "2026-10-02T14:16:00Z", "text": "平仓获利 NU ... NVO", "tab": "subs"}], str(drop), str(feed), DAY)
-    recs = bx.save([{"id": "2", "text": "全文 NVO 37.16→37.54", "tab": "subs", "enrich": True}], str(drop), str(feed), DAY)
+    bx.save([{"id": "2", "time": "2026-10-02T14:16:00Z", "text": "平仓获利 ABC ... DEF", "tab": "subs"}], str(drop), str(feed), DAY)
+    recs = bx.save([{"id": "2", "text": "全文 DEF 20.10→20.40", "tab": "subs", "enrich": True}], str(drop), str(feed), DAY)
     assert recs[0]["enrich"] and recs[0]["time"] == "2026-10-02T14:16:00Z"        # no time given: the first save's
     names = sorted((p.name for p in drop.iterdir()), key=len)                    # the post, then its supplement
     assert names[0] == "2026-10-06-x-2.txt" and re.fullmatch(r"2026-10-06-x-2-full-\d{6}\.txt", names[1])
     sup = (drop / names[1]).read_text()
-    assert "帖子(2026-10-02T14:16:00Z)(补全)" in sup and "NVO 37.16" in sup
+    assert "帖子(2026-10-02T14:16:00Z)(补全)" in sup and "DEF 20.10" in sup
     lines = _feed(feed)
     assert len(lines) == 2 and lines[1]["enrich"] and lines[1]["supplement"] == names[1]
     assert bx.save([{"id": "3", "text": "new", "enrich": True}], str(drop), str(feed), DAY)[0].get("enrich") is None   # unseen: a post
