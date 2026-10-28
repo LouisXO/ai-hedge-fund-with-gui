@@ -15,7 +15,9 @@ What counts as a view (pre-registered in docs/AGENT_PLAN.md S52):
   - a supplement (the full text read after the post was first saved, agent/balder_x_save, 2026-10-27) is read after
     the post's own file and adds only tickers the post's earlier files did not yield.
 Scoring: from the next session's open after the post, 5 and 20 sessions, SPY the same way. A bull view is right
-when it beats SPY, a bear view when it trails SPY.
+when it beats SPY, a bear view when it trails SPY. The summary adds the distinct posting days (n_days) and the signed
+abnormal return's sd per stance, and lists a return beyond ±50% under `suspect` to check against the bars; the
+registered statistics keep every row (2026-10-27).
 
 Usage: python -m agent.balder_views [--dry-run] [--rebuild]
   --rebuild   back up the table and the seen file, empty the table and re-extract every saved post
@@ -33,7 +35,7 @@ import re
 import pandas as pd
 
 from agent import ledger
-from agent.balder_log import DROP, drop_order, is_supplement, posted_date, same_post_files
+from agent.balder_log import DROP, drop_order, is_supplement, posted_date, same_post_files, sd, suspects
 from hedge_fund.features.panel import PanelStore
 from hedge_fund.paths import AGENT_DIR
 
@@ -182,7 +184,8 @@ def score(con) -> int:
 
 def summary(con) -> dict:
     df = con.execute("SELECT * FROM balder_views ORDER BY posted DESC, ticker").df()
-    out = {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "n": int(len(df)), "recent": [], "by_stance": {}}
+    out = {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "n": int(len(df)), "recent": [], "by_stance": {},
+           "suspect": []}
     if df.empty:
         return out
     df["posted"] = df["posted"].astype(str)
@@ -195,8 +198,10 @@ def summary(con) -> dict:
             r = g[f"ret{h}"].dropna()
             abn = (r - g.loc[r.index, f"spy{h}"]) * sign
             st[f"h{h}"] = {"n": int(len(r)), "mean_abn_signed": float(abn.mean()) if len(r) else None,
-                           "right": float((abn > 0).mean()) if len(r) else None}
+                           "right": float((abn > 0).mean()) if len(r) else None,
+                           "n_days": int(g.loc[r.index, "posted"].nunique()), "sd_abn_signed": sd(abn)}
         out["by_stance"][s] = st
+    out["suspect"] = suspects(df, HORIZONS)
     return out
 
 
@@ -227,7 +232,7 @@ def main() -> int:
     json.dump(seen, open(SEEN, "w"), ensure_ascii=False)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     json.dump(out, open(OUT, "w"), ensure_ascii=False, indent=1, default=str)
-    print(f"balder views: {n_new} new, {n_scored} scored, total {out['n']}")
+    print(f"balder views: {n_new} new, {n_scored} scored, total {out['n']}, suspect returns {len(out['suspect'])}")
     return 0
 
 

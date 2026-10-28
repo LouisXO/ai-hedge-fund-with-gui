@@ -30,6 +30,11 @@ must be fresh (DATA); the long alarm itself is a drift check (agent/drift.py).
 2026-10-21 (S54 investigation): a failed dividends update is named as what auction_basis used instead, and a newest
 auction row without its with-dividends NAV is bad (check_cash_events): unknown dividends are never $0 any more.
 
+2026-10-27: Balder's private archive and its scoring (check_balder: warn, never bad: no book, signal or alert reads
+any of it): the X feed saved within 2 sessions, at most 40 posts waiting for a full text or image, each tab's
+read_through within 7 days, the three summaries regenerated within 2 sessions; the record page's prices outside our
+bars and the scored returns beyond ±50% are counted, and warn only while one is dated within the last 7 days.
+
 Usage: python -m agent.health [--no-notify] [--no-llm-probe]
 """
 from __future__ import annotations
@@ -108,6 +113,15 @@ UNPAID_GRACE_DAYS = 5       # an entitled dividend this many days past its pay d
 SHADOW = os.path.join(OUT, "agent", "insider_shadow.json")
 SHADOW_DUE, SHADOW_GRACE_MIN = (13, 25), 90          # postclose.sh runs it after agent.evaluate
 SPRT_ZH = {"none": "未越线", "H1": '判"有"', "H0": '判"无"'}
+BALDER_FEED = os.path.join(OUT, "agent", "balder_x_feed.jsonl")      # agent/balder_x_save: one line per post saved
+BALDER_STATE = os.path.join(A, "balder_x_state.json")                 # read_through per tab, todo
+BALDER_OUTPUTS = {          # name, summary json: balder_log / balder_views at 13:25, balder_record at 16:10
+    "交易记分": os.path.join(OUT, "agent", "balder_latest.json"),
+    "观点记分": os.path.join(OUT, "agent", "balder_views.json"),
+    "公开战绩": os.path.join(OUT, "agent", "balder_record.json"),
+}
+BALDER_STALE_SESSIONS, BALDER_TODO_MAX, BALDER_READ_DAYS = 2, 40, 7
+BALDER_RECENT_DAYS = 7      # a suspect return or a price outside our bars warns while it is this many days old or newer
 
 DATA = [  # name, db, sql for the latest date, max age in sessions before warn / bad
     ("价格日线 bars", f"{A}/panel.db", "SELECT max(trade_date) FROM bars", 1, 3),
@@ -614,6 +628,105 @@ def check_insider_shadow(now: dt.datetime, path: str = SHADOW) -> dict:
     return r
 
 
+def last_saved(feed: str) -> dt.datetime | None:
+    """saved_at of the feed's last line that has one."""
+    try:
+        with open(feed, errors="ignore") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        try:
+            t = parse_iso(json.loads(line).get("saved_at")) if line.strip() else None
+        except (ValueError, AttributeError):
+            t = None
+        if t:
+            return t
+    return None
+
+
+def check_balder(now: dt.datetime, feed: str | None = None, state: str | None = None, outputs: dict | None = None) -> dict:
+    """Balder's archive and scoring: the feed's last save, the reader's todo and read_through, the three summaries'
+    age, the record page's price audit and the suspect returns (warn on a recent one only; the totals are always in the
+    detail). Warn, never bad: display and audit only."""
+    r = {"name": "Balder 存档与记分(只看不交易)", "label": "balder", "level": "ok", "detail": ""}
+    try:
+        warn, info = balder_findings(now, feed or BALDER_FEED, state or BALDER_STATE, outputs or BALDER_OUTPUTS)
+    except Exception as exc:                              # a hand-edited state file must not stop the health report
+        warn, info = [f"检查出错:{type(exc).__name__}: {str(exc)[:60]}"], []
+    r.update(level="warn" if warn else "ok", detail=";".join(warn + info))
+    return r
+
+
+def n_recent(days: list, today: dt.date) -> int:
+    """How many of these ISO dates are at most BALDER_RECENT_DAYS old; an unreadable date counts (it is looked at)."""
+    n = 0
+    for d in days:
+        try:
+            n += (today - dt.date.fromisoformat(str(d)[:10])).days <= BALDER_RECENT_DAYS
+        except ValueError:
+            n += 1
+    return n
+
+
+def balder_findings(now: dt.datetime, feed: str, state: str, outputs: dict) -> tuple[list[str], list[str]]:
+    """(warnings, notes) for check_balder."""
+    ref = last_session(now.date(), now)
+    warn, info = [], []
+    t = last_saved(feed)
+    if t is None:
+        warn.append("X 存档没有记录(balder_x_feed.jsonl)")
+    elif sessions_back(t.date(), ref) > BALDER_STALE_SESSIONS:
+        warn.append(f"X 存档最后一次是 {t:%m-%d %H:%M},落后 {sessions_back(t.date(), ref)} 个交易日(读帖循环停了?)")
+    else:
+        info.append(f"X 存档最后 {t:%m-%d %H:%M}")
+    st = _load_json(state)
+    if not isinstance(st, dict):
+        warn.append("没有读帖状态(balder_x_state.json)")
+    else:
+        todo = len(st.get("todo") or [])
+        if todo > BALDER_TODO_MAX:
+            warn.append(f"待补全文/图 {todo} 条(超过 {BALDER_TODO_MAX})")
+        else:
+            info.append(f"待补全文/图 {todo} 条")
+        for tab, v in sorted((st.get("read_through") or {}).items()):
+            rt = parse_iso(v)                             # UTC, compared with local time: a few hours do not matter here
+            if rt is None:
+                warn.append(f"{tab} 的 read_through 读不出:{str(v)[:30]}")
+            elif (now - rt).days > BALDER_READ_DAYS:
+                warn.append(f"{tab} 只读到 {rt:%m-%d}({(now - rt).days} 天前)")
+            else:
+                info.append(f"{tab} 读到 {rt:%m-%d}")
+    for name, path in outputs.items():
+        j = _load_json(path)
+        if not isinstance(j, dict):
+            warn.append(f"{name}没有 {os.path.basename(path)}")
+            continue
+        gen, base = parse_iso(j.get("generated_at")), os.path.basename(path)
+        if gen is None:
+            warn.append(f"{name} {base} 没有生成时间")
+        elif sessions_back(gen.date(), ref) > BALDER_STALE_SESSIONS:
+            warn.append(f"{name} {base} 是 {gen:%m-%d %H:%M} 的,落后 {sessions_back(gen.date(), ref)} 个交易日")
+        sus = j.get("suspect") or []
+        if sus:
+            m = n_recent([x.get("posted") for x in sus], now.date())
+            (warn if m else info).append(f"{name}收益绝对值超过 50%:历史 {len(sus)} 条,近 {BALDER_RECENT_DAYS} 天 {m} 条"
+                                         "(先核对日线,分数没改)")
+        pc = j.get("price_check")
+        if isinstance(pc, dict) and pc.get("error"):
+            warn.append(f"{name}价格核对失败:{str(pc['error'])[:80]}")
+        elif isinstance(pc, dict):
+            if pc.get("n_outside"):                     # `outside` lists the newest ones, so a recent one is in it
+                m = n_recent([x.get("day") for x in pc.get("outside") or []], now.date())
+                (warn if m else info).append(f"{name}价格核对:历史 {pc['n_outside']} 条超出日线范围,近 {BALDER_RECENT_DAYS} 天 "
+                                             f"{m} 条(共核对 {pc.get('n_checked', 0)} 个)")
+            else:
+                info.append(f"{name}价格核对 {pc.get('n_checked', 0)} 个都在日线范围里")
+            if pc.get("no_bars"):
+                info.append(f"{len(pc['no_bars'])} 个代码我们没有日线")
+    return warn, info
+
+
 def check_jobs(now: dt.datetime) -> list[dict]:
     try:
         listing = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=15).stdout
@@ -782,7 +895,7 @@ def main() -> int:
     now = dt.datetime.now()
     rep = {"generated_at": now.isoformat(timespec="seconds"),
            "jobs": check_jobs(now) + [check_exec(now)] + check_fetch_runs(now) + [check_list_writers(now), check_cash_events(now),
-                                                                                  check_insider_shadow(now)],
+                                                                                  check_insider_shadow(now), check_balder(now)],
            "data": check_data(now.date(), now),
            "system": check_system(not args.no_llm_probe)}
     try:                                                  # agent.drift: paper book vs its rules and the backtest's range

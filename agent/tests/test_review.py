@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from agent import ledger
+from agent import market_breadth as MB
 from agent import review as R
 
 D = dt.date
@@ -149,6 +150,8 @@ def _paper_fixture(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "AUCTIONS_DB", adb)
     monkeypatch.setattr(R, "OUT_DIR", str(tmp_path))
     monkeypatch.setattr(R, "headlines", lambda *a, **k: {})
+    monkeypatch.setattr(R, "ARCHIVE_DB", tmp_path / "archive.db")                 # never the real archive or calendar
+    monkeypatch.setattr(MB, "CAL_PATH", tmp_path / "earnings_calendar.csv")
     (tmp_path / f"sync_{day}.json").write_text(json.dumps({"reconcile": ["BBB: lots 50 vs broker 40"]}))
     # the previous session's 16:10 run: one order refused at the POST (not in agent_orders), one accepted
     (tmp_path / f"exec_{prev}.json").write_text(json.dumps({"orders": [
@@ -202,6 +205,7 @@ def test_real_section_dates_each_deal_by_its_own_day(tmp_path, monkeypatch):
     days to expiry and the price context come from each deal's date, lessons carry that date, the two buys are one
     lesson. Made-up tickers and prices."""
     monkeypatch.setattr(R, "OUT_DIR", str(tmp_path))
+    monkeypatch.setattr(R, "BALDER_STATE", str(tmp_path / "balder_x_state.json"))      # never the reader's real state
     for f in ("headlines", "retail", "insiders_30d"):
         monkeypatch.setattr(R, f, lambda *a, **k: {})
     days = [d.date() for d in pd.bdate_range("2026-08-03", "2026-10-12")]
@@ -243,6 +247,20 @@ def test_real_section_dates_each_deal_by_its_own_day(tmp_path, monkeypatch):
     assert [f["date"] for f in fl["real_add_same_day"]] == ["2026-10-12"]
     (rt,) = out["round_trips"]
     assert rt["code"] == "US.AAA261009C100000" and rt["exit_px"] == 0 and rt["exit_day"] == "2026-10-10"
+    # no Balder file in OUT_DIR: a grey line saying so under each deal but the settlement, and no flag from it
+    assert "balder" not in by["S1"] and all("存档不够早" in by[k]["balder"] and "公开记录缺失" in by[k]["balder"] for k in ("L1", "B1", "B2"))
+    assert not any("Balder" in f["text"] for f in out["flags"]) and not any("Balder" in t for x in out["deals"] for t in x["tags"])
+    # a bad feed (an impossible date, bytes that are not UTF-8) costs nothing but its own lines
+    (tmp_path / "balder_x_feed.jsonl").write_bytes(b'{"id": "1", "saved_at": "2030-03-01", "time": "2030-02-30T15:00:00Z", "text": "$BBB"}\n'
+                                                   b'{"id": "2", "text": "\xff $BBB"}\n'
+                                                   b'{"id": "3", "saved_at": "2026-10-01T10:00:00", "time": "2026-09-30T15:00:00Z", "text": "$AAA"}\n')
+    by = {x["deal_id"]: x for x in R.real_section(con, st, day, D(2026, 10, 9), 0.1, {}, {})["deals"]}
+    assert "X 帖子存档有缺口(没有读帖状态),已存的没有提到" in by["B1"]["balder"] and "读不出来" not in by["L1"]["balder"]
+    # a feed that cannot be read at all: every deal's line says so, the review still comes out
+    (tmp_path / "balder_x_feed.jsonl").unlink()
+    (tmp_path / "balder_x_feed.jsonl").mkdir()
+    by = {x["deal_id"]: x for x in R.real_section(con, st, day, D(2026, 10, 9), 0.1, {}, {})["deals"]}
+    assert [by[k]["balder"] for k in ("L1", "B1", "B2")] == ["Balder 对照读不出来(IsADirectoryError)"] * 3 and "balder" not in by["S1"]
 
 
 def test_a_15pct_day_is_a_big_move_not_an_action(tmp_path, monkeypatch):

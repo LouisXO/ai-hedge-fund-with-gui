@@ -10,7 +10,9 @@ or paste it into a file there by hand. This job:
      numbers validated: every price in the output must appear in the post text),
   3. records them in optradar.db `balder_trades` (open / close / add / trim, strategy, price),
   4. scores every open from the next session: 1 / 5 / 20-session return vs SPY, from our panel,
-  5. writes out/agent/balder_latest.json for the review page (private site only).
+  5. writes out/agent/balder_latest.json for the review page (private site only): per book the mean, hit rate and
+     abnormal return, with the distinct posting days (n_days) and the abnormal return's sd; a return beyond ±50%
+     is listed under `suspect` to check against the bars, never dropped (2026-10-27).
 
 What counts as a trade (2026-10-06, after targets were recorded as prices and recaps as second trades):
   - only a move the post states: open / new / buy / a monthly pick -> open; close / exit / sell -> close;
@@ -64,6 +66,7 @@ SYSTEM = ("你是一个只做信息提取的程序。输入是一段交易员发
           "没有交易就输出空数组 []。只输出 JSON,不解释。价格只能用原文里出现过的数字。")
 LEVEL_WORDS = ("目标", "初步", "止盈", "止损", "阻力", "支撑", "均线", "区间", "target", "stop")
 REPEAT_DAYS = 3
+SUSPECT_PCT = 50.0          # a scored return beyond ±50% is listed for a look at the bars (a split, a wrong ticker); scores unchanged
 
 
 def _load_seen(path=SEEN) -> dict:
@@ -299,21 +302,43 @@ def score(con) -> int:
     return n
 
 
+def sd(x: pd.Series) -> float | None:
+    """Sample standard deviation of the non-missing values; None below two."""
+    x = x.dropna()
+    return float(x.std(ddof=1)) if len(x) > 1 else None
+
+
+def suspects(df: pd.DataFrame, horizons) -> list[dict]:
+    """Rows with a scored return beyond ±SUSPECT_PCT at any horizon: id, ticker, posted, and the largest such return
+    with its horizon. A list to check against the bars, not a filter: the scores and the statistics keep every row."""
+    out = []
+    for r in df.to_dict("records"):
+        big = [(abs(r[f"ret{h}"]), h, r[f"ret{h}"]) for h in horizons if pd.notna(r[f"ret{h}"]) and abs(r[f"ret{h}"]) > SUSPECT_PCT]
+        if big:
+            _, h, ret = max(big)
+            out.append({"id": r["id"], "ticker": r["ticker"], "posted": str(r["posted"]), "h": h, "ret": round(float(ret), 1)})
+    return out
+
+
 def summary(con) -> dict:
     df = con.execute("SELECT * FROM balder_trades ORDER BY posted DESC, ticker").df()
-    out = {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "n": int(len(df)), "recent": [], "by_book": {}}
+    out = {"generated_at": dt.datetime.now().isoformat(timespec="seconds"), "n": int(len(df)), "recent": [], "by_book": {},
+           "suspect": []}
     if df.empty:
         return out
     df["posted"] = df["posted"].astype(str)
-    out["recent"] = df.head(15).where(pd.notna(df.head(15)), None).to_dict("records")
+    head = df.head(15).astype(object)        # object first: on a float column where(..., None) keeps NaN, which is not JSON
+    out["recent"] = head.where(pd.notna(head), None).to_dict("records")
     for b, g in df[df["action"].isin(["open", "add"])].groupby("book"):
         s = {}
         for h in (1, 5, 20):
             r = g[f"ret{h}"].dropna()
             sp = g.loc[r.index, f"spy{h}"]
             s[f"h{h}"] = {"n": int(len(r)), "mean": float(r.mean()) if len(r) else None, "hit": float((r > 0).mean()) if len(r) else None,
-                          "mean_abn": float((r - sp).mean()) if len(r) else None}
+                          "mean_abn": float((r - sp).mean()) if len(r) else None,
+                          "n_days": int(g.loc[r.index, "posted"].nunique()), "sd_abn": sd(r - sp)}   # trades on one day move together
         out["by_book"][b] = s
+    out["suspect"] = suspects(df, (1, 5, 20))
     return out
 
 
@@ -340,7 +365,7 @@ def main() -> int:
     if not args.dry_run:
         os.makedirs(os.path.dirname(OUT), exist_ok=True)
         json.dump(out, open(OUT, "w"), ensure_ascii=False, indent=1, default=str)
-    print(f"balder: {n_new} new trades, {n_scored} scored, total {out.get('n', 0)}")
+    print(f"balder: {n_new} new trades, {n_scored} scored, total {out.get('n', 0)}, suspect returns {len(out.get('suspect', []))}")
     return 0
 
 

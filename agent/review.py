@@ -17,6 +17,14 @@ Since 2026-09-29 (S48):
   - rule checks in classes: events needing action, the real account's behaviour, known simulator
     behaviour (shown, not a lesson), info.
 
+Since 2026-10-27 (uses the owner approved that day; display only, nothing here reaches a book, an order, the
+watch list, a lesson or the notification):
+  - Balder scorecard: one row per product (X trades by book, X views by stance, his public record by book) with
+    n, effective n (distinct posting days), mean abnormal return and its 95% interval, hit rate and a badge.
+  - paper: the holdings that report earnings within EARN_SESSIONS sessions, with our archived IV / HV.
+  - real account: under each deal, a grey line with what Balder posted, said and held about the name in the
+    BALDER_LOOKBACK sessions before it.
+
 No LLM. Every sentence is a template over numbers we computed; the rules are our own
 findings (S12/S13 spreads, S25 big moves, S26 option cheapness, S31 entry timing, S33 vetoes).
 
@@ -33,6 +41,7 @@ import os
 import re
 import subprocess
 import sys
+from zoneinfo import ZoneInfo
 
 import duckdb
 import numpy as np
@@ -42,6 +51,7 @@ import yaml
 from agent import ledger
 from agent.sources.alpaca_auctions import AUCTIONS_DB
 from agent.sources.alpaca_news import NEWS_DB
+from agent.sources.daily_archive import ARCHIVE_DB
 from agent.sources.retail_heat import RETAIL_DB
 from agent.watch import WATCHLIST
 from hedge_fund.features.panel import PanelStore
@@ -64,6 +74,22 @@ MISSED_STATUS = {"open": "持有中", "closed": "已结束", "no data": "无数�
 #   real    the user's own trading in the real account
 #   info    context only
 SIM_RULES = {"paper_unfilled", "paper_exec_gap", "paper_insider_limit"}
+EARN_SESSIONS = 5          # paper holdings reporting within this many sessions after the review day (or after its close)
+EARN_TIME = {"pre-market": "盘前", "post-market": "盘后"}
+# Balder (his X posts, his public record) is display and audit only: never a signal, never on the public site.
+BALDER_MIN_N = 30          # S52: under 30 per side describe only; counted here in distinct posting days (effective n)
+BALDER_H = 5               # the scorecard's horizon for the X products (trades are scored 1/5/20 sessions, views 5/20)
+BALDER_LOOKBACK = 3        # sessions before a real deal searched for his posts, views and record
+BOOK_ZH = {"short": "短线", "long": "长线", "algo": "短线算法"}
+STANCE_ZH = {"bull": "看多", "bear": "看空"}
+CASHTAG = re.compile(r"\$([A-Z]{1,5}(?:\.[A-Z])?)(?![A-Za-z0-9])")
+# a bare 3-5 letter word counts only when the feed also writes it as a cashtag (BUY, NOW, THE READ are words);
+# 1-2 letters always need the $: AI, ON, IT are words
+TICKER_WORD = re.compile(r"(?<![A-Za-z0-9$])([A-Z]{3,5})(?![A-Za-z0-9])")
+# the X reader's state (agent/balder_x_save): per tab, the post time up to which the feed has no gap
+BALDER_STATE = os.path.expanduser("~/.hedge-fund/agent/balder_x_state.json")
+BALDER_TABS = {"subs": "订阅帖", "posts": "主页"}
+NY = ZoneInfo("America/New_York")
 
 sys.path.insert(0, "/Users/louis/optradar/bin")
 import site_theme  # noqa: E402
@@ -303,6 +329,7 @@ def paper_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float
     out["positions"].sort(key=lambda r: (r["day_ret"] if r["day_ret"] is not None else 0))
 
     out["closed"] = closed_lots(con, store, day)
+    out["earnings"], out["earnings_cal"] = paper_earnings(out["positions"], day)     # display only: no flag below reads it
 
     # rule checks, in three classes (see SIM_RULES)
     def flag(rule: str, text: str, cls: str) -> None:
@@ -332,6 +359,69 @@ def paper_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float
     if big:
         flag("paper_big_move", "持仓大动:" + ", ".join(f"{p['ticker']} {p['day_ret']:+.1f}%" for p in big[:6]), "info")
     return out
+
+
+def sessions_until(day: dt.date, d: dt.date) -> int:
+    """Weekdays in (day, d]: 1 = the next session, 0 = `day` itself or the weekend after it. Holidays count as sessions."""
+    return int(np.busday_count(day + dt.timedelta(days=1), d + dt.timedelta(days=1)))
+
+
+def nth_session_after(day: dt.date, n: int) -> dt.date:
+    """The n-th weekday after `day` (a weekend day counts from the Friday before it). Holidays count as sessions."""
+    return pd.Timestamp(np.busday_offset(np.datetime64(day, "D"), n, roll="backward")).date()
+
+
+def earnings_soon(cal: pd.DataFrame, tickers: list[str], day: dt.date, n: int = EARN_SESSIONS) -> dict[str, dict]:
+    """Each ticker's first report after `day` up to the n-th session after it (a weekend report before that session's
+    open counts), or on `day` itself after the close or at a time the calendar does not give (shown as 时间未定): the
+    review runs after the bell, so a report before the open has been traded already. The calendar spells a class share
+    with '-', the books with '.'."""
+    want = {t.replace(".", "-"): t for t in tickers}
+    out: dict[str, dict] = {}
+    if cal is None or cal.empty or not want:
+        return out
+    end = nth_session_after(day, n)
+    c = cal[cal["ticker"].isin(list(want))].sort_values("date")
+    for k, d, tm in zip(c["ticker"], c["date"], c["time"]):
+        if want[k] not in out and (day < d <= end or (d == day and tm != "pre-market")):
+            out[want[k]] = {"date": str(d), "time": tm or "", "sessions": sessions_until(day, d)}
+    return out
+
+
+def iv_hv_latest(tickers: list[str], day: dt.date, days: int = 10) -> dict[str, dict]:
+    """The newest ATM IV and HV (moomoo, in %) on or before `day`, within `days` days, from archive.db (read-only; the
+    archive is written after the review, so this is the last session's). {} when the archive is missing or busy; a NaN
+    IV or HV is None."""
+    if not tickers:
+        return {}
+    try:
+        with duckdb.connect(str(ARCHIVE_DB), read_only=True) as a:
+            rows = a.execute(f"SELECT ticker, day, iv, hv FROM iv_hv WHERE ticker IN ({','.join('?' * len(tickers))}) AND day BETWEEN ? AND ? ORDER BY ticker, day",
+                             list(tickers) + [day - dt.timedelta(days=days), day]).fetchall()
+    except Exception:
+        return {}
+    out: dict[str, dict] = {}
+    for t, d, iv, hv in rows:                                     # oldest first: the newest row wins
+        iv, hv = (float(x) if x is not None and np.isfinite(x) else None for x in (iv, hv))
+        out[t] = {"iv_day": str(d), "iv": iv, "hv": hv, "iv_hv": iv / hv if iv and hv else None}
+    return out
+
+
+def paper_earnings(positions: list[dict], day: dt.date) -> tuple[list[dict], str | None]:
+    """(paper holdings reporting within EARN_SESSIONS sessions, the calendar file's date or None without a calendar).
+    Report dates from agent/market_breadth's cached Alpha Vantage calendar, never fetched here; our archived IV / HV."""
+    from agent import market_breadth                     # only for its cached calendar
+    try:
+        cal, _ = market_breadth.earnings_calendar(fetch=False, today=day)
+        cp = market_breadth.CAL_PATH
+        asof = dt.date.fromtimestamp(cp.stat().st_mtime).isoformat() if cp.exists() else None
+    except Exception:
+        return [], None
+    soon = earnings_soon(cal, sorted({p["ticker"] for p in positions}), day)
+    vol = iv_hv_latest(sorted(soon), day)
+    rows = [{"book": p["book"], "ticker": p["ticker"], "qty": p["qty"], "since_entry": p["since_entry"], **soon[p["ticker"]],
+             **vol.get(p["ticker"], {"iv_day": None, "iv": None, "hv": None, "iv_hv": None})} for p in positions if p["ticker"] in soon]
+    return sorted(rows, key=lambda r: (r["date"], r["book"], r["ticker"])), asof
 
 
 def submit_errors(prev: dt.date | None) -> list[dict]:
@@ -607,6 +697,26 @@ def real_section(con, store, day: dt.date, prev: dt.date | None, spy_ret: float 
                                        "hold_days": hold, "underlying_ret_pct": u_ret,
                                        "lesson": (f"标的同期 {u_ret:+.1f}%,期权 {ret:+.0f}%:杠杆 {ret / u_ret:.1f}x" if p["is_option"] and u_ret and ret is not None and abs(u_ret) > 0.5 else "")})
 
+    # Balder in the sessions before each deal: a grey line under it, never a tag (tags become lessons) and never a flag
+    if out["deals"]:
+        try:                                                      # an unreadable feed costs the lines, not the review
+            (feed, first), feed_err = balder_feed_index(), None
+        except (OSError, ValueError, UnicodeDecodeError) as exc:
+            (feed, first), feed_err = ({}, None), type(exc).__name__
+        bv, br, read = balder_json("balder_views.json"), balder_json("balder_record.json"), balder_read_through()
+        sess = sessions(store)
+        for row in out["deals"]:
+            if "到期作废(券商结算记录)" in row["tags"]:                      # the broker's settlement is not a decision
+                continue
+            if feed_err:
+                row["balder"] = f"Balder 对照读不出来({feed_err})"
+                continue
+            dd = dt.date.fromisoformat(row["day"])
+            try:                                                  # a malformed Balder file costs the line, not the review
+                row["balder"] = balder_line(balder_before(row["ticker"], dd, lookback_start(sess, dd), feed, first, bv, br, read))
+            except Exception as exc:
+                row["balder"] = f"Balder 对照读不出来({type(exc).__name__})"
+
     for code, name, qty, cost, px, mv, pl, is_opt, und in pos:
         p = parse_code(code)
         t = p["ticker"]
@@ -702,46 +812,292 @@ RULE_NAMES = {"paper_rejected": "模拟盘订单被拒", "paper_reconcile": "账
               "real_vs_insiders": "实盘逆内部人卖出买入", "real_concentration": "实盘单一持仓 ≥ 40%", "real_add_same_day": "实盘同一合约当日加仓"}
 
 
-def balder_record_block() -> str:
-    """Balder's public record (agent/balder_record.py): both books' closed trades against QQQ over each trade's window."""
+# ------------------------------------------------------------------ Balder ----
+def balder_json(name: str) -> dict:
+    """A Balder summary in OUT_DIR; {} when it is missing, empty or unreadable (the page renders without it)."""
     try:
-        b = json.load(open(os.path.join(OUT_DIR, "balder_record.json")))
+        j = json.load(open(os.path.join(OUT_DIR, name)))
     except Exception:
-        return ""
+        return {}
+    return j if isinstance(j, dict) else {}
+
+
+def balder_badge(n: int, n_eff: int | None) -> str:
+    """未计分: no scored row; 可读: effective n >= BALDER_MIN_N; 只描述: scored, effective n below it or unknown."""
+    if not n:
+        return "未计分"
+    return "可读" if n_eff is not None and n_eff >= BALDER_MIN_N else "只描述"
+
+
+def ci95(mean, sd, n) -> tuple[float, float] | None:
+    """mean ± 1.96·sd/√n; None without a mean, an sd or two rows."""
+    if mean is None or sd is None or not n or n < 2 or not np.isfinite(sd):
+        return None
+    h = 1.96 * sd / np.sqrt(n)
+    return (mean - h, mean + h)
+
+
+def ci_text(ci: tuple[float, float] | None) -> str:
+    return f"[{ci[0]:+.2f}, {ci[1]:+.2f}]" if ci else "(无 sd,不给区间)"
+
+
+def _diff(a, b, sign: int = 1):
+    return None if a is None or b is None else (a - b) * sign
+
+
+def _rows_stats(rows: list[dict], n: int, day_key: str, val) -> tuple[int | None, float | None]:
+    """(distinct days, sd) from a summary's row list when it holds every scored row of the group (the lists are the
+    newest 15 trades / views and the record's last week of closes), else (None, None)."""
+    xs = [(str(r.get(day_key))[:10], val(r)) for r in rows]
+    xs = [(d, v) for d, v in xs if v is not None]
+    if not n or len(xs) != n:
+        return None, None
+    return len({d for d, _ in xs}), (float(np.std([v for _, v in xs], ddof=1)) if n > 1 else None)
+
+
+def balder_scorecard(trades: dict, views: dict, record: dict) -> list[dict]:
+    """One row per Balder product and group: n, effective n (distinct posting days), mean abnormal return with its 95%
+    interval, hit rate, badge. A summary's own n_days / sd field wins; else both come from its row list when that holds
+    every scored row; else they are unknown (None). The record's sd can also come from its t (se = mean / t)."""
+    h, out = BALDER_H, []
+
+    def add(product: str, group: str, basis: str, src: dict, s: dict, mean, hit, rows: list[dict], day_key: str, val, sd_key: str):
+        n = int(s.get("n") or 0)
+        n_eff, sd = s.get("n_days"), s.get(sd_key)
+        if n_eff is None or sd is None:
+            e, d = _rows_stats(rows, n, day_key, val)
+            n_eff, sd = (e if n_eff is None else n_eff), (d if sd is None else sd)
+        if sd is None and s.get("t") and mean:
+            sd = abs(mean / s["t"]) * np.sqrt(n)
+        out.append({"product": product, "group": group, "basis": basis, "n": n, "n_eff": n_eff if n else None,
+                    "mean": mean if n else None, "ci": ci95(mean, sd, n) if n else None, "hit": hit if n else None,
+                    "badge": balder_badge(n, n_eff), "asof": str(src.get("generated_at") or "")[:10] or None})
+
+    books = trades.get("by_book") or {}
+    for b in ["short", "long"] + sorted(k for k in books if k not in ("short", "long")):
+        s = (books.get(b) or {}).get(f"h{h}") or {}
+        rows = [r for r in trades.get("recent") or [] if r.get("book") == b and r.get("action") in ("open", "add")]
+        add("X 帖子交易", BOOK_ZH.get(b, b), f"{h} 日,对 SPY", trades, s, s.get("mean_abn"), s.get("hit"), rows, "posted",
+            lambda r: _diff(r.get(f"ret{h}"), r.get(f"spy{h}")), "sd_abn")
+    stances = views.get("by_stance") or {}
+    for st, sign in (("bull", 1), ("bear", -1)):
+        s = (stances.get(st) or {}).get(f"h{h}") or {}
+        rows = [r for r in views.get("recent") or [] if r.get("stance") == st]
+        add("X 帖子观点", STANCE_ZH[st], f"{h} 日,带方向对 SPY", views, s, s.get("mean_abn_signed"), s.get("right"), rows, "posted",
+            lambda r, sign=sign: _diff(r.get(f"ret{h}"), r.get(f"spy{h}"), sign), "sd_abn_signed")
+    for b in ("algo", "long"):
+        s = record.get(b) or {}
+        rows = [r for r in record.get("week_trades") or [] if r.get("book") == b]
+        add("官网公开记录", BOOK_ZH[b], "每笔进出,对 QQQ", record, s, s.get("mean_ex_qqq"), s.get("beat_qqq"), rows, "opened",
+            lambda r: r.get("ex_qqq"), "sd_ex_qqq")
+    return out
+
+
+def balder_scorecard_html(rows: list[dict]) -> str:
+    def eff(r: dict) -> str:
+        return "—" if not r["n"] else "有效 n 未知" if r["n_eff"] is None else str(r["n_eff"])
+
+    tr = "".join(f"<tr><td>{esc(r['product'])} · {esc(r['group'])}</td><td class='muted'>{esc(r['basis'])}</td><td>{r['n']}</td><td>{eff(r)}</td>"
+                 f"<td>{pct(r['mean'])}{'' if r['mean'] is None else ' <span class=muted>' + esc(ci_text(r['ci'])) + '</span>'}</td>"
+                 f"<td>{'—' if r['hit'] is None else format(r['hit'], '.0%')}</td><td><span class='pill'>{esc(r['badge'])}</span></td>"
+                 f"<td class='muted'>{esc(r['asof'] or '文件缺失')}</td></tr>" for r in rows)
+    return (f"<div class='tbl'><table><tr><th>产品</th><th>口径</th><th>n</th><th>有效 n</th><th>平均超额 [95% 区间]</th><th>命中</th><th>状态</th>"
+            f"<th>更新</th></tr>{tr}</table></div>"
+            f"<p class='muted'>有效 n = 不同的发帖日数(同一天的几条不独立)。可读 = 有效 n ≥ {BALDER_MIN_N}(S52 的门槛);只描述 = 已计分,但有效 n 不到 "
+            f"{BALDER_MIN_N} 或未知;未计分 = 还没有计分的行。95% 区间 = 均值 ± 1.96·sd/√n,按条数算,同日几条不独立,实际更宽;摘要里没有 sd 就不给区间。"
+            f"命中:交易 = {BALDER_H} 日收益为正;观点 = 带方向跑赢 SPY;公开记录 = 跑赢 QQQ。</p>")
+
+
+def balder_record_block(b: dict) -> str:
+    """Balder's public record (agent/balder_record.py) by strategy and over the last week, and what he holds now."""
     if not b.get("n"):
-        return ""
+        return "<p class='muted'>官网公开记录:还没有数据(每天 16:10 取一次)。</p>"
     line = lambda name, s: (f"<tr><td>{esc(name)}</td><td>{s.get('n', 0)}</td><td>{pct(s.get('mean_ret'))}</td><td>{pct(s.get('mean_qqq'))}</td>"
                             f"<td>{pct(s.get('mean_ex_qqq'))}</td><td>{'' if s.get('t') is None else s['t']}</td>"
                             f"<td>{'' if s.get('beat_qqq') is None else format(s['beat_qqq'], '.0%')}</td></tr>")
-    rows = line("短线算法(全部)", b.get("algo", {})) + line("长线书(全部)", b.get("long", {}))
-    rows += "".join(line(f"短线 · {k}", v) for k, v in sorted(b.get("by_strategy", {}).items()))
-    rows += line("短线(近 7 天)", b.get("week", {}).get("algo", {})) + line("长线(近 7 天)", b.get("week", {}).get("long", {}))
-    opn = "、".join(f"{o['symbol']} {o['ret_pct']:+.1f}%" for o in b.get("open", []))
-    return (f"<p class='muted'>来源:balder-ai.com/record 公开记录(每天 16:10 取一次,含亏损单)。每笔按自己的进出日期对比同期 QQQ;只做记分对照,不进任何信号。</p>"
+    rows = "".join(line(f"短线 · {k}", v or {}) for k, v in sorted((b.get("by_strategy") or {}).items()))
+    wk = b.get("week") or {}
+    rows += line("短线(近 7 天)", wk.get("algo") or {}) + line("长线(近 7 天)", wk.get("long") or {})
+    opn = "、".join(f"{o.get('symbol')} " + ("" if o.get("ret_pct") is None else f"{o['ret_pct']:+.1f}%") for o in b.get("open") or [])
+    return (f"<p class='muted'>官网公开记录:balder-ai.com/record(每天 16:10 取一次,含亏损单)。每笔按自己的进出日期对比同期 QQQ。</p>"
             f"<div class='tbl'><table><tr><th></th><th>笔数</th><th>平均</th><th>同期 QQQ</th><th>超额</th><th>t</th><th>跑赢 QQQ</th></tr>{rows}</table></div>"
             + (f"<p class='muted'>在场:{esc(opn)}</p>" if opn else ""))
 
 
-def balder_block() -> str:
-    """Trades forwarded from Balder's X posts (agent/balder_log.py), scored 1/5/20 sessions vs SPY. Private site only."""
-    rec = balder_record_block()
-    try:
-        b = json.load(open(os.path.join(OUT_DIR, "balder_latest.json")))
-    except Exception:
-        return rec + "<p class='muted'>X 订阅帖子:还没有记录。把 Balder 的帖子以文本分享到 iCloud Drive 的 Balder 文件夹,收盘后自动解析记分。</p>"
+def balder_trades_block(b: dict) -> str:
+    """Trades forwarded from Balder's X posts (agent/balder_log.py), scored 1/5/20 sessions vs SPY, and the newest rows."""
+    if not b:
+        return "<p class='muted'>X 订阅帖子:还没有记录。把 Balder 的帖子以文本分享到 iCloud Drive 的 Balder 文件夹,收盘后自动解析记分。</p>"
     if not b.get("n"):
-        return rec + "<p class='muted'>X 订阅帖子:还没有记录(把帖子文本放进 iCloud Drive/Balder,每天 13:25 解析)。</p>"
+        return "<p class='muted'>X 订阅帖子:还没有记录(把帖子文本放进 iCloud Drive/Balder,每天 13:25 解析)。</p>"
     score = ""
-    for book, s in b.get("by_book", {}).items():
-        cells = "".join(f"<td>{v['n']}</td><td>{pct(v['mean'])}</td><td>{pct(v['mean_abn'])}</td><td>{'' if v['hit'] is None else format(v['hit'], '.0%')}</td>" for v in (s["h1"], s["h5"], s["h20"]))
+    for book, s in (b.get("by_book") or {}).items():
+        cells = "".join(f"<td>{v.get('n', 0)}</td><td>{pct(v.get('mean'))}</td><td>{pct(v.get('mean_abn'))}</td><td>{'' if v.get('hit') is None else format(v['hit'], '.0%')}</td>"
+                        for v in ((s or {}).get(h) or {} for h in ("h1", "h5", "h20")))
         score += f"<tr><td>{esc(book)}</td>{cells}</tr>"
-    rows = "".join(f"<tr><td>{esc(r['posted'])}</td><td>{esc(r['book'])}</td><td><b>{esc(r['ticker'])}</b></td><td>{esc(r['action'])}</td>"
+    rows = "".join(f"<tr><td>{esc(r.get('posted'))}</td><td>{esc(r.get('book'))}</td><td><b>{esc(r.get('ticker'))}</b></td><td>{esc(r.get('action'))}</td>"
                    f"<td>{'' if r.get('price') is None else format(r['price'], '.2f')}</td><td class='muted'>{esc(r.get('strategy') or '')}</td>"
                    f"<td>{pct(r.get('ret1'))}</td><td>{pct(r.get('ret5'))}</td><td>{pct(r.get('ret20'))}</td><td class='muted'>{esc(r.get('note') or '')}</td></tr>"
-                   for r in b.get("recent", []))
-    return rec + (f"<p class='muted'>来源:Balder 在 X 的订阅帖子,由用户转存;只做记分对照,不进任何信号,不上公开站。开仓从帖子次日开盘起算收益。共 {b['n']} 条。</p>"
+                   for r in b.get("recent") or [])
+    return (f"<p class='muted'>X 订阅帖子的交易:由用户转存,开仓从帖子次日开盘起算收益。共 {b['n']} 条。</p>"
             f"<div class='tbl'><table><tr><th>书</th><th>1日 n</th><th>均值</th><th>超额</th><th>胜率</th><th>5日 n</th><th>均值</th><th>超额</th><th>胜率</th><th>20日 n</th><th>均值</th><th>超额</th><th>胜率</th></tr>{score}</table></div>"
             f"<div class='tbl'><table><tr><th>日期</th><th>书</th><th>代码</th><th>动作</th><th>价格</th><th>策略</th><th>1日</th><th>5日</th><th>20日</th><th>摘要</th></tr>{rows}</table></div>")
+
+
+def balder_views_block(v: dict) -> str:
+    """His views on named stocks (S52, agent/balder_views.py) by stance, 5 and 20 sessions."""
+    if not v.get("n"):
+        return "<p class='muted'>X 帖子观点:还没有记录。</p>"
+    rows = ""
+    for s, st in sorted((v.get("by_stance") or {}).items()):
+        cells = "".join(f"<td>{x.get('n', 0)}</td><td>{pct(x.get('mean_abn_signed'))}</td><td>{'' if x.get('right') is None else format(x['right'], '.0%')}</td>"
+                        for x in ((st or {}).get(h) or {} for h in ("h5", "h20")))
+        rows += f"<tr><td>{esc(STANCE_ZH.get(s, s))}</td>{cells}</tr>"
+    return (f"<p class='muted'>X 帖子观点(S52,描述性):共 {v['n']} 条,发帖次日开盘起算;看多跑赢 SPY 算对,看空跑输 SPY 算对。</p>"
+            f"<div class='tbl'><table><tr><th>方向</th><th>5日 n</th><th>带方向超额</th><th>对的比例</th><th>20日 n</th><th>带方向超额</th><th>对的比例</th></tr>{rows}</table></div>")
+
+
+def balder_block() -> str:
+    """The Balder scorecard, then the details: his public record, the X trades, the X views. Private site only;
+    renders with any of the three files missing or empty."""
+    trades, views, record = (balder_json(f) for f in ("balder_latest.json", "balder_views.json", "balder_record.json"))
+    note = "<p class='muted'><b>Balder 的内容只做记分对照和审计,永远不是信号:不进任何一本书、订单、观察名单、提醒或通知,不上公开站。</b></p>"
+    try:                                                          # a malformed summary costs this section, not the page
+        return (note + balder_scorecard_html(balder_scorecard(trades, views, record))
+                + balder_record_block(record) + balder_trades_block(trades) + balder_views_block(views))
+    except Exception as exc:
+        return note + f"<p class='muted'>Balder 摘要读不出来({esc(type(exc).__name__)}),这一节不显示。</p>"
+
+
+def _post_day(rec: dict) -> dt.date | None:
+    """The US date of a feed record's post: an ISO time is UTC (X's datetime, as agent/balder_log.posted_date reads it);
+    a bare MM-DD (an early hand-read time such as '03-02 pre-open') takes the year of saved_at. None for an impossible
+    date (2030-02-30)."""
+    t = str(rec.get("time") or "")
+    m = re.match(r"(20\d{2}-\d{2}-\d{2})T(\d{2}):(\d{2})", t)
+    try:
+        if m:
+            u = dt.datetime.fromisoformat(f"{m.group(1)}T{m.group(2)}:{m.group(3)}").replace(tzinfo=dt.timezone.utc)
+            return u.astimezone(NY).date()
+        m = re.match(r"(\d{2})-(\d{2})(?!\d)", t)
+        saved = dt.date.fromisoformat(str(rec.get("saved_at"))[:10])
+        d = dt.date(saved.year, int(m.group(1)), int(m.group(2)))
+        return d if d <= saved else d.replace(year=d.year - 1)
+    except (AttributeError, ValueError):
+        return None
+
+
+def balder_feed_index(path: str | None = None) -> tuple[dict[str, list[tuple[dt.date, str]]], dt.date | None]:
+    """({ticker: [(post day, post id), ...]}, the first post day) from the private feed log, read once per review.
+    A ticker is a cashtag ($ABC), or a bare upper-case word of 3-5 letters that the feed writes as a cashtag somewhere.
+    A line that is not UTF-8, not JSON or has no readable date is skipped. ({}, None) without a feed; any other
+    OSError reaches the caller."""
+    try:
+        with open(path or os.path.join(OUT_DIR, "balder_x_feed.jsonl"), "rb") as f:
+            lines = f.read().splitlines()
+    except FileNotFoundError:
+        return {}, None
+    tags: set[str] = set()
+    posts = []
+    for line in lines:
+        try:
+            r = json.loads(line.decode("utf-8"))
+            if not isinstance(r, dict):
+                continue
+            text, d = str(r.get("text") or ""), _post_day(r)
+        except (ValueError, UnicodeDecodeError):
+            continue
+        cash = set(CASHTAG.findall(text))
+        tags |= cash
+        if d is not None:
+            posts.append((d, str(r.get("id") or ""), cash, set(TICKER_WORD.findall(text))))
+    idx: dict[str, set] = {}
+    for d, pid, cash, words in posts:
+        for t in cash | (words & tags):
+            idx.setdefault(t, set()).add((d, pid))
+    return {t: sorted(v) for t, v in idx.items()}, min((p[0] for p in posts), default=None)
+
+
+def balder_read_through(path: str | None = None) -> tuple[str | None, dt.datetime | None]:
+    """(tab, its read_through in ET) for the tab read least far: the feed has every post of that tab up to that time
+    (the reader saves with gaps; only read_through is gap-free, agent/balder_x_save). (None, None) without a readable
+    state file; (tab, None) when a tab has no readable read_through."""
+    try:
+        with open(path or BALDER_STATE) as f:
+            st = json.load(f)
+    except (OSError, ValueError):
+        return None, None
+    rt = st.get("read_through") if isinstance(st, dict) else None
+    if not isinstance(rt, dict):
+        return None, None
+    out = []
+    for tab in BALDER_TABS:
+        try:
+            u = dt.datetime.fromisoformat(str(rt.get(tab)).replace("Z", "+00:00"))
+            out.append(((u if u.tzinfo else u.replace(tzinfo=dt.timezone.utc)).astimezone(NY), tab))
+        except (ValueError, OverflowError):
+            return tab, None
+    at, tab = min(out)
+    return tab, at
+
+
+def lookback_start(sess: list[dt.date], d: dt.date, k: int = BALDER_LOOKBACK) -> dt.date:
+    """The first of the k sessions before d; the window is [that day, d): the weekend after a session counts, d does
+    not. With fewer than k sessions on record, k weekdays back."""
+    before = [s for s in sess if s < d]
+    if len(before) >= k:
+        return before[-k]
+    return pd.Timestamp(np.busday_offset(np.datetime64(d, "D"), -k, roll="forward")).date()
+
+
+def _iso_day(x) -> dt.date | None:
+    try:
+        return dt.date.fromisoformat(str(x)[:10])
+    except ValueError:
+        return None
+
+
+def balder_before(t: str, d: dt.date, start: dt.date, feed: dict, first: dt.date | None, views: dict, record: dict,
+                  read: tuple[str | None, dt.datetime | None]) -> dict:
+    """What Balder posted, said and held about `t` in [start, d). A part is None when our copy cannot answer it: the feed
+    starts after `start`, balder_views.json's rows (`index`, every view as ticker / stance / posted, when the summary has
+    it; else the newest 15 in `recent`) do not reach back past `start`, or a file is missing. `gap` is set when the
+    reader's least-read tab (`read`, from balder_read_through) has not read through to d 00:00 ET: a mention found is
+    real, none found proves nothing. The record knows his open positions and the last week's closes only."""
+    out: dict = {"start": start.isoformat(), "posts": None, "post_days": [], "views": None, "held": None, "gap": None}
+    tab, at = read
+    if at is None or at < dt.datetime.combine(d, dt.time(0), NY):
+        out["gap"] = {"tab": tab, "through": at.date().isoformat() if at else None}
+    if first is not None and first <= start:
+        hits = [(x, pid) for x, pid in feed.get(t, []) if start <= x < d]
+        out["posts"], out["post_days"] = len({pid for _, pid in hits}), sorted({x.isoformat() for x, _ in hits})
+    rec = views.get("index") or views.get("recent") or []
+    if views and (len(rec) >= int(views.get("n") or 0) or min((str(v.get("posted"))[:10] for v in rec), default="9999") < start.isoformat()):
+        out["views"] = [{"stance": v.get("stance"), "posted": str(v.get("posted"))[:10]} for v in rec
+                        if v.get("ticker") == t and start.isoformat() <= str(v.get("posted"))[:10] < d.isoformat()]
+    if record:
+        out["held"] = []
+        for o in (record.get("open") or []) + (record.get("week_trades") or []):
+            o_in, o_out = _iso_day(o.get("opened")), _iso_day(o.get("closed"))
+            if o.get("symbol") == t and o_in is not None and o_in < d and (o_out is None or o_out >= start):
+                out["held"].append({"book": o.get("book"), "opened": o_in.isoformat(), "closed": o_out.isoformat() if o_out else None})
+    return out
+
+
+def balder_line(b: dict) -> str:
+    """The grey line under a real deal. Information only: no tag, no lesson, no notification."""
+    g = b.get("gap")
+    gap = (None if not g else "没有读帖状态" if not g["tab"]
+           else BALDER_TABS.get(g["tab"], g["tab"]) + (f"读到 {g['through'][5:]}" if g["through"] else "读到哪天不知道"))
+    p = ("X 帖子存档不够早" if b["posts"] is None else f"X 帖子存档有缺口({gap}),已存的没有提到" if not b["posts"] and gap
+         else "X 帖子没有提到" if not b["posts"] else f"X 帖子提到 {b['posts']} 次({'、'.join(x[5:] for x in b['post_days'])})")
+    v = ("观点记录不够早或缺失" if b["views"] is None else f"观点记录有缺口({gap}),已存的没有观点" if not b["views"] and gap
+         else "没有记录的观点" if not b["views"]
+         else "观点 " + "、".join(f"{STANCE_ZH.get(x['stance'], x['stance'])} {x['posted'][5:]}" for x in b["views"]))
+    h = ("公开记录缺失" if b["held"] is None else "公开记录不在场" if not b["held"]
+         else "公开记录在场 " + "、".join(f"{BOOK_ZH.get(x['book'], x['book'])} {x['opened'][5:]} 起" + (f"至 {x['closed'][5:]}" if x["closed"] else "")
+                                         for x in b["held"]))
+    return f"Balder,交易前 {BALDER_LOOKBACK} 个交易日({b['start'][5:]} 起,不含当天):{p} · {v} · {h}。只做对照。"
 
 
 def auction_block(rep: dict) -> str:
@@ -853,6 +1209,20 @@ def render_html(rep: dict) -> str:
                      f"<td>{pct(o['gap_pct'])}</td><td>{pct(o['day1_pct'])}</td><td class='muted'>{esc(o['reason'])} {tags(o['tags'])}</td></tr>" for o in po)
     paper_orders = (f"<div class='tbl'><table><tr><th>书</th><th>标的</th><th>方向</th><th>单型</th><th>状态</th><th>成交</th><th>模型价(开盘)</th><th>对开盘偏差<br><span class='muted'>模拟器逐单撮合</span></th><th>首日</th><th>原因 / 标记</th></tr>{porows}</table>"
                     if po else "<p class='muted'>今日无订单</p>")
+    def ivhv(x: dict) -> str:
+        if any(v is None or not np.isfinite(v) for v in (x.get("iv"), x.get("hv"))):
+            return "—"
+        return f"{x['iv']:.0f}% / {x['hv']:.0f}%" + (f" · {x['iv_hv']:.2f}x" if x.get("iv_hv") else "") + f" <span class='muted'>{esc(str(x['iv_day'])[5:])}</span>"
+
+    pe = rep["paper"].get("earnings") or []
+    perows = "".join(f"<tr><td>{esc(x['book'])}</td><td><b>{esc(x['ticker'])}</b></td><td>{x['qty']}</td><td>{esc(x['date'])} {EARN_TIME.get(x['time'], '时间未定')}</td>"
+                     f"<td>{x['sessions']}</td><td>{pct(x['since_entry'])}</td><td>{ivhv(x)}</td></tr>" for x in pe)
+    cal = rep["paper"].get("earnings_cal")
+    paper_earn = (f"<p class='muted'>未来 {EARN_SESSIONS} 个交易日内(周末跳过,节假日按交易日算;今天盘后或时间未定的也算)发布财报的模拟盘持仓。财报日来自 Alpha Vantage 日历缓存"
+                  f"(agent/market_breadth,{esc(cal or '—')} 更新,这里不重新下载);IV / HV 是 moomoo 存档里最近一天的平值隐含波动率和历史波动率。只显示,不改任何书的规则。</p>"
+                  + (f"<div class='tbl'><table><tr><th>书</th><th>标的</th><th>股数</th><th>财报日</th><th>距今交易日</th><th>入场以来</th><th>IV / HV</th></tr>{perows}</table></div>"
+                     if pe else "<p class='muted'>没有持仓在这段时间发布财报</p>")
+                  if cal else "<p class='muted'>还没有财报日历缓存(agent/market_breadth 生成),这里不显示财报风险</p>")
     pp = rep["paper"]["positions"]
     movers = [p for p in pp if p["day_ret"] is not None]
     show = movers[:4] + movers[-4:] if len(movers) > 8 else movers
@@ -869,7 +1239,8 @@ def render_html(rep: dict) -> str:
                else f"当日区间位置 {x['range_pos']:.0f}%" if x.get("range_pos") is not None else "")
         drows += (f"<tr><td>{esc(x['ts'][5:16])}</td><td><b>{esc(x['ticker'])}</b><br><span class='muted'>{esc(x['name'])}</span></td><td>{esc(x['side'])} {x['qty']:g} @ {x['price']:.2f}</td>"
                   f"<td>{pct(x['u_ret'])}<br><span class='muted'>5 日 {pct(x['u_ret5'])}</span></td><td>{pct(x['after_pct'])}</td><td class='muted'>{esc(det)}</td>"
-                  f"<td class='muted'>{'<br>'.join(esc(s) for s in x['system'])}</td><td>{tags(x['tags'])}</td></tr>")
+                  f"<td class='muted'>{'<br>'.join(esc(s) for s in x['system'])}</td><td>{tags(x['tags'])}</td></tr>"
+                  + (f"<tr class='ref'><td></td><td colspan='7'>{esc(x['balder'])}</td></tr>" if x.get("balder") else ""))
     w = r.get("window") or {}
     real_deals = (f"<p class='muted'>上次复盘({esc(w.get('after'))})之后到 {esc(w.get('through'))} 的成交,加上此前没有进过任何复盘的晚到成交({w.get('late', 0)} 笔);"
                   f"剩余天数和标的当日行情按每笔成交自己的日期算。</p>" if w else "") + (f"<table><tr><th>时间</th><th>标的</th><th>成交</th><th>标的当日</th><th>成交后到收盘</th><th>细节</th><th>我们的系统怎么看</th><th>标记</th></tr>{drows}</table>"
@@ -916,9 +1287,10 @@ def render_html(rep: dict) -> str:
 <h2>规则检查</h2>{frows or "<p class='muted'>没有触发任何规则</p>"}
 <h2>模拟盘:今日订单</h2>{paper_orders}
 <h2>模拟盘:今日平仓</h2>{paper_closed}
-<h2>Balder 的操作(跟单记分,私有)</h2>{balder_block()}
+<h2>Balder 记分卡(私有,只做对照)</h2>{balder_block()}
 <h2>模拟盘:竞价口径与错过的交易</h2>{auction_block(rep)}
 <h2>模拟盘:持仓异动</h2>{paper_pos}
+<h2>模拟盘:未来 {EARN_SESSIONS} 个交易日的财报</h2>{paper_earn}
 <h2>实盘:新成交</h2>{real_deals}{real_rt}{real_opts}
 <h2>实盘:持仓</h2>{real_pos}
 <h2>30 日教训计数</h2>{('<table><tr><th>规则</th><th>次数</th></tr>' + lessons + '</table>') if lessons else "<p class='muted'>30 日内没有触发过规则</p>"}

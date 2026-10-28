@@ -79,3 +79,21 @@ def test_a_supplement_view_on_a_ticker_its_post_already_gave_is_not_a_second_vie
     assert n == 2
     assert con.execute("SELECT ticker, stance, source_file FROM balder_views ORDER BY ticker").fetchall() == [
         ("ABC", "bull", "2026-10-27-x-9.txt"), ("XYZ", "bull", "2026-10-27-x-9-full-120000.txt")]
+
+
+def test_the_summary_counts_posting_days_and_lists_suspect_returns_without_dropping_them():
+    con = _con()
+    for vid, day, t, stance, r5, r20 in (("v1", "2026-10-01", "ABC", "bull", 3.0, None), ("v2", "2026-10-01", "DEF", "bull", 1.0, None),
+                                         ("v3", "2026-10-05", "GHI", "bull", 5.0, -55.0), ("v4", "2026-10-05", "JKL", "bear", -2.0, None)):
+        con.execute("INSERT INTO balder_views VALUES (?, ?, ?, ?, 'unknown', '', '', 'a.txt', ?, ?, 1.0, ?, '2026-10-30')",
+                    [vid, day, t, stance, r5, r20, None if r20 is None else 0.0])
+    out = bv.summary(con)
+    json.dumps(out, allow_nan=False, default=str)
+    bull = out["by_stance"]["bull"]
+    assert (bull["h5"]["n"], bull["h5"]["n_days"]) == (3, 2) and bull["h5"]["mean_abn_signed"] == 2.0   # abn 2, 0, 4
+    assert round(bull["h5"]["sd_abn_signed"], 9) == 2.0
+    assert bull["h20"]["n"] == 1 and bull["h20"]["n_days"] == 1 and bull["h20"]["sd_abn_signed"] is None
+    bear = out["by_stance"]["bear"]["h5"]
+    assert (bear["n_days"], bear["mean_abn_signed"], bear["right"], bear["sd_abn_signed"]) == (1, 3.0, 1.0, None)
+    assert out["suspect"] == [{"id": "v3", "ticker": "GHI", "posted": "2026-10-05", "h": 20, "ret": -55.0}]
+    assert bull["h20"]["mean_abn_signed"] == -55.0                             # still scored

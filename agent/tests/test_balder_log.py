@@ -115,3 +115,22 @@ def test_a_quantity_in_words_is_dropped_not_a_crash():
                            {"ticker": "DEF", "action": "open", "price": None, "qty": "2,000"},
                            {"ticker": "GHI", "action": "open", "price": None, "qty": "30%"}]})
     assert [x["qty"] for x in bl.extract("买入 $ABC $DEF $GHI", llm)] == [None, 2000.0, 30.0]
+
+
+def test_the_summary_is_valid_json_and_counts_posting_days_and_suspect_returns():
+    con = _con()
+    rows = [("t1", "2026-10-01", "ABC", 2.0, 4.0, 1.0, 1.0), ("t2", "2026-10-01", "DEF", 0.0, 6.0, 1.0, 1.0),
+            ("t3", "2026-10-05", "GHI", 4.0, 62.0, 1.0, 2.0), ("t4", "2026-10-06", "JKL", None, None, None, None)]
+    for rid, day, t, r1, r5, s1, s5 in rows:
+        con.execute("INSERT INTO balder_trades (id, posted, book, ticker, action, side, price, ret1, ret5, spy1, spy5) "
+                    "VALUES (?, ?, 'short', ?, 'open', 'long', 10.0, ?, ?, ?, ?)", [rid, day, t, r1, r5, s1, s5])
+    out = bl.summary(con)
+    json.dumps(out, allow_nan=False, default=str)                              # NaN / NaT never reach the json
+    assert next(r for r in out["recent"] if r["id"] == "t4")["ret1"] is None
+    h1, h5, h20 = (out["by_book"]["short"][f"h{h}"] for h in (1, 5, 20))
+    assert (h1["n"], h1["n_days"], h1["mean"]) == (3, 2, 2.0)                # two trades on 10-01 are one posting day
+    assert round(h1["sd_abn"], 9) == 2.0 and h1["mean_abn"] == 1.0              # abn 1, -1, 3
+    assert h5["n_days"] == 2 and h20 == {"n": 0, "mean": None, "hit": None, "mean_abn": None, "n_days": 0, "sd_abn": None}
+    assert out["suspect"] == [{"id": "t3", "ticker": "GHI", "posted": "2026-10-05", "h": 5, "ret": 62.0}]
+    assert round(h5["mean"], 9) == 24.0                                        # listed, not dropped: the scores keep it
+    assert bl.summary(_con())["suspect"] == []

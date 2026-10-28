@@ -332,3 +332,76 @@ def test_the_index_freshness_check_reads_the_oldest_of_spy_iwm_and_qqq(tmp_path)
         s.con.execute("DELETE FROM index_daily WHERE symbol = 'QQQ' AND trade_date = '2026-10-20'")
         s.con.execute("INSERT INTO index_daily VALUES ('QQQ', '2026-10-21', 1, 1, 1, 1, 1, 't', now())")
         assert s.con.execute(sql).fetchone()[0] == dt.date(2026, 10, 21)        # all three current: SPY's day, as before
+
+
+def _balder_files(tmp_path, saved="2026-10-22T09:15:00", todo=12, read_through=None, generated="2026-10-22T13:30:00", **extra):
+    """A made-up Balder feed, reader state and three summaries; extra: per summary name, keys merged into its json."""
+    feed = tmp_path / "feed.jsonl"
+    feed.write_text(json.dumps({"id": "1", "saved_at": "2026-10-01T09:00:00", "text": "x"}) + "\n"
+                    + json.dumps({"id": "2", "saved_at": saved, "text": "y"}) + "\n\n")
+    state = tmp_path / "state.json"
+    state.write_text(json.dumps({"read_through": read_through or {"subs": "2026-10-22T14:00:00Z", "posts": "2026-10-20T20:00:00.000Z"},
+                                 "todo": [{"id": str(i), "why": "image", "time": "", "tab": "subs"} for i in range(todo)]}))
+    outputs = {}
+    for name, base in (("交易记分", "balder_latest.json"), ("观点记分", "balder_views.json"), ("公开战绩", "balder_record.json")):
+        p = tmp_path / base
+        p.write_text(json.dumps({"generated_at": generated, "n": 3, **extra.get(name, {})}))
+        outputs[name] = str(p)
+    return str(feed), str(state), outputs
+
+
+def test_balder_archive_and_scoring_check(tmp_path, monkeypatch):
+    thu_eve = dt.datetime(2026, 10, 22, 17, 0)
+    pc = {"n_checked": 30, "n_outside": 0, "outside": [], "n_no_bar_day": 1, "no_bars": ["XYZ"]}
+    r = health.check_balder(thu_eve, *_balder_files(tmp_path, **{"公开战绩": {"price_check": pc}, "交易记分": {"suspect": []}}))
+    assert (r["label"], r["level"]) == ("balder", "ok")
+    assert r["detail"] == ("X 存档最后 10-22 09:15;待补全文/图 12 条;posts 读到 10-20;subs 读到 10-22;"
+                           "公开战绩价格核对 30 个都在日线范围里;1 个代码我们没有日线")
+    pc_bad = dict(pc, n_outside=2, outside=[{"symbol": "ABC", "day": "2026-10-22"}, {"symbol": "DEF", "day": "2026-08-03"}])
+    files = _balder_files(tmp_path, todo=41, **{"公开战绩": {"price_check": pc_bad},
+                                                "交易记分": {"suspect": [{"id": "a", "posted": "2026-10-23"}]},
+                                                "观点记分": {"suspect": [{"id": "b", "posted": "2026-10-28"}, {"id": "c", "posted": "2026-09-01"}]}})
+    r = health.check_balder(dt.datetime(2026, 10, 29, 17, 0), *files)                         # a week on: everything stale
+    assert r["level"] == "warn"                                                              # never bad: nothing trades on it
+    for text in ("X 存档最后一次是 10-22 09:15,落后 5 个交易日", "待补全文/图 41 条(超过 40)", "posts 只读到 10-20(8 天前)",
+                 "交易记分 balder_latest.json 是 10-22 13:30 的,落后 5 个交易日", "交易记分收益绝对值超过 50%:历史 1 条,近 7 天 1 条",
+                 "观点记分收益绝对值超过 50%:历史 2 条,近 7 天 1 条",
+                 "公开战绩价格核对:历史 2 条超出日线范围,近 7 天 1 条(共核对 30 个)"):        # 10-22: 7 days old, still recent
+        assert text in r["detail"], text
+    assert "subs 读到 10-22" in r["detail"]                                                  # 7 days 3 hours: not older than 7 days
+    r = health.check_balder(thu_eve, *_balder_files(tmp_path, **{"公开战绩": {"price_check": {"error": "RuntimeError: panel locked"}}}))
+    assert r["level"] == "warn" and r["detail"].startswith("公开战绩价格核对失败:RuntimeError: panel locked")
+
+
+def test_old_balder_suspects_and_price_outliers_are_counted_but_do_not_warn(tmp_path):
+    thu_eve = dt.datetime(2026, 10, 22, 17, 0)
+    old = {"n_checked": 30, "n_outside": 2, "outside": [{"symbol": "ABC", "day": "2026-10-14"}, {"symbol": "DEF", "day": "2026-08-03"}],
+           "n_no_bar_day": 0, "no_bars": []}
+    r = health.check_balder(thu_eve, *_balder_files(tmp_path, **{"公开战绩": {"price_check": old},
+                                                                 "观点记分": {"suspect": [{"id": "b", "posted": "2026-09-01"}]}}))
+    assert r["level"] == "ok"                                                                # 8 days old and older: no warning
+    assert "观点记分收益绝对值超过 50%:历史 1 条,近 7 天 0 条" in r["detail"]                       # but the totals are shown
+    assert "公开战绩价格核对:历史 2 条超出日线范围,近 7 天 0 条(共核对 30 个)" in r["detail"]
+    new = dict(old, n_outside=3, outside=[{"symbol": "GHI", "day": "2026-10-15"}] + old["outside"])       # 7 days old: recent
+    r = health.check_balder(thu_eve, *_balder_files(tmp_path, **{"公开战绩": {"price_check": new}}))
+    assert r["level"] == "warn" and r["detail"].startswith("公开战绩价格核对:历史 3 条超出日线范围,近 7 天 1 条(共核对 30 个)")
+    r = health.check_balder(thu_eve, *_balder_files(tmp_path, **{"交易记分": {"suspect": [{"id": "a", "posted": "?"}]}}))
+    assert r["level"] == "warn" and r["detail"].startswith("交易记分收益绝对值超过 50%:历史 1 条,近 7 天 1 条")   # unreadable: counted
+
+
+def test_balder_check_reads_the_module_paths_and_survives_missing_or_broken_files(tmp_path, monkeypatch):
+    thu_eve = dt.datetime(2026, 10, 22, 17, 0)
+    monkeypatch.setattr(health, "BALDER_FEED", str(tmp_path / "none.jsonl"))
+    monkeypatch.setattr(health, "BALDER_STATE", str(tmp_path / "none.json"))
+    monkeypatch.setattr(health, "BALDER_OUTPUTS", {"交易记分": str(tmp_path / "missing" / "balder_latest.json")})
+    r = health.check_balder(thu_eve)
+    assert (r["level"], r["detail"]) == ("warn", "X 存档没有记录(balder_x_feed.jsonl);没有读帖状态(balder_x_state.json);"
+                                                 "交易记分没有 balder_latest.json")
+    feed, state, outputs = _balder_files(tmp_path)
+    open(state, "w").write(json.dumps({"read_through": {"posts": "soon"}, "todo": 5}))     # hand-edited: todo is not a list
+    r = health.check_balder(thu_eve, feed, state, outputs)
+    assert r["level"] == "warn" and r["detail"].startswith("检查出错:TypeError")
+    open(state, "w").write(json.dumps({"read_through": {"posts": "soon"}, "todo": []}))
+    assert "posts 的 read_through 读不出:soon" in health.check_balder(thu_eve, feed, state, outputs)["detail"]
+    import inspect
+    assert "check_balder(now)" in inspect.getsource(health.main)                            # registered with the other checks
